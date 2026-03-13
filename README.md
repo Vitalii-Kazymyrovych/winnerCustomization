@@ -9,17 +9,20 @@ Spring Boot script that:
 
 ## Run
 
-1. Build:
+1. Build and run unit tests:
    ```bash
    ./mvnw -B test
+   ```
+2. Build jar:
+   ```bash
    ./mvnw -B package
    ```
-2. Put `config.json` near the jar (copy from `config.json.example` and fill values).
-3. Start app:
+3. Put `config.json` near the jar (copy from `config.json.example` and fill values).
+4. Start app:
    ```bash
    java -jar target/winnerCustomization-0.0.1-SNAPSHOT.jar
    ```
-4. Download report from browser:
+5. Download report from browser:
    - `http://localhost:8080/report/sequences.xlsx`
 
 ## Configuration
@@ -28,6 +31,7 @@ Use `config.json` (not committed) with:
 
 - Source DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
+- Source detections table name.
 - Camera mapping list for:
   - Drive in (in)
   - Drive in (out)
@@ -46,3 +50,14 @@ Use `config.json` (not committed) with:
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
 - The app creates `vehicle_sequences` table in sequence DB if it does not exist.
+
+## Tests
+
+Unit tests cover sequence orchestration and every service class:
+- `SequenceEngineTest`
+- `DetectionServiceTest`
+- `SequenceStorageServiceTest`
+- `ReportServiceTest`
+- `TelegramNotifierTest`
+
+All tests are offline and use mocks (no live PostgreSQL or Telegram calls).
