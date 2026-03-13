@@ -20,51 +20,67 @@
 - `servicePosts`: list of post camera pairs (`in`, `out`).
 
 ### `DetectionService`
-- SQL reads detections sorted by `created_at, id` from configured source table.
-- Projects rows to `Detection(id, plateNumber, analyticsId, direction, createdAt)`.
+- Method: `loadAllDetections()`
+  - Builds SQL from runtime config (`schema.table`).
+  - Reads rows sorted by `created_at, id`.
+  - Maps each row to immutable `Detection` record.
 
 ### `SequenceEngine`
-- Stateless sequence builder.
-- Maps every detection to logical camera type by:
-  1. `analyticsId` equality,
-  2. direction-range pass.
-- Tracks active sequence per plate.
-- Handles sequence lifecycle:
-  - start on Drive in (in) / Service-Drive in (in),
-  - append stage events (service, post, parking),
-  - close on parking out,
-  - reset as new sequence if test-drive gap exceeds configured reset threshold.
-- Produces `SequenceRecord` with path, stage durations, alerts.
+- Method: `build(List<Detection>, AppConfig)`
+  - Stateless sequence builder.
+  - Maps every detection to logical camera type by:
+    1. `analyticsId` equality,
+    2. direction-range pass.
+  - Tracks active sequence per plate.
+  - Handles lifecycle:
+    - start on Drive in (in) / Service-Drive in (in),
+    - append stage events (service, post, parking),
+    - close on parking out,
+    - reset as new sequence if test-drive gap exceeds configured reset threshold.
+  - Produces `SequenceRecord` with path, stage durations, alerts.
 
 ### `SequenceStorageService`
-- Ensures `vehicle_sequences` table exists in sequence DB.
-- Replaces current rows with recomputed rows.
+- Method: `initialize()`
+  - Ensures `vehicle_sequences` table exists.
+- Method: `replaceAll(List<SequenceRecord>)`
+  - Deletes previous rows.
+  - Inserts each sequence with path, finish time, stage durations and joined alerts.
 
 ### `TelegramNotifier`
-- Sends alerts to Telegram Bot API only if `notifications.enabled=true`.
+- Method: `sendIfEnabled(AppConfig.NotificationsConfig, String)`
+  - No-op when notifications are missing/disabled.
+  - Builds Telegram Bot API request payload and sends POST.
+  - Fails silently (exceptions are swallowed).
 
 ### `ReportService`
-- Orchestrates flow:
-  1. load detections,
-  2. build sequences,
-  3. persist sequences,
-  4. send alerts,
-  5. create XLSX binary.
+- Method: `buildReport()`
+  - Orchestrates:
+    1. load detections,
+    2. build sequences,
+    3. initialize/replace storage,
+    4. send unique alert notifications,
+    5. generate XLSX report bytes.
+- Internal method: `toXlsx(...)`
+  - Creates `Sequences` worksheet with columns: Plate, Start, Finish, Path, Stage durations, Alerts.
 
 ### `ReportController`
 - HTTP GET `/report/sequences.xlsx`.
-- Returns XLSX attachment.
+- Returns XLSX attachment produced by `ReportService`.
 
 ## Data flow
 
-1. HTTP request hits `ReportController`.
-2. `ReportService` loads source detections and computes sequences.
-3. Sequence DB updated in `vehicle_sequences`.
-4. XLSX generated in-memory and returned.
+1. Request hits `ReportController`.
+2. `ReportService` asks `DetectionService` for detections.
+3. `SequenceEngine` computes sequence records.
+4. `SequenceStorageService` refreshes `vehicle_sequences` table.
+5. `TelegramNotifier` sends deduplicated alerts.
+6. XLSX is built in-memory and returned.
 
 ## Testing
 
-- `SequenceEngineTest` validates:
-  - full sequence construction,
-  - direction filtering behavior.
-- Tests are unit-only and do not call live DB/Telegram.
+Unit tests are isolated from live infrastructure and cover all services:
+- `SequenceEngineTest`: full sequence + direction filtering.
+- `DetectionServiceTest`: SQL construction and JDBC row mapping.
+- `SequenceStorageServiceTest`: DDL initialization and replace-all persistence flow.
+- `ReportServiceTest`: orchestration, storage refresh, telegram notification triggering, XLSX content.
+- `TelegramNotifierTest`: safe no-op behavior for null/disabled notifications.

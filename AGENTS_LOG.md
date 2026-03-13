@@ -11,3 +11,6 @@
 - Added `config.json.example` template and ignored `config.json`.
 - Updated Maven dependencies and unit tests for sequence logic and direction filtering.
 - Updated README and technical specification to reflect architecture and usage.
+- Added comprehensive unit tests for all service classes (`DetectionService`, `SequenceStorageService`, `ReportService`, `TelegramNotifier`) and kept `SequenceEngine` coverage.
+- Updated README test section and refreshed TECHNICAL_SPEC with service methods/interactions and full test coverage details.
+- Verified with `./mvnw -B test` (10 tests passing).
