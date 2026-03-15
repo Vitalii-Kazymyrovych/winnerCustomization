@@ -63,6 +63,7 @@ Use `config.json` (not committed) with:
 
 - If startup fails with `No qualifying bean of type 'com.fasterxml.jackson.databind.ObjectMapper'`, ensure you are running a build that includes `JacksonConfig` (adds explicit `ObjectMapper` bean for runtime config loading).
 - On first start, the app attempts to auto-create `sequenceDatabase.db` using `rootDatabase` credentials.
+- If startup fails with `Incorrect result size: expected 1, actual 0` while checking `pg_database`, upgrade to a build that uses `select exists(...)` for database presence checks (current implementation handles missing DB correctly).
 - If startup/report still fails with sequence DB connection errors, check:
   1. `rootDatabase` credentials really have rights to read `pg_database` and `CREATE DATABASE`.
   2. `rootDatabase.host`/`port` point to the same PostgreSQL instance as `sequenceDatabase`.
@@ -88,4 +89,9 @@ Unit tests cover sequence orchestration and every service class:
 - `TelegramNotifierTest`
 - `SourcePullTriggerServiceTest`
 
-All tests are offline and use mocks (no live PostgreSQL or Telegram calls).
+Unit tests remain offline and use mocks.
+
+Additionally, `PostgresDatabaseOperationsIntegrationTest` validates end-to-end PostgreSQL operations against a local PostgreSQL instance (`localhost:5432`, user/password `postgres/postgres`):
+- sequence DB auto-creation via `DatabaseBootstrapService`;
+- source detection read via `DetectionService`;
+- sequence table initialization and write flow via `SequenceStorageService`.

@@ -33,3 +33,9 @@
 - Added `DatabaseBootstrapService` and wired it into `JdbcConfig` before sequence datasource initialization.
 - Added `DatabaseBootstrapServiceTest` covering create-on-missing and skip-when-exists behavior without live DB.
 - Updated `config.json.example`, README, and TECHNICAL_SPEC for new root/admin configuration and first-start behavior.
+- Fixed PostgreSQL bootstrap bug in `DatabaseBootstrapService`: replaced `queryForObject("select 1 ...")` logic with `select exists(...)` to correctly handle missing DB without `EmptyResultDataAccessException`.
+- Updated `DatabaseBootstrapServiceTest` for boolean existence checks.
+- Installed PostgreSQL 16 in the environment, started local cluster, and validated database operations end-to-end.
+- Added `PostgresDatabaseOperationsIntegrationTest` to verify real PostgreSQL flow: source reads, sequence DB auto-creation, sequence table init, and persistence writes.
+- Updated README and TECHNICAL_SPEC with new troubleshooting note and integration-testing details.
+- Verified with `./mvnw -B test` (16 tests passing, including PostgreSQL integration test).
