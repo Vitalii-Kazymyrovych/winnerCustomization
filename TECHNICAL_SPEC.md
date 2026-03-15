@@ -14,9 +14,18 @@
 - Creates two PostgreSQL data sources and JDBC templates:
   - `sourceJdbc`: reads detections.
   - `sequenceJdbc`: stores computed sequences.
+- Before creating `sequenceDataSource`, invokes `DatabaseBootstrapService.ensureDatabaseExists(...)`.
+
+### `DatabaseBootstrapService`
+- Method: `ensureDatabaseExists(rootDatabase, sequenceDatabase)`
+  - Connects to PostgreSQL using root/admin credentials from config.
+  - Checks `pg_database` for the target sequence DB.
+  - Creates DB on first start when missing.
+  - Throws clear `IllegalStateException` when root credentials/permissions are invalid.
 
 ### `AppConfig` model
 - `sourceDatabase`, `sequenceDatabase`: credentials + schema + db.
+- `rootDatabase`: PostgreSQL root/admin connection used at startup to auto-create the sequence database if missing.
 - `sourceTable`: source detections table name.
 - `notifications`: telegram on/off + token/chat id.
 - `timing`: thresholds for alerts and test-drive reset.
@@ -46,6 +55,7 @@
 ### `SequenceStorageService`
 - Method: `initialize()`
   - Ensures `vehicle_sequences` table exists.
+  - When PostgreSQL connection cannot be obtained, throws `IllegalStateException` with actionable diagnostics (`host`, `port`, `db`, `user`) for operator troubleshooting.
 - Method: `replaceAll(List<SequenceRecord>)`
   - Deletes previous rows.
   - Inserts each sequence with path, finish time, stage durations and joined alerts.

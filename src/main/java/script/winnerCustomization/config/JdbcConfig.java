@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import script.winnerCustomization.model.AppConfig;
+import script.winnerCustomization.service.DatabaseBootstrapService;
 
 import javax.sql.DataSource;
 
@@ -24,11 +25,15 @@ public class JdbcConfig {
     }
 
     @Bean(name = "sequenceDataSource")
-    public DataSource sequenceDataSource(RuntimeConfig runtimeConfig) {
+    public DataSource sequenceDataSource(RuntimeConfig runtimeConfig, DatabaseBootstrapService databaseBootstrapService) {
         log.info("Initializing sequence datasource for {}:{} / {}",
                 runtimeConfig.get().getSequenceDatabase().getHost(),
                 runtimeConfig.get().getSequenceDatabase().getPort(),
                 runtimeConfig.get().getSequenceDatabase().getDb());
+        databaseBootstrapService.ensureDatabaseExists(
+                runtimeConfig.get().getRootDatabase(),
+                runtimeConfig.get().getSequenceDatabase()
+        );
         return toDataSource(runtimeConfig.get().getSequenceDatabase());
     }
 

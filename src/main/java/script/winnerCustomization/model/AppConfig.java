@@ -6,6 +6,7 @@ import java.util.List;
 public class AppConfig {
     private DatabaseConfig sourceDatabase;
     private DatabaseConfig sequenceDatabase;
+    private RootDatabaseConfig rootDatabase;
     private SourceTableConfig sourceTable;
     private NotificationsConfig notifications;
     private TimingConfig timing;
@@ -25,6 +26,14 @@ public class AppConfig {
 
     public void setSequenceDatabase(DatabaseConfig sequenceDatabase) {
         this.sequenceDatabase = sequenceDatabase;
+    }
+
+    public RootDatabaseConfig getRootDatabase() {
+        return rootDatabase;
+    }
+
+    public void setRootDatabase(RootDatabaseConfig rootDatabase) {
+        this.rootDatabase = rootDatabase;
     }
 
     public SourceTableConfig getSourceTable() {
@@ -83,6 +92,30 @@ public class AppConfig {
         public void setUser(String user) { this.user = user; }
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
+    }
+
+
+    public static class RootDatabaseConfig {
+        private String host;
+        private int port;
+        private String user;
+        private String password;
+        private String maintenanceDb = "postgres";
+
+        public String jdbcUrl() {
+            return "jdbc:postgresql://" + host + ":" + port + "/" + maintenanceDb;
+        }
+
+        public String getHost() { return host; }
+        public void setHost(String host) { this.host = host; }
+        public int getPort() { return port; }
+        public void setPort(int port) { this.port = port; }
+        public String getUser() { return user; }
+        public void setUser(String user) { this.user = user; }
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
+        public String getMaintenanceDb() { return maintenanceDb; }
+        public void setMaintenanceDb(String maintenanceDb) { this.maintenanceDb = maintenanceDb; }
     }
 
     public static class SourceTableConfig {

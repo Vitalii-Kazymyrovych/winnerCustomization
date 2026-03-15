@@ -15,6 +15,13 @@
     "user": "sequence_user",
     "password": "sequence_password"
   },
+  "rootDatabase": {
+    "host": "SEQUENCE_DB_HOST",
+    "port": 5432,
+    "user": "postgres_root_user",
+    "password": "postgres_root_password",
+    "maintenanceDb": "postgres"
+  },
   "sourceTable": {
     "table": "alpr_detections"
   },
