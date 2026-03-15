@@ -21,3 +21,7 @@
 - Updated README and TECHNICAL_SPEC with new endpoint behavior and response statuses.
 
 - Added detailed console logging across controllers, configuration loading, JDBC initialization, source pull trigger, sequence/report services, storage and Telegram notification flow.
+
+## 2026-03-15
+- Fixed Spring Boot startup failure by adding explicit `ObjectMapper` bean configuration (`JacksonConfig`) used by `RuntimeConfig` constructor injection.
+- Verified with `./mvnw -B test` (13 tests passing).

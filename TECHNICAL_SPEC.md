@@ -2,6 +2,10 @@
 
 ## Components
 
+### `JacksonConfig`
+- Provides explicit `ObjectMapper` bean for JSON serialization/deserialization dependencies.
+- Guarantees `RuntimeConfig` constructor injection works during application startup.
+
 ### `RuntimeConfig`
 - Loads runtime JSON configuration from `<working_dir>/config.json` at startup.
 - Provides typed `AppConfig` object for all services.
