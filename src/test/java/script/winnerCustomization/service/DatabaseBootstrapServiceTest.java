@@ -16,7 +16,7 @@ class DatabaseBootstrapServiceTest {
     @Test
     void shouldCreateDatabaseWhenMissing() {
         JdbcTemplate rootJdbc = mock(JdbcTemplate.class);
-        when(rootJdbc.queryForObject(any(String.class), eq(Integer.class), eq("customization"))).thenReturn(null);
+        when(rootJdbc.queryForObject(any(String.class), eq(Boolean.class), eq("customization"))).thenReturn(false);
 
         DatabaseBootstrapService service = new TestableDatabaseBootstrapService(rootJdbc);
         service.ensureDatabaseExists(rootConfig(), sequenceConfig("customization"));
@@ -27,7 +27,7 @@ class DatabaseBootstrapServiceTest {
     @Test
     void shouldSkipCreateWhenDatabaseAlreadyExists() {
         JdbcTemplate rootJdbc = mock(JdbcTemplate.class);
-        when(rootJdbc.queryForObject(any(String.class), eq(Integer.class), eq("customization"))).thenReturn(1);
+        when(rootJdbc.queryForObject(any(String.class), eq(Boolean.class), eq("customization"))).thenReturn(true);
 
         DatabaseBootstrapService service = new TestableDatabaseBootstrapService(rootJdbc);
         service.ensureDatabaseExists(rootConfig(), sequenceConfig("customization"));

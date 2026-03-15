@@ -19,7 +19,7 @@
 ### `DatabaseBootstrapService`
 - Method: `ensureDatabaseExists(rootDatabase, sequenceDatabase)`
   - Connects to PostgreSQL using root/admin credentials from config.
-  - Checks `pg_database` for the target sequence DB.
+  - Checks `pg_database` for the target sequence DB using `select exists(...)` (safe when DB is absent).
   - Creates DB on first start when missing.
   - Throws clear `IllegalStateException` when root credentials/permissions are invalid.
 
@@ -121,3 +121,6 @@ Unit tests are isolated from live infrastructure and cover all services:
 
 - Application actions are logged to console using SLF4J (startup config, datasource initialization, HTTP requests, source pulls, sequence calculations, persistence operations, report generation and Telegram notifications).
 - Trigger endpoint logs cooldown/running/triggered outcomes for concurrent external callback diagnostics.
+
+Integration test (live PostgreSQL):
+- `PostgresDatabaseOperationsIntegrationTest`: runs against local PostgreSQL (`localhost:5432`) and verifies real DB operations chain: database bootstrap/create, detection reads from `videoanalytics.alpr_detections`, sequence table creation, and sequence persistence writes.

@@ -26,12 +26,12 @@ public class DatabaseBootstrapService {
 
         JdbcTemplate rootJdbc = createRootJdbcTemplate(rootConfig);
         try {
-            Integer exists = rootJdbc.queryForObject(
-                    "select 1 from pg_database where datname = ?",
-                    Integer.class,
+            Boolean exists = rootJdbc.queryForObject(
+                    "select exists(select 1 from pg_database where datname = ?)",
+                    Boolean.class,
                     dbName
             );
-            if (exists == null) {
+            if (!Boolean.TRUE.equals(exists)) {
                 String createSql = "create database " + quoteIdentifier(dbName);
                 log.info("Sequence database '{}' does not exist. Creating it now.", dbName);
                 rootJdbc.execute(createSql);
