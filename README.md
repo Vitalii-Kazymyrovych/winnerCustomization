@@ -58,6 +58,10 @@ Use `config.json` (not committed) with:
   - 30-second cooldown after successful trigger.
 - Suitable for situations where multiple analytics systems can call the endpoint simultaneously.
 
+## Startup troubleshooting
+
+- If startup fails with `No qualifying bean of type 'com.fasterxml.jackson.databind.ObjectMapper'`, ensure you are running a build that includes `JacksonConfig` (adds explicit `ObjectMapper` bean for runtime config loading).
+
 ## Notes
 
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, report generation, notifications).
