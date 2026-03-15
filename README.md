@@ -35,7 +35,7 @@ Use `config.json` (not committed) with:
 
 - Source DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
-- Root PostgreSQL credentials for first-start sequence DB auto-creation: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`).
+- Root PostgreSQL credentials for first-start bootstrap: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`). Bootstrap now ensures both sequence database and its DB user/permissions.
 - Source detections table name.
 - Camera mapping list for:
   - Drive in (in)
@@ -67,7 +67,7 @@ Use `config.json` (not committed) with:
 - If startup/report still fails with sequence DB connection errors, check:
   1. `rootDatabase` credentials really have rights to read `pg_database` and `CREATE DATABASE`.
   2. `rootDatabase.host`/`port` point to the same PostgreSQL instance as `sequenceDatabase`.
-  3. `sequenceDatabase.user` has rights to connect and write into the created DB.
+  3. `sequenceDatabase.user`/`password` are set correctly. Current bootstrap will create/update this role and grant DB/schema permissions automatically when root credentials are valid.
   4. Manual validation:
      - `psql -h <rootHost> -p <rootPort> -U <rootUser> -d postgres -c "select datname from pg_database"`
      - `psql -h <seqHost> -p <seqPort> -U <seqUser> -d <sequenceDb>`
@@ -91,7 +91,7 @@ Unit tests cover sequence orchestration and every service class:
 
 Unit tests remain offline and use mocks.
 
-Additionally, `PostgresDatabaseOperationsIntegrationTest` validates end-to-end PostgreSQL operations against a local PostgreSQL instance (`localhost:5432`, user/password `postgres/postgres`):
+Additionally, `PostgresDatabaseOperationsIntegrationTest` validates end-to-end PostgreSQL operations against a local PostgreSQL instance (`localhost:5432`, user/password `postgres/postgres`). If PostgreSQL is unavailable in CI/local env, the test is skipped via JUnit assumption:
 - sequence DB auto-creation via `DatabaseBootstrapService`;
 - source detection read via `DetectionService`;
 - sequence table initialization and write flow via `SequenceStorageService`.

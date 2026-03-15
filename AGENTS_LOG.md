@@ -39,3 +39,8 @@
 - Added `PostgresDatabaseOperationsIntegrationTest` to verify real PostgreSQL flow: source reads, sequence DB auto-creation, sequence table init, and persistence writes.
 - Updated README and TECHNICAL_SPEC with new troubleshooting note and integration-testing details.
 - Verified with `./mvnw -B test` (16 tests passing, including PostgreSQL integration test).
+- Investigated runtime failure where sequence DB was auto-created but report call failed with `password authentication failed` for `sequenceDatabase.user`.
+- Enhanced `DatabaseBootstrapService` to also bootstrap the sequence DB role: create role if missing, enforce password, create DB with owner, grant DB connect/temp, and grant/create schema permissions in `public`.
+- Added/updated unit tests in `DatabaseBootstrapServiceTest` to validate role creation/update, DB ownership, and grants.
+- Stabilized `PostgresDatabaseOperationsIntegrationTest` for environments without local PostgreSQL by skipping with JUnit assumption when `localhost:5432` is unavailable.
+- Verified with `./mvnw -B test` (build success; integration test skipped when PostgreSQL is absent).
