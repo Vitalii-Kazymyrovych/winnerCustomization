@@ -35,6 +35,7 @@ Use `config.json` (not committed) with:
 
 - Source DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
+- Root PostgreSQL credentials for first-start sequence DB auto-creation: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`).
 - Source detections table name.
 - Camera mapping list for:
   - Drive in (in)
@@ -61,6 +62,14 @@ Use `config.json` (not committed) with:
 ## Startup troubleshooting
 
 - If startup fails with `No qualifying bean of type 'com.fasterxml.jackson.databind.ObjectMapper'`, ensure you are running a build that includes `JacksonConfig` (adds explicit `ObjectMapper` bean for runtime config loading).
+- On first start, the app attempts to auto-create `sequenceDatabase.db` using `rootDatabase` credentials.
+- If startup/report still fails with sequence DB connection errors, check:
+  1. `rootDatabase` credentials really have rights to read `pg_database` and `CREATE DATABASE`.
+  2. `rootDatabase.host`/`port` point to the same PostgreSQL instance as `sequenceDatabase`.
+  3. `sequenceDatabase.user` has rights to connect and write into the created DB.
+  4. Manual validation:
+     - `psql -h <rootHost> -p <rootPort> -U <rootUser> -d postgres -c "select datname from pg_database"`
+     - `psql -h <seqHost> -p <seqPort> -U <seqUser> -d <sequenceDb>`
 
 ## Notes
 

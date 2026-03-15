@@ -5,6 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.SequenceRecord;
 
 import java.time.LocalDateTime;
@@ -21,9 +22,12 @@ class SequenceStorageServiceTest {
     @Mock
     private JdbcTemplate sequenceJdbc;
 
+    @Mock
+    private RuntimeConfig runtimeConfig;
+
     @Test
     void shouldCreateTableOnInitialize() {
-        SequenceStorageService service = new SequenceStorageService(sequenceJdbc);
+        SequenceStorageService service = new SequenceStorageService(sequenceJdbc, runtimeConfig);
 
         service.initialize();
 
@@ -32,7 +36,7 @@ class SequenceStorageServiceTest {
 
     @Test
     void shouldReplaceAllRowsWithProvidedRecords() {
-        SequenceStorageService service = new SequenceStorageService(sequenceJdbc);
+        SequenceStorageService service = new SequenceStorageService(sequenceJdbc, runtimeConfig);
         SequenceRecord finished = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
         finished.setDriveInOutAt(LocalDateTime.of(2026, 1, 1, 10, 10));
         finished.setFinishedAt(LocalDateTime.of(2026, 1, 1, 11, 0));

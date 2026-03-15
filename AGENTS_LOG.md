@@ -25,3 +25,11 @@
 ## 2026-03-15
 - Fixed Spring Boot startup failure by adding explicit `ObjectMapper` bean configuration (`JacksonConfig`) used by `RuntimeConfig` constructor injection.
 - Verified with `./mvnw -B test` (13 tests passing).
+- Improved sequence database failure diagnostics in `SequenceStorageService.initialize()`: JDBC connection failures now raise an actionable `IllegalStateException` that includes configured host/port/db/user and explicit checks to perform.
+- Updated `SequenceStorageServiceTest` for constructor changes.
+- Updated README and TECHNICAL_SPEC with PostgreSQL troubleshooting steps for `database does not exist` errors and new diagnostic behavior.
+- Verified with `./mvnw -B test` (13 tests passing).
+- Added startup PostgreSQL bootstrap flow: app now checks and auto-creates `sequenceDatabase.db` on first start using new `rootDatabase` credentials from `config.json`.
+- Added `DatabaseBootstrapService` and wired it into `JdbcConfig` before sequence datasource initialization.
+- Added `DatabaseBootstrapServiceTest` covering create-on-missing and skip-when-exists behavior without live DB.
+- Updated `config.json.example`, README, and TECHNICAL_SPEC for new root/admin configuration and first-start behavior.
