@@ -19,8 +19,11 @@
 ### `DatabaseBootstrapService`
 - Method: `ensureDatabaseExists(rootDatabase, sequenceDatabase)`
   - Connects to PostgreSQL using root/admin credentials from config.
+  - Validates required sequence DB user/password presence in runtime config.
+  - Ensures target sequence role exists (`create role ... login password ...`) or updates password (`alter role ...`).
   - Checks `pg_database` for the target sequence DB using `select exists(...)` (safe when DB is absent).
-  - Creates DB on first start when missing.
+  - Creates DB on first start when missing with sequence user as DB owner.
+  - Grants DB-level (`CONNECT`, `TEMPORARY`) and schema-level (`USAGE`, `CREATE` on `public`) permissions for sequence user.
   - Throws clear `IllegalStateException` when root credentials/permissions are invalid.
 
 ### `AppConfig` model
@@ -123,4 +126,4 @@ Unit tests are isolated from live infrastructure and cover all services:
 - Trigger endpoint logs cooldown/running/triggered outcomes for concurrent external callback diagnostics.
 
 Integration test (live PostgreSQL):
-- `PostgresDatabaseOperationsIntegrationTest`: runs against local PostgreSQL (`localhost:5432`) and verifies real DB operations chain: database bootstrap/create, detection reads from `videoanalytics.alpr_detections`, sequence table creation, and sequence persistence writes.
+- `PostgresDatabaseOperationsIntegrationTest`: runs against local PostgreSQL (`localhost:5432`) and verifies real DB operations chain: database/bootstrap role provisioning, detection reads from `videoanalytics.alpr_detections`, sequence table creation, and sequence persistence writes. Test auto-skips when PostgreSQL is unavailable.

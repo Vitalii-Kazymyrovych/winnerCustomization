@@ -2,6 +2,7 @@ package script.winnerCustomization.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import script.winnerCustomization.config.RuntimeConfig;
@@ -10,6 +11,7 @@ import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,6 +31,8 @@ class PostgresDatabaseOperationsIntegrationTest {
 
     @BeforeEach
     void prepareSourceData() {
+        Assumptions.assumeTrue(postgresAvailable(), "PostgreSQL on localhost:5432 is not available in this environment");
+
         JdbcTemplate sourceJdbc = new JdbcTemplate(dataSource("videoanalytics"));
         sourceJdbc.execute("create schema if not exists videoanalytics");
         sourceJdbc.execute("""
@@ -90,6 +94,14 @@ class PostgresDatabaseOperationsIntegrationTest {
         assertNotNull(count);
         assertEquals(1, count);
         assertEquals("AA1111", plate);
+    }
+
+    private boolean postgresAvailable() {
+        try (Connection ignored = dataSource("videoanalytics").getConnection()) {
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     private AppConfig.RootDatabaseConfig rootConfig() {
