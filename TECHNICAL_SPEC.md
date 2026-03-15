@@ -63,18 +63,35 @@
 - Internal method: `toXlsx(...)`
   - Creates `Sequences` worksheet with columns: Plate, Start, Finish, Path, Stage durations, Alerts.
 
+### `SourcePullTriggerService`
+- Method: `triggerPull()`
+  - Provides concurrency-safe trigger for reading source detections.
+  - Protection rules:
+    - only one trigger execution at a time (`RUNNING` status for parallel calls),
+    - 30-second cooldown after each successful trigger (`COOLDOWN` status).
+  - On successful trigger reads detections via `DetectionService.loadAllDetections()` and returns loaded row count.
+
+### `SourceTriggerController`
+- HTTP GET `/source/trigger-pull`.
+- Invokes `SourcePullTriggerService.triggerPull()`.
+- Response statuses:
+  - `200` for `TRIGGERED` (`detectionsLoaded` in body),
+  - `429` for `COOLDOWN` (`retryAfterMillis` in body),
+  - `409` for `RUNNING`.
+
 ### `ReportController`
 - HTTP GET `/report/sequences.xlsx`.
 - Returns XLSX attachment produced by `ReportService`.
 
 ## Data flow
 
-1. Request hits `ReportController`.
-2. `ReportService` asks `DetectionService` for detections.
-3. `SequenceEngine` computes sequence records.
-4. `SequenceStorageService` refreshes `vehicle_sequences` table.
-5. `TelegramNotifier` sends deduplicated alerts.
-6. XLSX is built in-memory and returned.
+1. Optional trigger request hits `SourceTriggerController` to force source read with cooldown/parallel-call protection.
+2. Report request hits `ReportController`.
+3. `ReportService` asks `DetectionService` for detections.
+4. `SequenceEngine` computes sequence records.
+5. `SequenceStorageService` refreshes `vehicle_sequences` table.
+6. `TelegramNotifier` sends deduplicated alerts.
+7. XLSX is built in-memory and returned.
 
 ## Testing
 
@@ -84,3 +101,9 @@ Unit tests are isolated from live infrastructure and cover all services:
 - `SequenceStorageServiceTest`: DDL initialization and replace-all persistence flow.
 - `ReportServiceTest`: orchestration, storage refresh, telegram notification triggering, XLSX content.
 - `TelegramNotifierTest`: safe no-op behavior for null/disabled notifications.
+- `SourcePullTriggerServiceTest`: trigger success, cooldown behavior, and parallel-run protection.
+
+## Logging
+
+- Application actions are logged to console using SLF4J (startup config, datasource initialization, HTTP requests, source pulls, sequence calculations, persistence operations, report generation and Telegram notifications).
+- Trigger endpoint logs cooldown/running/triggered outcomes for concurrent external callback diagnostics.

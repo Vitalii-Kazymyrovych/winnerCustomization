@@ -2,6 +2,8 @@ package script.winnerCustomization.service;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.Detection;
@@ -10,6 +12,8 @@ import java.util.List;
 
 @Service
 public class DetectionService {
+    private static final Logger log = LoggerFactory.getLogger(DetectionService.class);
+
     private final JdbcTemplate sourceJdbc;
     private final RuntimeConfig runtimeConfig;
 
@@ -22,12 +26,15 @@ public class DetectionService {
         String schema = runtimeConfig.get().getSourceDatabase().getSchema();
         String table = runtimeConfig.get().getSourceTable().getTable();
         String sql = "select id, plate_number, analytics_id, direction, created_at from " + schema + "." + table + " order by created_at asc, id asc";
-        return sourceJdbc.query(sql, (rs, rowNum) -> new Detection(
+        log.info("Loading detections from source table {}.{}", schema, table);
+        List<Detection> detections = sourceJdbc.query(sql, (rs, rowNum) -> new Detection(
                 rs.getLong("id"),
                 rs.getString("plate_number"),
                 rs.getInt("analytics_id"),
                 (Integer) rs.getObject("direction"),
                 rs.getTimestamp("created_at").toLocalDateTime()
         ));
+        log.info("Loaded {} detections from source", detections.size());
+        return detections;
     }
 }

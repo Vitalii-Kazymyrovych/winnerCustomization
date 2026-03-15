@@ -14,3 +14,10 @@
 - Added comprehensive unit tests for all service classes (`DetectionService`, `SequenceStorageService`, `ReportService`, `TelegramNotifier`) and kept `SequenceEngine` coverage.
 - Updated README test section and refreshed TECHNICAL_SPEC with service methods/interactions and full test coverage details.
 - Verified with `./mvnw -B test` (10 tests passing).
+- Added manual source pull endpoint `GET /source/trigger-pull` for external analytics callbacks.
+- Implemented `SourcePullTriggerService` with concurrency protection (single active trigger) and 30-second cooldown after successful trigger.
+- Added `TimeConfig` clock bean to make trigger timing deterministic and testable.
+- Added `SourcePullTriggerServiceTest` covering success flow, cooldown, and parallel-call protection.
+- Updated README and TECHNICAL_SPEC with new endpoint behavior and response statuses.
+
+- Added detailed console logging across controllers, configuration loading, JDBC initialization, source pull trigger, sequence/report services, storage and Telegram notification flow.
