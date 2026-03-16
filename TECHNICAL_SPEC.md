@@ -78,7 +78,10 @@
     4. send unique alert notifications,
     5. generate XLSX report bytes.
 - Internal method: `toXlsx(...)`
-  - Creates `Sequences` worksheet with columns: Plate, Start, Finish, Path, Stage durations, Alerts.
+  - Creates `Sequences` worksheet with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
+  - For each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Parking`) with dynamic inclusion based on available timestamps.
+  - Computes `Duration` from stage start/end as `HH:mm:ss`; empty when one of timestamps is missing.
+  - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 
 ### `SourcePullTriggerService`
 - Method: `triggerPull()`
