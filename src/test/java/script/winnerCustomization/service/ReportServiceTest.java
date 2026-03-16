@@ -78,6 +78,35 @@ class ReportServiceTest {
         }
     }
 
+
+    @Test
+    void shouldCloseServiceStageAtPostInWhenServiceOutIsMissing() throws Exception {
+        AppConfig config = new AppConfig();
+        config.setNotifications(new AppConfig.NotificationsConfig());
+        when(runtimeConfig.get()).thenReturn(config);
+
+        Detection detection = new Detection(1L, "AA0029TT", 10, 90, LocalDateTime.now());
+        when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
+
+        SequenceRecord record = new SequenceRecord("AA0029TT", LocalDateTime.of(2026, 3, 16, 12, 31, 51, 453_000_000));
+        record.setDriveInOutAt(LocalDateTime.of(2026, 3, 16, 12, 36, 38, 186_000_000));
+        record.setServiceInAt(LocalDateTime.of(2026, 3, 16, 12, 40, 48, 531_000_000));
+        record.setPostInAt(LocalDateTime.of(2026, 3, 16, 13, 21, 19, 644_000_000));
+
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
+
+        byte[] data = reportService.buildReport();
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
+            XSSFSheet sheet = workbook.getSheet("Sequences");
+            assertThat(sheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
+            assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("2026-03-16T13:21:19.644");
+            assertThat(sheet.getRow(3).getCell(3).getStringCellValue()).isEqualTo("00:40:31");
+            assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post");
+            assertThat(sheet.getRow(4).getCell(2).getStringCellValue()).isEqualTo("");
+        }
+    }
+
     @Test
     void shouldSkipNotificationsWhenThereAreNoAlerts() throws Exception {
         AppConfig config = new AppConfig();
