@@ -33,7 +33,7 @@ public class SequenceEngine {
                     current.setFinishedAt(detection.createdAt());
                     done.add(current);
                 }
-                if (type != CameraType.DRIVE_IN_IN && type != CameraType.SERVICE_DRIVE_IN_IN) {
+                if (type != CameraType.DRIVE_IN_IN && type != CameraType.SERVICE_IN) {
                     log.debug("Ignoring detection id={} plate={} because sequence has not started yet and camera type={} is not a start event",
                             detection.id(), detection.plateNumber(), type);
                     continue;
@@ -78,7 +78,6 @@ public class SequenceEngine {
             case SERVICE_OUT -> current.setServiceOutAt(at);
             case PARKING_IN -> current.setParkingInAt(at);
             case PARKING_OUT -> current.setParkingOutAt(at);
-            case SERVICE_DRIVE_IN_IN -> { }
             case DRIVE_IN_IN -> { }
             default -> { }
         }
@@ -101,7 +100,6 @@ public class SequenceEngine {
         AppConfig.CamerasConfig cameras = config.getCameras();
         if (matches(cameras.getDriveInIn(), detection)) return CameraType.DRIVE_IN_IN;
         if (matches(cameras.getDriveInOut(), detection)) return CameraType.DRIVE_IN_OUT;
-        if (matches(cameras.getServiceDriveInIn(), detection)) return CameraType.SERVICE_DRIVE_IN_IN;
         if (matches(cameras.getServiceIn(), detection)) return CameraType.SERVICE_IN;
         if (matches(cameras.getServiceOut(), detection)) return CameraType.SERVICE_OUT;
         if (matches(cameras.getParkingIn(), detection)) return CameraType.PARKING_IN;
@@ -123,7 +121,6 @@ public class SequenceEngine {
     enum CameraType {
         DRIVE_IN_IN,
         DRIVE_IN_OUT,
-        SERVICE_DRIVE_IN_IN,
         SERVICE_IN,
         POST_IN,
         SERVICE_OUT,

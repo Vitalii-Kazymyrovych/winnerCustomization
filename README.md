@@ -40,7 +40,6 @@ Use `config.json` (not committed) with:
 - Camera mapping list for:
   - Drive in (in)
   - Drive in (out)
-  - Service-Drive in (in)
   - Service (in)
   - Service posts (array: post in cameras)
   - Service (out)
