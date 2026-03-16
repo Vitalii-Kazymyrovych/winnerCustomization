@@ -13,3 +13,6 @@
 - Removed redundant `serviceDriveInIn` camera slot from configuration and sequence camera type mapping.
 - Updated sequence start logic to use `Drive in (in)` or `Service (in)` as valid start events.
 - Updated `config.json.example`, `README.md`, and `TECHNICAL_SPEC.md` to reflect simplified service entry camera mapping.
+- Fixed XLSX stage rendering for incomplete sequences: Service stage now closes at `postInAt` when `serviceOutAt` is not yet available, so a detected post entry always finalizes Service row in report.
+- Added `ReportServiceTest` case covering `serviceIn + postIn + missing serviceOut` to verify Service time-out/duration and open Post row behavior.
+- Updated `README.md` and `TECHNICAL_SPEC.md` stage-boundary notes to document Service end fallback to `postInAt`.
