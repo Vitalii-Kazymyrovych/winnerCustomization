@@ -53,17 +53,9 @@
         "to": 180
       }
     },
-    "serviceDriveInIn": {
-      "name": "Service-Drive in (in)",
-      "analyticsId": 1003,
-      "directionRange": {
-        "from": null,
-        "to": null
-      }
-    },
     "serviceIn": {
       "name": "Service (in)",
-      "analyticsId": 1004,
+      "analyticsId": 1003,
       "directionRange": {
         "from": null,
         "to": null

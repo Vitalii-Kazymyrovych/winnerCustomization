@@ -157,7 +157,6 @@ public class AppConfig {
     public static class CamerasConfig {
         private CameraConfig driveInIn;
         private CameraConfig driveInOut;
-        private CameraConfig serviceDriveInIn;
         private CameraConfig serviceIn;
         private List<PostCameraConfig> servicePosts = new ArrayList<>();
         private CameraConfig serviceOut;
@@ -168,8 +167,6 @@ public class AppConfig {
         public void setDriveInIn(CameraConfig driveInIn) { this.driveInIn = driveInIn; }
         public CameraConfig getDriveInOut() { return driveInOut; }
         public void setDriveInOut(CameraConfig driveInOut) { this.driveInOut = driveInOut; }
-        public CameraConfig getServiceDriveInIn() { return serviceDriveInIn; }
-        public void setServiceDriveInIn(CameraConfig serviceDriveInIn) { this.serviceDriveInIn = serviceDriveInIn; }
         public CameraConfig getServiceIn() { return serviceIn; }
         public void setServiceIn(CameraConfig serviceIn) { this.serviceIn = serviceIn; }
         public List<PostCameraConfig> getServicePosts() { return servicePosts; }

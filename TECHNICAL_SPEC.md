@@ -49,7 +49,7 @@
     2. direction-range pass.
   - Tracks active sequence per plate.
   - Handles lifecycle:
-    - start on Drive in (in) / Service-Drive in (in),
+    - start on Drive in (in) / Service (in),
     - append stage events (service, post, parking),
     - treat `Service (in) -> Post 1 (in)` as service stage,
     - treat `Post 1 (in) -> Service (out)` as post stage (no post-out camera),

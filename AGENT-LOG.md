@@ -10,3 +10,6 @@
 - Removed support for service post out cameras from configuration and sequence mapping.
 - Updated report and duration calculations to use `serviceOutAt` as the Post stage end timestamp.
 - Updated docs (`README.md`, `TECHNICAL_SPEC.md`) and `config.json.example` to reflect removal of post-out camera config.
+- Removed redundant `serviceDriveInIn` camera slot from configuration and sequence camera type mapping.
+- Updated sequence start logic to use `Drive in (in)` or `Service (in)` as valid start events.
+- Updated `config.json.example`, `README.md`, and `TECHNICAL_SPEC.md` to reflect simplified service entry camera mapping.
