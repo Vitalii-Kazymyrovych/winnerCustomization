@@ -33,7 +33,7 @@
 - `notifications`: telegram on/off + token/chat id.
 - `timing`: thresholds for alerts and test-drive reset.
 - `cameras`: all logical camera slots, each with `analyticsId` and optional direction range.
-- `servicePosts`: list of post camera pairs (`in`, `out`).
+- `servicePosts`: list of post cameras (`in`).
 
 ### `DetectionService`
 - Method: `loadAllDetections()`
@@ -51,6 +51,8 @@
   - Handles lifecycle:
     - start on Drive in (in) / Service-Drive in (in),
     - append stage events (service, post, parking),
+    - treat `Service (in) -> Post 1 (in)` as service stage,
+    - treat `Post 1 (in) -> Service (out)` as post stage (no post-out camera),
     - close on parking out,
     - reset as new sequence if test-drive gap exceeds configured reset threshold.
   - Produces `SequenceRecord` with path, stage durations, alerts.
@@ -79,7 +81,7 @@
     5. generate XLSX report bytes.
 - Internal method: `toXlsx(...)`
   - Creates `Sequences` worksheet with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
-  - For each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Parking`) with dynamic inclusion based on available timestamps.
+  - For each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Parking`) with dynamic inclusion based on available timestamps. Post stage starts at post-in and ends at service-out.
   - Computes `Duration` from stage start/end as `HH:mm:ss`; empty when one of timestamps is missing.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 

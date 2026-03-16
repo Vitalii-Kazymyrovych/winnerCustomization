@@ -75,7 +75,6 @@ public class SequenceEngine {
             case DRIVE_IN_OUT -> current.setDriveInOutAt(at);
             case SERVICE_IN -> current.setServiceInAt(at);
             case POST_IN -> current.setPostInAt(at);
-            case POST_OUT -> current.setPostOutAt(at);
             case SERVICE_OUT -> current.setServiceOutAt(at);
             case PARKING_IN -> current.setParkingInAt(at);
             case PARKING_OUT -> current.setParkingOutAt(at);
@@ -110,7 +109,6 @@ public class SequenceEngine {
 
         for (AppConfig.PostCameraConfig post : cameras.getServicePosts()) {
             if (matches(post.getIn(), detection)) return CameraType.POST_IN;
-            if (matches(post.getOut(), detection)) return CameraType.POST_OUT;
         }
 
         return CameraType.OTHER;
@@ -128,7 +126,6 @@ public class SequenceEngine {
         SERVICE_DRIVE_IN_IN,
         SERVICE_IN,
         POST_IN,
-        POST_OUT,
         SERVICE_OUT,
         PARKING_IN,
         PARKING_OUT,
