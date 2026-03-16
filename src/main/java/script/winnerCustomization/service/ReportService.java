@@ -118,7 +118,7 @@ public class ReportService {
         List<StageLine> stages = new ArrayList<>();
         addStage(stages, "Drive in", record.getStartedAt(), record.getDriveInOutAt());
         addStage(stages, "Service", record.getServiceInAt(), record.getServiceOutAt());
-        addStage(stages, "Post", record.getPostInAt(), record.getPostOutAt());
+        addStage(stages, "Post", record.getPostInAt(), record.getServiceOutAt());
         addStage(stages, "Parking", record.getParkingInAt(), record.getParkingOutAt());
         if (stages.isEmpty()) {
             stages.add(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt()));

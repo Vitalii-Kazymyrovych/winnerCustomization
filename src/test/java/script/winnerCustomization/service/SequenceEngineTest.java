@@ -22,10 +22,9 @@ class SequenceEngineTest {
                 new Detection(2, "A123", 11, 90, t.plusMinutes(5)),
                 new Detection(3, "A123", 12, 90, t.plusMinutes(8)),
                 new Detection(4, "A123", 20, 90, t.plusMinutes(12)),
-                new Detection(5, "A123", 21, 90, t.plusMinutes(40)),
-                new Detection(6, "A123", 13, 90, t.plusMinutes(50)),
-                new Detection(7, "A123", 14, 90, t.plusMinutes(52)),
-                new Detection(8, "A123", 15, 90, t.plusMinutes(70))
+                new Detection(5, "A123", 13, 90, t.plusMinutes(50)),
+                new Detection(6, "A123", 14, 90, t.plusMinutes(52)),
+                new Detection(7, "A123", 15, 90, t.plusMinutes(70))
         );
 
         List<SequenceRecord> result = engine.build(detections, config);
@@ -61,7 +60,6 @@ class SequenceEngineTest {
         AppConfig.PostCameraConfig post = new AppConfig.PostCameraConfig();
         post.setPostName("post-1");
         post.setIn(camera(20));
-        post.setOut(camera(21));
         cameras.setServicePosts(List.of(post));
         c.setCameras(cameras);
         return c;

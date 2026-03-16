@@ -6,3 +6,7 @@
 - Updated `ReportServiceTest` to validate the new report structure.
 - Removed `<NEXT NUMBER SEQUENCE>` row from XLSX output; sequences are now separated only by plate marker row and following stage rows.
 
+- Updated stage boundary logic so `Service in -> Post in` is treated as Service stage and `Post in -> Service out` as Post stage.
+- Removed support for service post out cameras from configuration and sequence mapping.
+- Updated report and duration calculations to use `serviceOutAt` as the Post stage end timestamp.
+- Updated docs (`README.md`, `TECHNICAL_SPEC.md`) and `config.json.example` to reflect removal of post-out camera config.

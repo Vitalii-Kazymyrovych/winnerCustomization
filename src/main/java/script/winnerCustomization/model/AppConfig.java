@@ -185,14 +185,11 @@ public class AppConfig {
     public static class PostCameraConfig {
         private String postName;
         private CameraConfig in;
-        private CameraConfig out;
 
         public String getPostName() { return postName; }
         public void setPostName(String postName) { this.postName = postName; }
         public CameraConfig getIn() { return in; }
         public void setIn(CameraConfig in) { this.in = in; }
-        public CameraConfig getOut() { return out; }
-        public void setOut(CameraConfig out) { this.out = out; }
     }
 
     public static class CameraConfig {

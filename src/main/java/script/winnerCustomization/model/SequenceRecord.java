@@ -11,7 +11,6 @@ public class SequenceRecord {
     private LocalDateTime driveInOutAt;
     private LocalDateTime serviceInAt;
     private LocalDateTime postInAt;
-    private LocalDateTime postOutAt;
     private LocalDateTime serviceOutAt;
     private LocalDateTime parkingInAt;
     private LocalDateTime parkingOutAt;
@@ -33,8 +32,6 @@ public class SequenceRecord {
     public void setServiceInAt(LocalDateTime serviceInAt) { this.serviceInAt = serviceInAt; appendPath("Service (in)"); }
     public LocalDateTime getPostInAt() { return postInAt; }
     public void setPostInAt(LocalDateTime postInAt) { this.postInAt = postInAt; appendPath("Service post (in)"); }
-    public LocalDateTime getPostOutAt() { return postOutAt; }
-    public void setPostOutAt(LocalDateTime postOutAt) { this.postOutAt = postOutAt; appendPath("Service post (out)"); }
     public LocalDateTime getServiceOutAt() { return serviceOutAt; }
     public void setServiceOutAt(LocalDateTime serviceOutAt) { this.serviceOutAt = serviceOutAt; appendPath("Service (out)"); }
     public LocalDateTime getParkingInAt() { return parkingInAt; }
@@ -51,7 +48,7 @@ public class SequenceRecord {
         appendDuration(sb, "DriveIn->Out", startedAt, driveInOutAt);
         appendDuration(sb, "Out->Service", driveInOutAt, serviceInAt);
         appendDuration(sb, "Service->Post", serviceInAt, postInAt);
-        appendDuration(sb, "PostWork", postInAt, postOutAt);
+        appendDuration(sb, "PostWork", postInAt, serviceOutAt);
         appendDuration(sb, "Service->Parking", serviceOutAt, parkingInAt);
         appendDuration(sb, "Parking", parkingInAt, parkingOutAt);
         return sb.toString();

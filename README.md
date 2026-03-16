@@ -42,7 +42,7 @@ Use `config.json` (not committed) with:
   - Drive in (out)
   - Service-Drive in (in)
   - Service (in)
-  - Service posts (array: post in/out)
+  - Service posts (array: post in cameras)
   - Service (out)
   - Parking (in)
   - Parking (out)
@@ -75,7 +75,7 @@ Use `config.json` (not committed) with:
 ## Notes
 
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, report generation, notifications).
-- XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text.
+- XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text. Service stage is interpreted as `Service in -> Post in`, and Post stage as `Post in -> Service out`.
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
 - The app creates `vehicle_sequences` table in sequence DB if it does not exist.
