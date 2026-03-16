@@ -12,6 +12,9 @@ import script.winnerCustomization.model.SequenceRecord;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -72,29 +75,79 @@ public class ReportService {
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             XSSFSheet sheet = workbook.createSheet("Sequences");
             Row header = sheet.createRow(0);
-            header.createCell(0).setCellValue("Plate");
-            header.createCell(1).setCellValue("Start");
-            header.createCell(2).setCellValue("Finish");
-            header.createCell(3).setCellValue("Path");
-            header.createCell(4).setCellValue("Stage durations");
-            header.createCell(5).setCellValue("Alerts");
+            header.createCell(0).setCellValue("Stage");
+            header.createCell(1).setCellValue("Time in");
+            header.createCell(2).setCellValue("Time out");
+            header.createCell(3).setCellValue("Duration");
+            header.createCell(4).setCellValue("Alerts");
 
             int rowIndex = 1;
             for (SequenceRecord r : records) {
-                Row row = sheet.createRow(rowIndex++);
-                row.createCell(0).setCellValue(r.getPlateNumber());
-                row.createCell(1).setCellValue(String.valueOf(r.getStartedAt()));
-                row.createCell(2).setCellValue(String.valueOf(r.getFinishedAt()));
-                row.createCell(3).setCellValue(r.getPath());
-                row.createCell(4).setCellValue(r.stageDurations());
-                row.createCell(5).setCellValue(String.join(" | ", r.getAlerts()));
+                Row plateRow = sheet.createRow(rowIndex++);
+                plateRow.createCell(2).setCellValue(r.getPlateNumber());
+
+                List<StageLine> stages = toStages(r);
+                List<String> alerts = r.getAlerts();
+                for (int stageIndex = 0; stageIndex < stages.size(); stageIndex++) {
+                    StageLine stage = stages.get(stageIndex);
+                    Row row = sheet.createRow(rowIndex++);
+                    row.createCell(0).setCellValue(stage.stageName());
+                    row.createCell(1).setCellValue(formatTime(stage.timeIn()));
+                    row.createCell(2).setCellValue(formatTime(stage.timeOut()));
+                    row.createCell(3).setCellValue(formatDuration(stage.timeIn(), stage.timeOut()));
+
+                    String alertCellValue = "";
+                    if (alerts.isEmpty() && stageIndex == 0) {
+                        alertCellValue = "none";
+                    } else if (stageIndex < alerts.size()) {
+                        alertCellValue = alerts.get(stageIndex);
+                    }
+                    row.createCell(4).setCellValue(alertCellValue);
+                }
             }
-            for (int i = 0; i <= 5; i++) {
+            for (int i = 0; i <= 4; i++) {
                 sheet.autoSizeColumn(i);
             }
             workbook.write(output);
             log.info("XLSX generation completed");
             return output.toByteArray();
         }
+    }
+
+    private List<StageLine> toStages(SequenceRecord record) {
+        List<StageLine> stages = new ArrayList<>();
+        addStage(stages, "Drive in", record.getStartedAt(), record.getDriveInOutAt());
+        addStage(stages, "Service", record.getServiceInAt(), record.getServiceOutAt());
+        addStage(stages, "Post", record.getPostInAt(), record.getPostOutAt());
+        addStage(stages, "Parking", record.getParkingInAt(), record.getParkingOutAt());
+        if (stages.isEmpty()) {
+            stages.add(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt()));
+        }
+        return stages;
+    }
+
+    private void addStage(List<StageLine> stages, String stageName, LocalDateTime timeIn, LocalDateTime timeOut) {
+        if (timeIn == null && timeOut == null) {
+            return;
+        }
+        stages.add(new StageLine(stageName, timeIn, timeOut));
+    }
+
+    private String formatTime(LocalDateTime value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private String formatDuration(LocalDateTime from, LocalDateTime to) {
+        if (from == null || to == null) {
+            return "";
+        }
+        Duration duration = Duration.between(from, to);
+        long seconds = duration.toSeconds();
+        long abs = Math.abs(seconds);
+        String formatted = String.format("%02d:%02d:%02d", abs / 3600, (abs % 3600) / 60, abs % 60);
+        return seconds < 0 ? "-" + formatted : formatted;
+    }
+
+    private record StageLine(String stageName, LocalDateTime timeIn, LocalDateTime timeOut) {
     }
 }

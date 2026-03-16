@@ -5,7 +5,7 @@ Spring Boot script that:
 1. Reads ALPR detections from source PostgreSQL (`videoanalytics.alpr_detections` or configurable table).
 2. Builds car movement sequences across configured camera stages.
 3. Stores computed sequences in a separate PostgreSQL database.
-4. Exposes XLSX report download endpoint.
+4. Exposes XLSX report download endpoint in a stage-row layout (dynamic per sequence, not fixed stage columns).
 5. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
 
 ## Run
@@ -75,6 +75,7 @@ Use `config.json` (not committed) with:
 ## Notes
 
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, report generation, notifications).
+- XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text.
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
 - The app creates `vehicle_sequences` table in sequence DB if it does not exist.
