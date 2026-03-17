@@ -155,38 +155,54 @@ public class AppConfig {
     }
 
     public static class CamerasConfig {
-        private CameraConfig driveInIn;
-        private CameraConfig driveInOut;
-        private CameraConfig serviceIn;
+        private List<CameraConfig> driveInIn = new ArrayList<>();
+        private List<CameraConfig> driveInOut = new ArrayList<>();
+        private List<CameraConfig> serviceIn = new ArrayList<>();
         private List<PostCameraConfig> servicePosts = new ArrayList<>();
-        private CameraConfig serviceOut;
-        private CameraConfig parkingIn;
-        private CameraConfig parkingOut;
+        private List<CameraConfig> serviceOut = new ArrayList<>();
+        private List<CameraConfig> parkingIn = new ArrayList<>();
+        private List<CameraConfig> parkingOut = new ArrayList<>();
 
-        public CameraConfig getDriveInIn() { return driveInIn; }
-        public void setDriveInIn(CameraConfig driveInIn) { this.driveInIn = driveInIn; }
-        public CameraConfig getDriveInOut() { return driveInOut; }
-        public void setDriveInOut(CameraConfig driveInOut) { this.driveInOut = driveInOut; }
-        public CameraConfig getServiceIn() { return serviceIn; }
-        public void setServiceIn(CameraConfig serviceIn) { this.serviceIn = serviceIn; }
+        public List<CameraConfig> getDriveInIn() { return driveInIn; }
+        public void setDriveInIn(List<CameraConfig> driveInIn) { this.driveInIn = driveInIn; }
+        public List<CameraConfig> getDriveInOut() { return driveInOut; }
+        public void setDriveInOut(List<CameraConfig> driveInOut) { this.driveInOut = driveInOut; }
+        public List<CameraConfig> getServiceIn() { return serviceIn; }
+        public void setServiceIn(List<CameraConfig> serviceIn) { this.serviceIn = serviceIn; }
         public List<PostCameraConfig> getServicePosts() { return servicePosts; }
         public void setServicePosts(List<PostCameraConfig> servicePosts) { this.servicePosts = servicePosts; }
-        public CameraConfig getServiceOut() { return serviceOut; }
-        public void setServiceOut(CameraConfig serviceOut) { this.serviceOut = serviceOut; }
-        public CameraConfig getParkingIn() { return parkingIn; }
-        public void setParkingIn(CameraConfig parkingIn) { this.parkingIn = parkingIn; }
-        public CameraConfig getParkingOut() { return parkingOut; }
-        public void setParkingOut(CameraConfig parkingOut) { this.parkingOut = parkingOut; }
+        public List<CameraConfig> getServiceOut() { return serviceOut; }
+        public void setServiceOut(List<CameraConfig> serviceOut) { this.serviceOut = serviceOut; }
+        public List<CameraConfig> getParkingIn() { return parkingIn; }
+        public void setParkingIn(List<CameraConfig> parkingIn) { this.parkingIn = parkingIn; }
+        public List<CameraConfig> getParkingOut() { return parkingOut; }
+        public void setParkingOut(List<CameraConfig> parkingOut) { this.parkingOut = parkingOut; }
     }
 
     public static class PostCameraConfig {
         private String postName;
-        private CameraConfig in;
+        private int analyticsId;
+        private DirectionRange inDirectionRange;
+        private DirectionRange outDirectionRange;
 
         public String getPostName() { return postName; }
         public void setPostName(String postName) { this.postName = postName; }
-        public CameraConfig getIn() { return in; }
-        public void setIn(CameraConfig in) { this.in = in; }
+        public int getAnalyticsId() { return analyticsId; }
+        public void setAnalyticsId(int analyticsId) { this.analyticsId = analyticsId; }
+        public DirectionRange getInDirectionRange() { return inDirectionRange; }
+        public void setInDirectionRange(DirectionRange inDirectionRange) { this.inDirectionRange = inDirectionRange; }
+        public DirectionRange getOutDirectionRange() { return outDirectionRange; }
+        public void setOutDirectionRange(DirectionRange outDirectionRange) { this.outDirectionRange = outDirectionRange; }
+
+        public boolean matchesIn(Detection detection) {
+            return analyticsId == detection.analyticsId()
+                    && (inDirectionRange == null || inDirectionRange.contains(detection.direction()));
+        }
+
+        public boolean matchesOut(Detection detection) {
+            return analyticsId == detection.analyticsId()
+                    && (outDirectionRange == null || outDirectionRange.contains(detection.direction()));
+        }
     }
 
     public static class CameraConfig {

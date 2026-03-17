@@ -38,14 +38,8 @@ Use `config.json` (not committed) with:
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Root PostgreSQL credentials for first-start bootstrap: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`). Bootstrap now ensures both sequence database and its DB user/permissions.
 - Source detections table name.
-- Camera mapping list for:
-  - Drive in (in)
-  - Drive in (out)
-  - Service (in)
-  - Service posts (array: post in cameras)
-  - Service (out)
-  - Parking (in)
-  - Parking (out)
+- Camera mapping lists for common points (Drive in / Service / Parking), where each point can contain multiple cameras and each camera is matched by analyticsId + directionRange.
+  - `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`
 - Direction ranges per camera (`from`/`to`) where null means no filtering.
 - Alert timing thresholds.
 - Telegram notifications toggle and credentials.
@@ -87,7 +81,7 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
 
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, timed alert sync/dispatch, report generation, notifications).
 - XLSX report endpoint now returns as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
-- XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text. Service stage is interpreted as `Service in -> Post in` (or `Service in -> Service out` when post-in is missing), and Post stage as `Post in -> Service out`.
+- XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text. Stage split is now: `Service #1` (`Service in`/`Post out` -> `Post in`/`Service out`/next stage), `Post` (`Post in` -> `Post out`), `Service #2` (`Post out` -> `Service out`/next stage).
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
 - The app creates `vehicle_sequences` table in sequence DB if it does not exist.
@@ -109,3 +103,5 @@ Additionally, `PostgresDatabaseOperationsIntegrationTest` validates end-to-end P
 - sequence DB auto-creation via `DatabaseBootstrapService`;
 - source detection read via `DetectionService`;
 - sequence table initialization and write flow via `SequenceStorageService`.
+
+- Post Out detections are treated as overwrite events: each new valid Post Out updates `postOutAt` and restarts second service start time.
