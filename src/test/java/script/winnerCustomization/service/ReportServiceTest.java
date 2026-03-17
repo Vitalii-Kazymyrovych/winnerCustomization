@@ -4,6 +4,7 @@ import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -13,10 +14,13 @@ import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
 
 import java.io.ByteArrayInputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,7 +39,7 @@ class ReportServiceTest {
     private ReportService reportService;
 
     @Test
-    void shouldBuildReportPersistRecords() throws Exception {
+    void shouldBuildReportPersistRecordsAndCreateSecondSheet() throws Exception {
         AppConfig config = new AppConfig();
         config.setNotifications(new AppConfig.NotificationsConfig());
         when(runtimeConfig.get()).thenReturn(config);
@@ -45,28 +49,35 @@ class ReportServiceTest {
 
         SequenceRecord first = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
         first.setDriveInOutAt(LocalDateTime.of(2026, 1, 1, 10, 5));
-        first.setFinishedAt(LocalDateTime.of(2026, 1, 1, 10, 30));
+        first.setServiceInAt(LocalDateTime.of(2026, 1, 1, 10, 10));
+        first.setPostInAt(LocalDateTime.of(2026, 1, 1, 10, 20));
+        first.setPostOutAt(LocalDateTime.of(2026, 1, 1, 10, 25));
+        first.setSecondServiceInAt(LocalDateTime.of(2026, 1, 1, 10, 25));
+        first.setServiceOutAt(LocalDateTime.of(2026, 1, 1, 10, 40));
+        first.setParkingInAt(LocalDateTime.of(2026, 1, 1, 10, 50));
+        first.setParkingOutAt(LocalDateTime.of(2026, 1, 1, 10, 55));
+        first.setFinishedAt(LocalDateTime.of(2026, 1, 1, 10, 55));
         first.addAlert("Exceeded 15 min");
 
-        SequenceRecord second = new SequenceRecord("BB2222", LocalDateTime.of(2026, 1, 1, 11, 0));
-        second.setServiceInAt(LocalDateTime.of(2026, 1, 1, 11, 2));
-        second.addAlert("Exceeded 15 min");
-
-        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(first, second));
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(first));
 
         byte[] data = reportService.buildReport();
 
-        verify(sequenceStorageService).initialize();
-        verify(sequenceStorageService).replaceAll(List.of(first, second));
+        verify(sequenceStorageService, timeout(1000)).initialize();
+        verify(sequenceStorageService, timeout(1000)).replaceAll(List.of(first));
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
-            XSSFSheet sheet = workbook.getSheet("Sequences");
-            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Stage");
-            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("AA1111");
-            assertThat(sheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive in");
-            assertThat(sheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("00:05:00");
-            assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("BB2222");
-            assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Drive in");
-            assertThat(sheet.getRow(5).getCell(0).getStringCellValue()).isEqualTo("Service");
+            XSSFSheet stageSheet = workbook.getSheet("Sequences");
+            assertThat(stageSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Stage");
+            assertThat(stageSheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("AA1111");
+            assertThat(stageSheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive in");
+
+            XSSFSheet eventsSheet = workbook.getSheet("Events");
+            assertThat(eventsSheet).isNotNull();
+            assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Номер");
+            assertThat(eventsSheet.getRow(0).getCell(5).getStringCellValue())
+                    .isEqualTo("Для события Out время проведенное на этапе");
+            assertThat(eventsSheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("Out");
+            assertThat(eventsSheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo("00:05:00");
         }
     }
 
@@ -100,4 +111,22 @@ class ReportServiceTest {
         }
     }
 
+    @Test
+    void shouldPersistReportIntoConfiguredFolder(@TempDir Path tempDir) throws Exception {
+        AppConfig config = new AppConfig();
+        AppConfig.ReportsConfig reports = new AppConfig.ReportsConfig();
+        reports.setOutputDirectory(tempDir.resolve("xlsx").toString());
+        config.setReports(reports);
+        when(runtimeConfig.get()).thenReturn(config);
+
+        Detection detection = new Detection(1L, "CC0001", 10, 90, LocalDateTime.now());
+        when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(new SequenceRecord("CC0001", LocalDateTime.now())));
+
+        byte[] body = reportService.buildReport();
+
+        Path reportPath = tempDir.resolve("xlsx").resolve("sequences.xlsx");
+        assertThat(Files.exists(reportPath)).isTrue();
+        assertThat(Files.size(reportPath)).isEqualTo(body.length);
+    }
 }

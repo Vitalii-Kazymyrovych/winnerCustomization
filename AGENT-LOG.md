@@ -39,3 +39,7 @@
 - Updated tests (`DetectionServiceTest`, `ReportServiceTest`) and docs (`README.md`, `TECHNICAL_SPEC.md`, `config.json.example`) for the new report naming and load-from behavior.
 - Fixed runtime config `LocalDateTime` deserialization on packaged app startup by adding `jackson-datatype-jsr310` dependency and added `JacksonConfigTest` coverage for `sourceTable.loadFrom` JSON parsing.
 - Updated `README.md` and `TECHNICAL_SPEC.md` startup/config notes to document Java time module requirement.
+- Added report output persistence into configurable folder (`reports.outputDirectory`): each `/report/sequences.xlsx` build now also writes `sequences.xlsx` to disk.
+- Extended XLSX generation with a second `Events` sheet containing columns `Номер`, `Камера`, `Этап`, `Тип события (In \\ Out)`, `Время`, and duration for `Out` events.
+- Updated `ReportServiceTest` to cover second-sheet structure and configured report-file persistence.
+- Updated `config.json.example`, `README.md`, and `TECHNICAL_SPEC.md` for the new report configuration and two-sheet report format.

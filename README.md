@@ -29,6 +29,7 @@ Spring Boot script that:
    - returns `200` on success, `409` if a trigger is currently running, `429` during cooldown.
 6. Download report from browser:
    - `http://localhost:8080/report/sequences.xlsx`
+   - The same report file is additionally saved as `sequences.xlsx` in `reports.outputDirectory` (if configured).
 
 ## Configuration
 
@@ -42,6 +43,7 @@ Use `config.json` (not committed) with:
   - `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`
 - Direction ranges per camera (`from`/`to`) where null means no filtering.
 - Alert timing thresholds.
+- `reports.outputDirectory`: optional folder where each `/report/sequences.xlsx` call also stores `sequences.xlsx`. The folder is created automatically if missing.
 - Telegram notifications toggle and credentials.
 
 ## Timed notifications (DB-backed)
@@ -82,7 +84,10 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
 
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, timed alert sync/dispatch, report generation, notifications).
 - XLSX report endpoint now returns as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
-- XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text. Stage split is now: `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and ends at `Post out`, second `Service` starts at `Post out` and ends at `Service out` (or next closing event).
+- XLSX report now contains two sheets:
+  - `Sequences`: stage-oriented layout with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and `Alerts`.
+  - `Events`: event log layout with columns `Номер`, `Камера`, `Этап`, `Тип события (In \ Out)`, `Время`, `Для события Out время проведенное на этапе`.
+- Stage split is now: `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and ends at `Post out`, second `Service` starts at `Post out` and ends at `Service out` (or next closing event).
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
 - The app creates `vehicle_sequences` table in sequence DB if it does not exist.
