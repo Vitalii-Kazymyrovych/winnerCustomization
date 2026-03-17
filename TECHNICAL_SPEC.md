@@ -112,7 +112,7 @@
 - Internal method: `toXlsx(...)`
   - Creates two worksheets:
     - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
-    - `Events` with columns: `Номер`, `Камера`, `Этап`, `Тип события (In \ Out)`, `Время`, `Для события Out время проведенное на этапе`.
+    - `Events` with columns: `Plate`, `Camera`, `Event type (In / Out)`, `Time`, `Duration for Out event`.
   - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Service`, `Parking`) with dynamic inclusion based on available timestamps. First Service stage ends at `postInAt` when present; Post stage starts at `postInAt` and ends at `postOutAt`; second Service stage starts at `postOutAt` and ends at `serviceOutAt`.
   - For `Events`: writes one row per present stage transition event with `In`/`Out`; duration is filled only for `Out` rows based on stage start/end timestamps.
   - Computes duration as `HH:mm:ss`; empty when one of timestamps is missing.
