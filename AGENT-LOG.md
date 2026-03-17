@@ -20,3 +20,5 @@
 - Enabled Spring scheduling globally and moved Telegram sending out of `ReportService` into timed dispatcher.
 - Added models for alert job type/record, updated `ReportServiceTest`, and added `AlertSchedulerServiceTest` coverage for upsert/cancel/dispatch behavior.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document timed notifications architecture, scheduler intervals, and DB load safeguards (indexed due query + idempotent upserts).
+- Moved `ReportService` sequence DB refresh (`initialize` + `replaceAll`) to asynchronous background execution so `/report/sequences.xlsx` response is not delayed by sequence DB writes.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document non-blocking report download behavior and updated report data flow.
