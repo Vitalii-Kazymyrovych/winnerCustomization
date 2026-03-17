@@ -86,7 +86,7 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
 - XLSX report endpoint now returns as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
 - XLSX report now contains two sheets:
   - `Sequences`: stage-oriented layout with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and `Alerts`.
-  - `Events`: event log layout with columns `Номер`, `Камера`, `Этап`, `Тип события (In \ Out)`, `Время`, `Для события Out время проведенное на этапе`.
+  - `Events`: event log layout with columns `Plate`, `Camera`, `Event type (In / Out)`, `Time`, `Duration for Out event`.
 - Stage split is now: `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and ends at `Post out`, second `Service` starts at `Post out` and ends at `Service out` (or next closing event).
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.

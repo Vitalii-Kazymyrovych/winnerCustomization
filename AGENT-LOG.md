@@ -43,3 +43,6 @@
 - Extended XLSX generation with a second `Events` sheet containing columns `Номер`, `Камера`, `Этап`, `Тип события (In \\ Out)`, `Время`, and duration for `Out` events.
 - Updated `ReportServiceTest` to cover second-sheet structure and configured report-file persistence.
 - Updated `config.json.example`, `README.md`, and `TECHNICAL_SPEC.md` for the new report configuration and two-sheet report format.
+- Updated `Events` XLSX sheet to remove the separate `Stage` column (stage is now implied by camera) and translated event-sheet headers to English (`Plate`, `Camera`, `Event type (In / Out)`, `Time`, `Duration for Out event`).
+- Updated `ReportServiceTest` assertions for the new `Events` sheet structure and English headers.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the new `Events` sheet columns.

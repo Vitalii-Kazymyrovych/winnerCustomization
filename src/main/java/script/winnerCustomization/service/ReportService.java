@@ -136,26 +136,25 @@ public class ReportService {
     private void writeEventSheet(XSSFWorkbook workbook, List<SequenceRecord> records) {
         XSSFSheet sheet = workbook.createSheet("Events");
         Row header = sheet.createRow(0);
-        header.createCell(0).setCellValue("Номер");
-        header.createCell(1).setCellValue("Камера");
-        header.createCell(2).setCellValue("Этап");
-        header.createCell(3).setCellValue("Тип события (In \\ Out)");
-        header.createCell(4).setCellValue("Время");
-        header.createCell(5).setCellValue("Для события Out время проведенное на этапе");
+        header.createCell(0).setCellValue("Plate");
+        header.createCell(1).setCellValue("Camera");
+        header.createCell(2).setCellValue("Event type (In / Out)");
+        header.createCell(3).setCellValue("Time");
+        header.createCell(4).setCellValue("Duration for Out event");
 
         int rowIndex = 1;
         for (SequenceRecord record : records) {
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Drive in", "Drive in", "In", record.getStartedAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Drive in", "Drive in", "Out", record.getDriveInOutAt(), record.getStartedAt(), record.getDriveInOutAt());
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service", "Service", "In", record.getServiceInAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service post", "Post", "In", record.getPostInAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service post", "Post", "Out", record.getPostOutAt(), record.getPostInAt(), record.getPostOutAt());
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service", "Service", "Out", record.getServiceOutAt(), resolveServiceOutStart(record), record.getServiceOutAt());
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Parking", "Parking", "In", record.getParkingInAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Parking", "Parking", "Out", record.getParkingOutAt(), record.getParkingInAt(), record.getParkingOutAt());
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Drive in", "In", record.getStartedAt(), null, null);
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Drive in", "Out", record.getDriveInOutAt(), record.getStartedAt(), record.getDriveInOutAt());
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service", "In", record.getServiceInAt(), null, null);
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service post", "In", record.getPostInAt(), null, null);
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service post", "Out", record.getPostOutAt(), record.getPostInAt(), record.getPostOutAt());
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service", "Out", record.getServiceOutAt(), resolveServiceOutStart(record), record.getServiceOutAt());
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Parking", "In", record.getParkingInAt(), null, null);
+            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Parking", "Out", record.getParkingOutAt(), record.getParkingInAt(), record.getParkingOutAt());
         }
 
-        for (int i = 0; i <= 5; i++) {
+        for (int i = 0; i <= 4; i++) {
             sheet.autoSizeColumn(i);
         }
     }
@@ -164,7 +163,6 @@ public class ReportService {
                             int rowIndex,
                             String plate,
                             String camera,
-                            String stage,
                             String eventType,
                             LocalDateTime eventTime,
                             LocalDateTime durationStart,
@@ -175,10 +173,9 @@ public class ReportService {
         Row row = sheet.createRow(rowIndex);
         row.createCell(0).setCellValue(plate);
         row.createCell(1).setCellValue(camera);
-        row.createCell(2).setCellValue(stage);
-        row.createCell(3).setCellValue(eventType);
-        row.createCell(4).setCellValue(formatTime(eventTime));
-        row.createCell(5).setCellValue("Out".equals(eventType) ? formatDuration(durationStart, durationEnd) : "");
+        row.createCell(2).setCellValue(eventType);
+        row.createCell(3).setCellValue(formatTime(eventTime));
+        row.createCell(4).setCellValue("Out".equals(eventType) ? formatDuration(durationStart, durationEnd) : "");
         return rowIndex + 1;
     }
 

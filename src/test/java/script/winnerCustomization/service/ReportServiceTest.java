@@ -73,11 +73,11 @@ class ReportServiceTest {
 
             XSSFSheet eventsSheet = workbook.getSheet("Events");
             assertThat(eventsSheet).isNotNull();
-            assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Номер");
-            assertThat(eventsSheet.getRow(0).getCell(5).getStringCellValue())
-                    .isEqualTo("Для события Out время проведенное на этапе");
-            assertThat(eventsSheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("Out");
-            assertThat(eventsSheet.getRow(2).getCell(5).getStringCellValue()).isEqualTo("00:05:00");
+            assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Plate");
+            assertThat(eventsSheet.getRow(0).getCell(4).getStringCellValue())
+                    .isEqualTo("Duration for Out event");
+            assertThat(eventsSheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("Out");
+            assertThat(eventsSheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:05:00");
         }
     }
 
