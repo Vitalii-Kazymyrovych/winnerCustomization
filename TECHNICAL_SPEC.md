@@ -65,6 +65,30 @@
   - Deletes previous rows.
   - Inserts each sequence with path, finish time, stage durations and joined alerts.
 
+### `AlertJobStorageService`
+- Method: `initialize()`
+  - Ensures `alert_jobs` table and partial pending-due index exist.
+  - Table stores alert queue state (`PENDING`/`SENT`/`CANCELLED`) with timestamps (`trigger_at`, `due_at`, `sent_at`, `cancelled_at`).
+- Method: `upsertPending(...)`
+  - Idempotently inserts or reactivates a pending alert job using unique key (`plate_number`, `alert_type`, `trigger_at`).
+- Method: `cancel(...)`
+  - Cancels only pending jobs for a given alert key when stage is completed in time.
+- Method: `findDuePending(now, limit)`
+  - Returns indexed, due pending jobs ordered by `due_at`.
+- Method: `markSent(id, sentAt)`
+  - Moves pending jobs to `SENT` after successful dispatch attempt.
+
+### `AlertSchedulerService`
+- Scheduled method: `syncPendingJobs()`
+  - Runs with fixed delay (`alerts.sync.delay.millis`, default `10000`).
+  - Loads detections, rebuilds sequences, and synchronizes DB-backed alert jobs:
+    - `DRIVE_IN_OUT_MISSING` (trigger: `startedAt`, due: `startedAt + driveInToDriveOutAlertMinutes`)
+    - `SERVICE_POST_IN_MISSING` (trigger: `serviceInAt`, due: `serviceInAt + serviceToPostAlertMinutes`)
+  - Cancels pending jobs when expected next stage already exists (`driveInOutAt` / `postInAt`).
+- Scheduled method: `dispatchDueAlerts()`
+  - Runs with fixed delay (`alerts.dispatch.delay.millis`, default `5000`).
+  - Reads due pending jobs in batches, sends Telegram messages, marks jobs as `SENT`.
+
 ### `TelegramNotifier`
 - Method: `sendIfEnabled(AppConfig.NotificationsConfig, String)`
   - No-op when notifications are missing/disabled.
@@ -77,8 +101,8 @@
     1. load detections,
     2. build sequences,
     3. initialize/replace storage,
-    4. send unique alert notifications,
-    5. generate XLSX report bytes.
+    4. generate XLSX report bytes.
+  - Does not dispatch Telegram alerts anymore (alerts are handled by timed background workers).
 - Internal method: `toXlsx(...)`
   - Creates `Sequences` worksheet with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
   - For each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Parking`) with dynamic inclusion based on available timestamps. Service stage ends at `postInAt` when present (fallback: `serviceOutAt`), Post stage starts at post-in and ends at service-out.
@@ -107,13 +131,14 @@
 
 ## Data flow
 
-1. Optional trigger request hits `SourceTriggerController` to force source read with cooldown/parallel-call protection.
-2. Report request hits `ReportController`.
-3. `ReportService` asks `DetectionService` for detections.
-4. `SequenceEngine` computes sequence records.
-5. `SequenceStorageService` refreshes `vehicle_sequences` table.
-6. `TelegramNotifier` sends deduplicated alerts.
-7. XLSX is built in-memory and returned.
+1. `AlertSchedulerService.syncPendingJobs()` periodically rebuilds sequences and synchronizes `alert_jobs` (`PENDING` upsert or cancel on stage completion).
+2. `AlertSchedulerService.dispatchDueAlerts()` periodically sends only due pending jobs via `TelegramNotifier` and marks them as `SENT`.
+3. Optional trigger request hits `SourceTriggerController` to force source read with cooldown/parallel-call protection.
+4. Report request hits `ReportController`.
+5. `ReportService` asks `DetectionService` for detections.
+6. `SequenceEngine` computes sequence records.
+7. `SequenceStorageService` refreshes `vehicle_sequences` table.
+8. XLSX is built in-memory and returned.
 
 ## Testing
 
@@ -121,9 +146,10 @@ Unit tests are isolated from live infrastructure and cover all services:
 - `SequenceEngineTest`: full sequence + direction filtering.
 - `DetectionServiceTest`: SQL construction and JDBC row mapping.
 - `SequenceStorageServiceTest`: DDL initialization and replace-all persistence flow.
-- `ReportServiceTest`: orchestration, storage refresh, telegram notification triggering, XLSX content.
+- `ReportServiceTest`: orchestration, storage refresh, XLSX content.
 - `TelegramNotifierTest`: safe no-op behavior for null/disabled notifications.
 - `SourcePullTriggerServiceTest`: trigger success, cooldown behavior, and parallel-run protection.
+- `AlertSchedulerServiceTest`: pending alert-job sync (upsert/cancel) and due-job dispatch flow.
 
 ## Logging
 

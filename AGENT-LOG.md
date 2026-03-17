@@ -16,3 +16,7 @@
 - Fixed XLSX stage rendering for incomplete sequences: Service stage now closes at `postInAt` when `serviceOutAt` is not yet available, so a detected post entry always finalizes Service row in report.
 - Added `ReportServiceTest` case covering `serviceIn + postIn + missing serviceOut` to verify Service time-out/duration and open Post row behavior.
 - Updated `README.md` and `TECHNICAL_SPEC.md` stage-boundary notes to document Service end fallback to `postInAt`.
+- Reworked notifications to DB-backed timed jobs: added `alert_jobs` storage (`AlertJobStorageService`) and `AlertSchedulerService` with two background loops (sync pending jobs + dispatch due jobs).
+- Enabled Spring scheduling globally and moved Telegram sending out of `ReportService` into timed dispatcher.
+- Added models for alert job type/record, updated `ReportServiceTest`, and added `AlertSchedulerServiceTest` coverage for upsert/cancel/dispatch behavior.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document timed notifications architecture, scheduler intervals, and DB load safeguards (indexed due query + idempotent upserts).

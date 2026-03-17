@@ -15,9 +15,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 @Service
 public class ReportService {
@@ -27,18 +25,15 @@ public class ReportService {
     private final DetectionService detectionService;
     private final SequenceEngine sequenceEngine;
     private final SequenceStorageService sequenceStorageService;
-    private final TelegramNotifier telegramNotifier;
 
     public ReportService(RuntimeConfig runtimeConfig,
                          DetectionService detectionService,
                          SequenceEngine sequenceEngine,
-                         SequenceStorageService sequenceStorageService,
-                         TelegramNotifier telegramNotifier) {
+                         SequenceStorageService sequenceStorageService) {
         this.runtimeConfig = runtimeConfig;
         this.detectionService = detectionService;
         this.sequenceEngine = sequenceEngine;
         this.sequenceStorageService = sequenceStorageService;
-        this.telegramNotifier = telegramNotifier;
     }
 
     public byte[] buildReport() throws IOException {
@@ -49,25 +44,9 @@ public class ReportService {
         log.info("Built {} sequence records", records.size());
         sequenceStorageService.initialize();
         sequenceStorageService.replaceAll(records);
-        sendNotifications(records);
         byte[] reportBytes = toXlsx(records);
         log.info("Report build finished, bytes={}", reportBytes.length);
         return reportBytes;
-    }
-
-    private void sendNotifications(List<SequenceRecord> records) {
-        Set<String> unique = new HashSet<>();
-        log.info("Preparing notifications for {} records", records.size());
-        for (SequenceRecord r : records) {
-            for (String alert : r.getAlerts()) {
-                String message = "Plate " + r.getPlateNumber() + ": " + alert;
-                if (unique.add(message)) {
-                    log.info("Sending notification: {}", message);
-                    telegramNotifier.sendIfEnabled(runtimeConfig.get().getNotifications(), message);
-                }
-            }
-        }
-        log.info("Notification processing finished. Unique messages={}", unique.size());
     }
 
     private byte[] toXlsx(List<SequenceRecord> records) throws IOException {

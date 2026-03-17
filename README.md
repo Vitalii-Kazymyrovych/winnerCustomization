@@ -6,7 +6,8 @@ Spring Boot script that:
 2. Builds car movement sequences across configured camera stages.
 3. Stores computed sequences in a separate PostgreSQL database.
 4. Exposes XLSX report download endpoint in a stage-row layout (dynamic per sequence, not fixed stage columns).
-5. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
+5. Runs DB-backed alert scheduling: pending alert jobs are stored in PostgreSQL and dispatched by background workers close to due time.
+6. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
 
 ## Run
 
@@ -49,6 +50,17 @@ Use `config.json` (not committed) with:
 - Alert timing thresholds.
 - Telegram notifications toggle and credentials.
 
+## Timed notifications (DB-backed)
+
+Notifications are now processed independently from report download:
+
+- Background sync worker (`alerts.sync.delay.millis`, default `10000`) rebuilds sequences from source detections and upserts/cancels pending alert jobs in `alert_jobs`.
+- Background dispatch worker (`alerts.dispatch.delay.millis`, default `5000`) sends only due jobs (`status=PENDING and due_at <= now`) and marks them as `SENT`.
+- Per-stage completion cancels pending jobs, so no alert is sent if the car reached the expected next stage in time.
+- `alert_jobs` has a partial index on pending due rows and a unique key (`plate_number`, `alert_type`, `trigger_at`) to avoid duplicate job explosion.
+
+This keeps DB load bounded: each cycle does one read/build pass and a small indexed due-job query, while writes are idempotent upserts/cancels for active sequences only.
+
 ## Trigger endpoint behavior
 
 - Endpoint: `GET /source/trigger-pull`.
@@ -73,7 +85,7 @@ Use `config.json` (not committed) with:
 
 ## Notes
 
-- Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, report generation, notifications).
+- Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, timed alert sync/dispatch, report generation, notifications).
 - XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text. Service stage is interpreted as `Service in -> Post in` (or `Service in -> Service out` when post-in is missing), and Post stage as `Post in -> Service out`.
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
@@ -88,6 +100,7 @@ Unit tests cover sequence orchestration and every service class:
 - `ReportServiceTest`
 - `TelegramNotifierTest`
 - `SourcePullTriggerServiceTest`
+- `AlertSchedulerServiceTest`
 
 Unit tests remain offline and use mocks.
 
