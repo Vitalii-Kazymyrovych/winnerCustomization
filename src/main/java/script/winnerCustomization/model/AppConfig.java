@@ -12,6 +12,7 @@ public class AppConfig {
     private NotificationsConfig notifications;
     private TimingConfig timing;
     private CamerasConfig cameras;
+    private ReportsConfig reports;
 
     public DatabaseConfig getSourceDatabase() {
         return sourceDatabase;
@@ -67,6 +68,14 @@ public class AppConfig {
 
     public void setCameras(CamerasConfig cameras) {
         this.cameras = cameras;
+    }
+
+    public ReportsConfig getReports() {
+        return reports;
+    }
+
+    public void setReports(ReportsConfig reports) {
+        this.reports = reports;
     }
 
     public static class DatabaseConfig {
@@ -181,6 +190,18 @@ public class AppConfig {
         public void setParkingIn(List<CameraConfig> parkingIn) { this.parkingIn = parkingIn; }
         public List<CameraConfig> getParkingOut() { return parkingOut; }
         public void setParkingOut(List<CameraConfig> parkingOut) { this.parkingOut = parkingOut; }
+    }
+
+    public static class ReportsConfig {
+        private String outputDirectory;
+
+        public String getOutputDirectory() {
+            return outputDirectory;
+        }
+
+        public void setOutputDirectory(String outputDirectory) {
+            this.outputDirectory = outputDirectory;
+        }
     }
 
     public static class PostCameraConfig {

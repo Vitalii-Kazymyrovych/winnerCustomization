@@ -33,6 +33,7 @@
 - `sourceTable`: source detections table name + optional `loadFrom` timestamp (lower bound for `created_at`).
 - `notifications`: telegram on/off + token/chat id.
 - `timing`: thresholds for alerts and test-drive reset.
+- `reports.outputDirectory`: optional folder path for saving generated XLSX file copy on each report request.
 - `cameras`: camera lists for Drive in / Service / Parking logical points. Each camera is matched by `analyticsId` and optional direction range.
 - `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`.
 
@@ -104,12 +105,17 @@
     1. load detections,
     2. build sequences,
     3. start async storage refresh (`vehicle_sequences`) in background,
-    4. generate XLSX report bytes and return response without waiting for DB refresh completion.
+    4. generate XLSX report bytes,
+    5. optionally persist `sequences.xlsx` into `reports.outputDirectory`,
+    6. return HTTP response without waiting for DB refresh completion.
   - Does not dispatch Telegram alerts anymore (alerts are handled by timed background workers).
 - Internal method: `toXlsx(...)`
-  - Creates `Sequences` worksheet with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
-  - For each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Service`, `Parking`) with dynamic inclusion based on available timestamps. First Service stage ends at `postInAt` when present; Post stage starts at `postInAt` and ends at `postOutAt`; second Service stage starts at `postOutAt` and ends at `serviceOutAt`.
-  - Computes `Duration` from stage start/end as `HH:mm:ss`; empty when one of timestamps is missing.
+  - Creates two worksheets:
+    - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
+    - `Events` with columns: `Номер`, `Камера`, `Этап`, `Тип события (In \ Out)`, `Время`, `Для события Out время проведенное на этапе`.
+  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Service`, `Parking`) with dynamic inclusion based on available timestamps. First Service stage ends at `postInAt` when present; Post stage starts at `postInAt` and ends at `postOutAt`; second Service stage starts at `postOutAt` and ends at `serviceOutAt`.
+  - For `Events`: writes one row per present stage transition event with `In`/`Out`; duration is filled only for `Out` rows based on stage start/end timestamps.
+  - Computes duration as `HH:mm:ss`; empty when one of timestamps is missing.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 
 ### `SourcePullTriggerService`
