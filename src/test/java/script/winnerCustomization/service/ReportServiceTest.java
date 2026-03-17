@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,18 +30,14 @@ class ReportServiceTest {
     private SequenceEngine sequenceEngine;
     @Mock
     private SequenceStorageService sequenceStorageService;
-    @Mock
-    private TelegramNotifier telegramNotifier;
 
     @InjectMocks
     private ReportService reportService;
 
     @Test
-    void shouldBuildReportPersistRecordsAndSendAlerts() throws Exception {
+    void shouldBuildReportPersistRecords() throws Exception {
         AppConfig config = new AppConfig();
-        AppConfig.NotificationsConfig notifications = new AppConfig.NotificationsConfig();
-        notifications.setEnabled(true);
-        config.setNotifications(notifications);
+        config.setNotifications(new AppConfig.NotificationsConfig());
         when(runtimeConfig.get()).thenReturn(config);
 
         Detection detection = new Detection(1L, "AA1111", 10, 90, LocalDateTime.now());
@@ -63,9 +58,6 @@ class ReportServiceTest {
 
         verify(sequenceStorageService).initialize();
         verify(sequenceStorageService).replaceAll(List.of(first, second));
-        verify(telegramNotifier).sendIfEnabled(notifications, "Plate AA1111: Exceeded 15 min");
-        verify(telegramNotifier).sendIfEnabled(notifications, "Plate BB2222: Exceeded 15 min");
-
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
             XSSFSheet sheet = workbook.getSheet("Sequences");
             assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Stage");
@@ -107,16 +99,4 @@ class ReportServiceTest {
         }
     }
 
-    @Test
-    void shouldSkipNotificationsWhenThereAreNoAlerts() throws Exception {
-        AppConfig config = new AppConfig();
-        config.setNotifications(new AppConfig.NotificationsConfig());
-        when(runtimeConfig.get()).thenReturn(config);
-        when(detectionService.loadAllDetections()).thenReturn(List.of());
-        when(sequenceEngine.build(List.of(), config)).thenReturn(List.of());
-
-        reportService.buildReport();
-
-        verify(telegramNotifier, never()).sendIfEnabled(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString());
-    }
 }
