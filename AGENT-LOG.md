@@ -22,3 +22,14 @@
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document timed notifications architecture, scheduler intervals, and DB load safeguards (indexed due query + idempotent upserts).
 - Moved `ReportService` sequence DB refresh (`initialize` + `replaceAll`) to asynchronous background execution so `/report/sequences.xlsx` response is not delayed by sequence DB writes.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document non-blocking report download behavior and updated report data flow.
+
+## 2026-03-17
+- Reworked stage processing logic in `SequenceEngine` and sequence model to support:
+  - auto-closing previous stage on next-stage detection,
+  - multi-camera matching for Drive In / Service / Parking by `analyticsId + directionRange`,
+  - post camera split into `Post In`/`Post Out` by direction ranges,
+  - first-only `Post In` and overwrite behavior for repeated valid `Post Out`.
+- Extended `SequenceRecord` with explicit first-service end, post-out and second-service-start timestamps.
+- Updated report stage rows to `Service #1`, `Post`, `Service #2` where applicable.
+- Updated tests (`SequenceEngineTest`, `ReportServiceTest`) and configuration template (`config.json.example`) for the new camera/stage model.
+- Updated `README.md` and `TECHNICAL_SPEC.md` with new camera mapping and stage-processing rules.

@@ -66,7 +66,7 @@ class ReportServiceTest {
             assertThat(sheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("00:05:00");
             assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("BB2222");
             assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Drive in");
-            assertThat(sheet.getRow(5).getCell(0).getStringCellValue()).isEqualTo("Service");
+            assertThat(sheet.getRow(5).getCell(0).getStringCellValue()).isEqualTo("Service #1");
         }
     }
 
@@ -84,6 +84,7 @@ class ReportServiceTest {
         record.setDriveInOutAt(LocalDateTime.of(2026, 3, 16, 12, 36, 38, 186_000_000));
         record.setServiceInAt(LocalDateTime.of(2026, 3, 16, 12, 40, 48, 531_000_000));
         record.setPostInAt(LocalDateTime.of(2026, 3, 16, 13, 21, 19, 644_000_000));
+        record.setServiceFirstFinishedAt(LocalDateTime.of(2026, 3, 16, 13, 21, 19, 644_000_000));
 
         when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
 
@@ -91,7 +92,7 @@ class ReportServiceTest {
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
             XSSFSheet sheet = workbook.getSheet("Sequences");
-            assertThat(sheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
+            assertThat(sheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service #1");
             assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("2026-03-16T13:21:19.644");
             assertThat(sheet.getRow(3).getCell(3).getStringCellValue()).isEqualTo("00:40:31");
             assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post");

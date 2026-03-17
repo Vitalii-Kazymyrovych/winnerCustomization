@@ -37,66 +37,55 @@
     "testDriveResetMinutes": 60
   },
   "cameras": {
-    "driveInIn": {
-      "name": "Drive in (in)",
-      "analyticsId": 1001,
-      "directionRange": {
-        "from": null,
-        "to": null
+    "driveInIn": [
+      {
+        "name": "Drive in (in) cam 1",
+        "analyticsId": 1001,
+        "directionRange": { "from": null, "to": null }
       }
-    },
-    "driveInOut": {
-      "name": "Drive in (out)",
-      "analyticsId": 1002,
-      "directionRange": {
-        "from": 0,
-        "to": 180
+    ],
+    "driveInOut": [
+      {
+        "name": "Drive in (out) cam 1",
+        "analyticsId": 1002,
+        "directionRange": { "from": 0, "to": 180 }
       }
-    },
-    "serviceIn": {
-      "name": "Service (in)",
-      "analyticsId": 1003,
-      "directionRange": {
-        "from": null,
-        "to": null
+    ],
+    "serviceIn": [
+      {
+        "name": "Service (in) cam 1",
+        "analyticsId": 1003,
+        "directionRange": { "from": null, "to": null }
       }
-    },
+    ],
     "servicePosts": [
       {
         "postName": "Post 1",
-        "in": {
-          "name": "Post 1 (in)",
-          "analyticsId": 1101,
-          "directionRange": {
-            "from": 0,
-            "to": 180
-          }
-        }
+        "analyticsId": 1101,
+        "inDirectionRange": { "from": 0, "to": 180 },
+        "outDirectionRange": { "from": 181, "to": 360 }
       }
     ],
-    "serviceOut": {
-      "name": "Service (out)",
-      "analyticsId": 1005,
-      "directionRange": {
-        "from": null,
-        "to": null
+    "serviceOut": [
+      {
+        "name": "Service (out)",
+        "analyticsId": 1005,
+        "directionRange": { "from": null, "to": null }
       }
-    },
-    "parkingIn": {
-      "name": "Parking (in)",
-      "analyticsId": 1006,
-      "directionRange": {
-        "from": null,
-        "to": null
+    ],
+    "parkingIn": [
+      {
+        "name": "Parking (in)",
+        "analyticsId": 1006,
+        "directionRange": { "from": null, "to": null }
       }
-    },
-    "parkingOut": {
-      "name": "Parking (out)",
-      "analyticsId": 1007,
-      "directionRange": {
-        "from": null,
-        "to": null
+    ],
+    "parkingOut": [
+      {
+        "name": "Parking (out)",
+        "analyticsId": 1007,
+        "directionRange": { "from": null, "to": null }
       }
-    }
+    ]
   }
 }

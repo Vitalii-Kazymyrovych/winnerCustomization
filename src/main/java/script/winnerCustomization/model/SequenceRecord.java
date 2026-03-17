@@ -10,7 +10,10 @@ public class SequenceRecord {
     private final LocalDateTime startedAt;
     private LocalDateTime driveInOutAt;
     private LocalDateTime serviceInAt;
+    private LocalDateTime serviceFirstFinishedAt;
     private LocalDateTime postInAt;
+    private LocalDateTime postOutAt;
+    private LocalDateTime secondServiceInAt;
     private LocalDateTime serviceOutAt;
     private LocalDateTime parkingInAt;
     private LocalDateTime parkingOutAt;
@@ -30,8 +33,14 @@ public class SequenceRecord {
     public void setDriveInOutAt(LocalDateTime driveInOutAt) { this.driveInOutAt = driveInOutAt; appendPath("Drive in (out)"); }
     public LocalDateTime getServiceInAt() { return serviceInAt; }
     public void setServiceInAt(LocalDateTime serviceInAt) { this.serviceInAt = serviceInAt; appendPath("Service (in)"); }
+    public LocalDateTime getServiceFirstFinishedAt() { return serviceFirstFinishedAt; }
+    public void setServiceFirstFinishedAt(LocalDateTime serviceFirstFinishedAt) { this.serviceFirstFinishedAt = serviceFirstFinishedAt; }
     public LocalDateTime getPostInAt() { return postInAt; }
     public void setPostInAt(LocalDateTime postInAt) { this.postInAt = postInAt; appendPath("Service post (in)"); }
+    public LocalDateTime getPostOutAt() { return postOutAt; }
+    public void setPostOutAt(LocalDateTime postOutAt) { this.postOutAt = postOutAt; appendPath("Service post (out)"); }
+    public LocalDateTime getSecondServiceInAt() { return secondServiceInAt; }
+    public void setSecondServiceInAt(LocalDateTime secondServiceInAt) { this.secondServiceInAt = secondServiceInAt; }
     public LocalDateTime getServiceOutAt() { return serviceOutAt; }
     public void setServiceOutAt(LocalDateTime serviceOutAt) { this.serviceOutAt = serviceOutAt; appendPath("Service (out)"); }
     public LocalDateTime getParkingInAt() { return parkingInAt; }
@@ -45,11 +54,10 @@ public class SequenceRecord {
 
     public String stageDurations() {
         StringBuilder sb = new StringBuilder();
-        appendDuration(sb, "DriveIn->Out", startedAt, driveInOutAt);
-        appendDuration(sb, "Out->Service", driveInOutAt, serviceInAt);
-        appendDuration(sb, "Service->Post", serviceInAt, postInAt);
-        appendDuration(sb, "PostWork", postInAt, serviceOutAt);
-        appendDuration(sb, "Service->Parking", serviceOutAt, parkingInAt);
+        appendDuration(sb, "DriveIn", startedAt, driveInOutAt);
+        appendDuration(sb, "Service#1", serviceInAt, serviceFirstFinishedAt);
+        appendDuration(sb, "Post", postInAt, postOutAt);
+        appendDuration(sb, "Service#2", secondServiceInAt, serviceOutAt);
         appendDuration(sb, "Parking", parkingInAt, parkingOutAt);
         return sb.toString();
     }

@@ -32,8 +32,8 @@
 - `sourceTable`: source detections table name.
 - `notifications`: telegram on/off + token/chat id.
 - `timing`: thresholds for alerts and test-drive reset.
-- `cameras`: all logical camera slots, each with `analyticsId` and optional direction range.
-- `servicePosts`: list of post cameras (`in`).
+- `cameras`: camera lists for Drive in / Service / Parking logical points. Each camera is matched by `analyticsId` and optional direction range.
+- `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`.
 
 ### `DetectionService`
 - Method: `loadAllDetections()`
@@ -49,10 +49,11 @@
     2. direction-range pass.
   - Tracks active sequence per plate.
   - Handles lifecycle:
-    - start on Drive in (in) / Service (in),
-    - append stage events (service, post, parking),
-    - treat `Service (in) -> Post 1 (in)` as service stage,
-    - treat `Post 1 (in) -> Service (out)` as post stage (no post-out camera),
+    - start on Drive in (in) / Service (in) / Post Out,
+    - append stage events (service #1, post, service #2, parking),
+    - auto-close previous stage with timestamp of next stage detection when previous stage is not closed yet,
+    - ignore repeated detections for common points and repeated Post In,
+    - treat each valid Post Out as overwrite event (`postOutAt` + second service start are updated),
     - close on parking out,
     - reset as new sequence if test-drive gap exceeds configured reset threshold.
   - Produces `SequenceRecord` with path, stage durations, alerts.
@@ -143,7 +144,7 @@
 ## Testing
 
 Unit tests are isolated from live infrastructure and cover all services:
-- `SequenceEngineTest`: full sequence + direction filtering.
+- `SequenceEngineTest`: full sequence including Post Out overwrite semantics + direction filtering.
 - `DetectionServiceTest`: SQL construction and JDBC row mapping.
 - `SequenceStorageServiceTest`: DDL initialization and replace-all persistence flow.
 - `ReportServiceTest`: orchestration, storage refresh, XLSX content.
@@ -158,3 +159,8 @@ Unit tests are isolated from live infrastructure and cover all services:
 
 Integration test (live PostgreSQL):
 - `PostgresDatabaseOperationsIntegrationTest`: runs against local PostgreSQL (`localhost:5432`) and verifies real DB operations chain: database/bootstrap role provisioning, detection reads from `videoanalytics.alpr_detections`, sequence table creation, and sequence persistence writes. Test auto-skips when PostgreSQL is unavailable.
+
+
+### Updated stage processing rules
+- Automatic stage closure: when next stage is detected and current stage has no end timestamp, previous stage closes at next detection time (without overwriting already closed stage).
+- Repeat handling: repeated detections in the same logical point are ignored; `Post In` is first-only; `Post Out` is always overwrite/update event.

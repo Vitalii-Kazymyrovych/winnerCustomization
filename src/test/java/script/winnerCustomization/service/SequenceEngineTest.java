@@ -22,23 +22,25 @@ class SequenceEngineTest {
                 new Detection(2, "A123", 11, 90, t.plusMinutes(5)),
                 new Detection(3, "A123", 12, 90, t.plusMinutes(8)),
                 new Detection(4, "A123", 20, 90, t.plusMinutes(12)),
-                new Detection(5, "A123", 13, 90, t.plusMinutes(50)),
-                new Detection(6, "A123", 14, 90, t.plusMinutes(52)),
-                new Detection(7, "A123", 15, 90, t.plusMinutes(70))
+                new Detection(5, "A123", 20, 250, t.plusMinutes(20)),
+                new Detection(6, "A123", 13, 90, t.plusMinutes(50)),
+                new Detection(7, "A123", 14, 90, t.plusMinutes(52)),
+                new Detection(8, "A123", 15, 90, t.plusMinutes(70))
         );
 
         List<SequenceRecord> result = engine.build(detections, config);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().getFinishedAt()).isEqualTo(t.plusMinutes(70));
+        assertThat(result.getFirst().getPostOutAt()).isEqualTo(t.plusMinutes(20));
         assertThat(result.getFirst().getPath()).contains("Parking (out)");
     }
 
     @Test
     void shouldIgnoreDirectionOutsideRange() {
         AppConfig config = baseConfig();
-        config.getCameras().getDriveInIn().getDirectionRange().setFrom(0);
-        config.getCameras().getDriveInIn().getDirectionRange().setTo(180);
+        config.getCameras().getDriveInIn().getFirst().getDirectionRange().setFrom(0);
+        config.getCameras().getDriveInIn().getFirst().getDirectionRange().setTo(180);
 
         List<SequenceRecord> result = engine.build(List.of(
                 new Detection(1, "A123", 10, 270, LocalDateTime.now())
@@ -51,16 +53,20 @@ class SequenceEngineTest {
         AppConfig c = new AppConfig();
         c.setTiming(new AppConfig.TimingConfig());
         AppConfig.CamerasConfig cameras = new AppConfig.CamerasConfig();
-        cameras.setDriveInIn(camera(10));
-        cameras.setDriveInOut(camera(11));
-        cameras.setServiceIn(camera(12));
-        cameras.setServiceOut(camera(13));
-        cameras.setParkingIn(camera(14));
-        cameras.setParkingOut(camera(15));
+        cameras.setDriveInIn(List.of(camera(10)));
+        cameras.setDriveInOut(List.of(camera(11)));
+        cameras.setServiceIn(List.of(camera(12)));
+        cameras.setServiceOut(List.of(camera(13)));
+        cameras.setParkingIn(List.of(camera(14)));
+        cameras.setParkingOut(List.of(camera(15)));
+
         AppConfig.PostCameraConfig post = new AppConfig.PostCameraConfig();
         post.setPostName("post-1");
-        post.setIn(camera(20));
+        post.setAnalyticsId(20);
+        post.setInDirectionRange(range(0, 180));
+        post.setOutDirectionRange(range(181, 360));
         cameras.setServicePosts(List.of(post));
+
         c.setCameras(cameras);
         return c;
     }
@@ -70,5 +76,12 @@ class SequenceEngineTest {
         camera.setAnalyticsId(id);
         camera.setDirectionRange(new AppConfig.DirectionRange());
         return camera;
+    }
+
+    private AppConfig.DirectionRange range(int from, int to) {
+        AppConfig.DirectionRange range = new AppConfig.DirectionRange();
+        range.setFrom(from);
+        range.setTo(to);
+        return range;
     }
 }
