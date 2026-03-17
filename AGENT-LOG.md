@@ -33,3 +33,7 @@
 - Updated report stage rows to `Service #1`, `Post`, `Service #2` where applicable.
 - Updated tests (`SequenceEngineTest`, `ReportServiceTest`) and configuration template (`config.json.example`) for the new camera/stage model.
 - Updated `README.md` and `TECHNICAL_SPEC.md` with new camera mapping and stage-processing rules.
+
+- Renamed XLSX stage labels from `Service #1`/`Service #2` to repeated `Service` rows to match business terminology while preserving stage boundaries (`Service in`→`Post in` and `Post out`→`Service out`).
+- Added optional `sourceTable.loadFrom` runtime config timestamp and source-query filtering (`created_at >= loadFrom`) to avoid scanning historic detections.
+- Updated tests (`DetectionServiceTest`, `ReportServiceTest`) and docs (`README.md`, `TECHNICAL_SPEC.md`, `config.json.example`) for the new report naming and load-from behavior.

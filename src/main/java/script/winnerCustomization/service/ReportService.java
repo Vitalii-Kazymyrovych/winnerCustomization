@@ -109,9 +109,9 @@ public class ReportService {
     private List<StageLine> toStages(SequenceRecord record) {
         List<StageLine> stages = new ArrayList<>();
         addStage(stages, "Drive in", record.getStartedAt(), record.getDriveInOutAt());
-        addStage(stages, "Service #1", record.getServiceInAt(), record.getServiceFirstFinishedAt());
+        addStage(stages, "Service", record.getServiceInAt(), record.getServiceFirstFinishedAt());
         addStage(stages, "Post", record.getPostInAt(), record.getPostOutAt());
-        addStage(stages, "Service #2", record.getSecondServiceInAt(), record.getServiceOutAt());
+        addStage(stages, "Service", record.getSecondServiceInAt(), record.getServiceOutAt());
         addStage(stages, "Parking", record.getParkingInAt(), record.getParkingOutAt());
         if (stages.isEmpty()) {
             stages.add(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt()));

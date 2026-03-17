@@ -29,7 +29,7 @@
 ### `AppConfig` model
 - `sourceDatabase`, `sequenceDatabase`: credentials + schema + db.
 - `rootDatabase`: PostgreSQL root/admin connection used at startup to auto-create the sequence database if missing.
-- `sourceTable`: source detections table name.
+- `sourceTable`: source detections table name + optional `loadFrom` timestamp (lower bound for `created_at`).
 - `notifications`: telegram on/off + token/chat id.
 - `timing`: thresholds for alerts and test-drive reset.
 - `cameras`: camera lists for Drive in / Service / Parking logical points. Each camera is matched by `analyticsId` and optional direction range.
@@ -38,6 +38,7 @@
 ### `DetectionService`
 - Method: `loadAllDetections()`
   - Builds SQL from runtime config (`schema.table`).
+  - If `sourceTable.loadFrom` is configured, adds `where created_at >= ?` to limit data scan window.
   - Reads rows sorted by `created_at, id`.
   - Maps each row to immutable `Detection` record.
 
@@ -50,7 +51,7 @@
   - Tracks active sequence per plate.
   - Handles lifecycle:
     - start on Drive in (in) / Service (in) / Post Out,
-    - append stage events (service #1, post, service #2, parking),
+    - append stage events (service, post, service, parking),
     - auto-close previous stage with timestamp of next stage detection when previous stage is not closed yet,
     - ignore repeated detections for common points and repeated Post In,
     - treat each valid Post Out as overwrite event (`postOutAt` + second service start are updated),
@@ -106,7 +107,7 @@
   - Does not dispatch Telegram alerts anymore (alerts are handled by timed background workers).
 - Internal method: `toXlsx(...)`
   - Creates `Sequences` worksheet with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
-  - For each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Parking`) with dynamic inclusion based on available timestamps. Service stage ends at `postInAt` when present (fallback: `serviceOutAt`), Post stage starts at post-in and ends at service-out.
+  - For each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Service`, `Parking`) with dynamic inclusion based on available timestamps. First Service stage ends at `postInAt` when present; Post stage starts at `postInAt` and ends at `postOutAt`; second Service stage starts at `postOutAt` and ends at `serviceOutAt`.
   - Computes `Duration` from stage start/end as `HH:mm:ss`; empty when one of timestamps is missing.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 
