@@ -37,3 +37,5 @@
 - Renamed XLSX stage labels from `Service #1`/`Service #2` to repeated `Service` rows to match business terminology while preserving stage boundaries (`Service in`→`Post in` and `Post out`→`Service out`).
 - Added optional `sourceTable.loadFrom` runtime config timestamp and source-query filtering (`created_at >= loadFrom`) to avoid scanning historic detections.
 - Updated tests (`DetectionServiceTest`, `ReportServiceTest`) and docs (`README.md`, `TECHNICAL_SPEC.md`, `config.json.example`) for the new report naming and load-from behavior.
+- Fixed runtime config `LocalDateTime` deserialization on packaged app startup by adding `jackson-datatype-jsr310` dependency and added `JacksonConfigTest` coverage for `sourceTable.loadFrom` JSON parsing.
+- Updated `README.md` and `TECHNICAL_SPEC.md` startup/config notes to document Java time module requirement.

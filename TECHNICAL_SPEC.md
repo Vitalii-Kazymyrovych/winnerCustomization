@@ -4,6 +4,7 @@
 
 ### `JacksonConfig`
 - Provides explicit `ObjectMapper` bean for JSON serialization/deserialization dependencies.
+- Uses `findAndRegisterModules()` and relies on `jackson-datatype-jsr310` on classpath, so runtime config can deserialize Java time values (`LocalDateTime` such as `sourceTable.loadFrom`).
 - Guarantees `RuntimeConfig` constructor injection works during application startup.
 
 ### `RuntimeConfig`

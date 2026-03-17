@@ -67,6 +67,7 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
 ## Startup troubleshooting
 
 - If startup fails with `No qualifying bean of type 'com.fasterxml.jackson.databind.ObjectMapper'`, ensure you are running a build that includes `JacksonConfig` (adds explicit `ObjectMapper` bean for runtime config loading).
+- If startup fails with `Java 8 date/time type java.time.LocalDateTime not supported by default` while reading `sourceTable.loadFrom`, ensure the build includes `jackson-datatype-jsr310` (current `pom.xml` includes it).
 - On first start, the app attempts to auto-create `sequenceDatabase.db` using `rootDatabase` credentials.
 - If startup fails with `Incorrect result size: expected 1, actual 0` while checking `pg_database`, upgrade to a build that uses `select exists(...)` for database presence checks (current implementation handles missing DB correctly).
 - If startup/report still fails with sequence DB connection errors, check:
