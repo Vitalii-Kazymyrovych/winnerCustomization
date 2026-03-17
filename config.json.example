@@ -23,7 +23,8 @@
     "maintenanceDb": "postgres"
   },
   "sourceTable": {
-    "table": "alpr_detections"
+    "table": "alpr_detections",
+    "loadFrom": "2026-03-17T00:00:00"
   },
   "notifications": {
     "enabled": false,

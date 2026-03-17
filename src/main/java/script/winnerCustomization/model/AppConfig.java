@@ -2,6 +2,7 @@ package script.winnerCustomization.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDateTime;
 
 public class AppConfig {
     private DatabaseConfig sourceDatabase;
@@ -120,9 +121,12 @@ public class AppConfig {
 
     public static class SourceTableConfig {
         private String table;
+        private LocalDateTime loadFrom;
 
         public String getTable() { return table; }
         public void setTable(String table) { this.table = table; }
+        public LocalDateTime getLoadFrom() { return loadFrom; }
+        public void setLoadFrom(LocalDateTime loadFrom) { this.loadFrom = loadFrom; }
     }
 
     public static class NotificationsConfig {

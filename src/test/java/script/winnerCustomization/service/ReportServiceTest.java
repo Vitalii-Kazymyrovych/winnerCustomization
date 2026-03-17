@@ -66,7 +66,7 @@ class ReportServiceTest {
             assertThat(sheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("00:05:00");
             assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("BB2222");
             assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Drive in");
-            assertThat(sheet.getRow(5).getCell(0).getStringCellValue()).isEqualTo("Service #1");
+            assertThat(sheet.getRow(5).getCell(0).getStringCellValue()).isEqualTo("Service");
         }
     }
 
@@ -92,7 +92,7 @@ class ReportServiceTest {
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
             XSSFSheet sheet = workbook.getSheet("Sequences");
-            assertThat(sheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service #1");
+            assertThat(sheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
             assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("2026-03-16T13:21:19.644");
             assertThat(sheet.getRow(3).getCell(3).getStringCellValue()).isEqualTo("00:40:31");
             assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post");

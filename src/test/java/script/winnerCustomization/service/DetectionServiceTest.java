@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,5 +65,28 @@ class DetectionServiceTest {
                 "select id, plate_number, analytics_id, direction, created_at from videoanalytics.alpr_detections order by created_at asc, id asc"
         );
         assertThat(detections).containsExactly(new Detection(9L, "AB1234", 55, 270, createdAt));
+    }
+
+    @Test
+    void shouldApplyLoadFromFilterWhenConfigured() {
+        AppConfig appConfig = new AppConfig();
+        AppConfig.DatabaseConfig sourceDb = new AppConfig.DatabaseConfig();
+        sourceDb.setSchema("videoanalytics");
+        appConfig.setSourceDatabase(sourceDb);
+        AppConfig.SourceTableConfig sourceTable = new AppConfig.SourceTableConfig();
+        sourceTable.setTable("alpr_detections");
+        LocalDateTime loadFrom = LocalDateTime.of(2026, 3, 17, 9, 30);
+        sourceTable.setLoadFrom(loadFrom);
+        appConfig.setSourceTable(sourceTable);
+        when(runtimeConfig.get()).thenReturn(appConfig);
+        when(sourceJdbc.query(any(String.class), any(RowMapper.class), any())).thenReturn(List.of());
+
+        detectionService.loadAllDetections();
+
+        verify(sourceJdbc).query(
+                eq("select id, plate_number, analytics_id, direction, created_at from videoanalytics.alpr_detections where created_at >= ? order by created_at asc, id asc"),
+                any(RowMapper.class),
+                eq(Timestamp.valueOf(loadFrom))
+        );
     }
 }

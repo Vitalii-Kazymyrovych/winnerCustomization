@@ -55,9 +55,9 @@ public class SequenceRecord {
     public String stageDurations() {
         StringBuilder sb = new StringBuilder();
         appendDuration(sb, "DriveIn", startedAt, driveInOutAt);
-        appendDuration(sb, "Service#1", serviceInAt, serviceFirstFinishedAt);
+        appendDuration(sb, "Service", serviceInAt, serviceFirstFinishedAt);
         appendDuration(sb, "Post", postInAt, postOutAt);
-        appendDuration(sb, "Service#2", secondServiceInAt, serviceOutAt);
+        appendDuration(sb, "Service", secondServiceInAt, serviceOutAt);
         appendDuration(sb, "Parking", parkingInAt, parkingOutAt);
         return sb.toString();
     }
