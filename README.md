@@ -4,7 +4,7 @@ Spring Boot script that:
 
 1. Reads ALPR detections from source PostgreSQL (`videoanalytics.alpr_detections` or configurable table).
 2. Builds car movement sequences across configured camera stages.
-3. Stores computed sequences in a separate PostgreSQL database.
+3. Stores computed sequences in a separate PostgreSQL database asynchronously (does not block XLSX download response).
 4. Exposes XLSX report download endpoint in a stage-row layout (dynamic per sequence, not fixed stage columns).
 5. Runs DB-backed alert scheduling: pending alert jobs are stored in PostgreSQL and dispatched by background workers close to due time.
 6. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
@@ -86,6 +86,7 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
 ## Notes
 
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, timed alert sync/dispatch, report generation, notifications).
+- XLSX report endpoint now returns as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
 - XLSX report format is stage-oriented: for each plate, the sheet includes stage rows with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and per-row alert text. Service stage is interpreted as `Service in -> Post in` (or `Service in -> Service out` when post-in is missing), and Post stage as `Post in -> Service out`.
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.

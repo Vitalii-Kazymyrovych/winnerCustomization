@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class ReportService {
@@ -42,11 +43,23 @@ public class ReportService {
         log.info("Building sequences from {} detections", detections.size());
         List<SequenceRecord> records = sequenceEngine.build(detections, runtimeConfig.get());
         log.info("Built {} sequence records", records.size());
-        sequenceStorageService.initialize();
-        sequenceStorageService.replaceAll(records);
+        persistSequencesAsync(records);
         byte[] reportBytes = toXlsx(records);
         log.info("Report build finished, bytes={}", reportBytes.length);
         return reportBytes;
+    }
+
+    private void persistSequencesAsync(List<SequenceRecord> records) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                log.info("Async sequence persistence started for {} records", records.size());
+                sequenceStorageService.initialize();
+                sequenceStorageService.replaceAll(records);
+                log.info("Async sequence persistence finished");
+            } catch (Exception exception) {
+                log.warn("Async sequence persistence failed: {}", exception.getMessage());
+            }
+        });
     }
 
     private byte[] toXlsx(List<SequenceRecord> records) throws IOException {

@@ -100,8 +100,8 @@
   - Orchestrates:
     1. load detections,
     2. build sequences,
-    3. initialize/replace storage,
-    4. generate XLSX report bytes.
+    3. start async storage refresh (`vehicle_sequences`) in background,
+    4. generate XLSX report bytes and return response without waiting for DB refresh completion.
   - Does not dispatch Telegram alerts anymore (alerts are handled by timed background workers).
 - Internal method: `toXlsx(...)`
   - Creates `Sequences` worksheet with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
@@ -137,8 +137,8 @@
 4. Report request hits `ReportController`.
 5. `ReportService` asks `DetectionService` for detections.
 6. `SequenceEngine` computes sequence records.
-7. `SequenceStorageService` refreshes `vehicle_sequences` table.
-8. XLSX is built in-memory and returned.
+7. `ReportService` starts asynchronous `SequenceStorageService` refresh for `vehicle_sequences` (non-blocking for HTTP response).
+8. XLSX is built in-memory and returned immediately to caller while DB refresh continues in background.
 
 ## Testing
 
