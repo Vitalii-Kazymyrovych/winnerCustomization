@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -88,7 +89,7 @@ public class ReportService {
         log.info("Generating XLSX report for {} records", records.size());
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             writeStageSheet(workbook, records);
-            writeEventSheet(workbook, records);
+            writeFlatStageSheet(workbook, records);
             workbook.write(output);
             log.info("XLSX generation completed");
             return output.toByteArray();
@@ -110,22 +111,13 @@ public class ReportService {
             plateRow.createCell(2).setCellValue(r.getPlateNumber());
 
             List<StageLine> stages = toStages(r);
-            List<String> alerts = r.getAlerts();
-            for (int stageIndex = 0; stageIndex < stages.size(); stageIndex++) {
-                StageLine stage = stages.get(stageIndex);
+            for (StageLine stage : stages) {
                 Row row = sheet.createRow(rowIndex++);
                 row.createCell(0).setCellValue(stage.stageName());
                 row.createCell(1).setCellValue(formatTime(stage.timeIn()));
                 row.createCell(2).setCellValue(formatTime(stage.timeOut()));
                 row.createCell(3).setCellValue(formatDuration(stage.timeIn(), stage.timeOut()));
-
-                String alertCellValue = "";
-                if (alerts.isEmpty() && stageIndex == 0) {
-                    alertCellValue = "none";
-                } else if (stageIndex < alerts.size()) {
-                    alertCellValue = alerts.get(stageIndex);
-                }
-                row.createCell(4).setCellValue(alertCellValue);
+                row.createCell(4).setCellValue(stage.alert());
             }
         }
         for (int i = 0; i <= 4; i++) {
@@ -133,81 +125,75 @@ public class ReportService {
         }
     }
 
-    private void writeEventSheet(XSSFWorkbook workbook, List<SequenceRecord> records) {
+    private void writeFlatStageSheet(XSSFWorkbook workbook, List<SequenceRecord> records) {
         XSSFSheet sheet = workbook.createSheet("Events");
         Row header = sheet.createRow(0);
         header.createCell(0).setCellValue("Plate");
-        header.createCell(1).setCellValue("Camera");
-        header.createCell(2).setCellValue("Event type (In / Out)");
-        header.createCell(3).setCellValue("Time");
-        header.createCell(4).setCellValue("Duration for Out event");
+        header.createCell(1).setCellValue("Stage");
+        header.createCell(2).setCellValue("In time");
+        header.createCell(3).setCellValue("Out time");
+        header.createCell(4).setCellValue("Duration");
+        header.createCell(5).setCellValue("Alarms");
 
         int rowIndex = 1;
         for (SequenceRecord record : records) {
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Drive in", "In", record.getStartedAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Drive in", "Out", record.getDriveInOutAt(), record.getStartedAt(), record.getDriveInOutAt());
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service", "In", record.getServiceInAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service post", "In", record.getPostInAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service post", "Out", record.getPostOutAt(), record.getPostInAt(), record.getPostOutAt());
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Service", "Out", record.getServiceOutAt(), resolveServiceOutStart(record), record.getServiceOutAt());
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Parking", "In", record.getParkingInAt(), null, null);
-            rowIndex = addEventRow(sheet, rowIndex, record.getPlateNumber(), "Parking", "Out", record.getParkingOutAt(), record.getParkingInAt(), record.getParkingOutAt());
+            for (StageLine stage : toStages(record)) {
+                Row row = sheet.createRow(rowIndex++);
+                row.createCell(0).setCellValue(record.getPlateNumber());
+                row.createCell(1).setCellValue(stage.stageName());
+                row.createCell(2).setCellValue(formatTime(stage.timeIn()));
+                row.createCell(3).setCellValue(formatTime(stage.timeOut()));
+                row.createCell(4).setCellValue(formatDuration(stage.timeIn(), stage.timeOut()));
+                row.createCell(5).setCellValue(stage.alert());
+            }
         }
 
-        for (int i = 0; i <= 4; i++) {
+        for (int i = 0; i <= 5; i++) {
             sheet.autoSizeColumn(i);
         }
     }
 
-    private int addEventRow(XSSFSheet sheet,
-                            int rowIndex,
-                            String plate,
-                            String camera,
-                            String eventType,
-                            LocalDateTime eventTime,
-                            LocalDateTime durationStart,
-                            LocalDateTime durationEnd) {
-        if (eventTime == null) {
-            return rowIndex;
-        }
-        Row row = sheet.createRow(rowIndex);
-        row.createCell(0).setCellValue(plate);
-        row.createCell(1).setCellValue(camera);
-        row.createCell(2).setCellValue(eventType);
-        row.createCell(3).setCellValue(formatTime(eventTime));
-        row.createCell(4).setCellValue("Out".equals(eventType) ? formatDuration(durationStart, durationEnd) : "");
-        return rowIndex + 1;
-    }
-
-    private LocalDateTime resolveServiceOutStart(SequenceRecord record) {
-        if (record.getSecondServiceInAt() != null) {
-            return record.getSecondServiceInAt();
-        }
-        if (record.getPostOutAt() != null) {
-            return record.getPostOutAt();
-        }
-        return record.getServiceInAt();
-    }
-
     private List<StageLine> toStages(SequenceRecord record) {
         List<StageLine> stages = new ArrayList<>();
-        addStage(stages, "Drive in", record.getStartedAt(), record.getDriveInOutAt());
+        addStage(stages, "Drive In", record.getStartedAt(), record.getDriveInOutAt());
         addStage(stages, "Service", record.getServiceInAt(), record.getServiceFirstFinishedAt());
         addStage(stages, "Post", record.getPostInAt(), record.getPostOutAt());
         addStage(stages, "Service", record.getSecondServiceInAt(), record.getServiceOutAt());
+        for (SequenceRecord.StageWindow backyardStage : record.getBackyardStages()) {
+            addStage(stages, backyardStage.stageName(), backyardStage.timeIn(), backyardStage.timeOut());
+        }
         addStage(stages, "Parking", record.getParkingInAt(), record.getParkingOutAt());
         if (stages.isEmpty()) {
-            stages.add(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt()));
+            stages.add(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt(), alertForIndex(record, 0)));
+            return stages;
         }
-        return stages;
+
+        stages.sort(Comparator
+                .comparing(StageLine::timeIn, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(StageLine::timeOut, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(StageLine::stageName));
+
+        List<StageLine> withAlerts = new ArrayList<>();
+        for (int i = 0; i < stages.size(); i++) {
+            StageLine stage = stages.get(i);
+            withAlerts.add(new StageLine(stage.stageName(), stage.timeIn(), stage.timeOut(), alertForIndex(record, i)));
+        }
+        return withAlerts;
     }
 
+    private String alertForIndex(SequenceRecord record, int stageIndex) {
+        List<String> alerts = record.getAlerts();
+        if (alerts.isEmpty()) {
+            return stageIndex == 0 ? "none" : "";
+        }
+        return stageIndex < alerts.size() ? alerts.get(stageIndex) : "";
+    }
 
     private void addStage(List<StageLine> stages, String stageName, LocalDateTime timeIn, LocalDateTime timeOut) {
         if (timeIn == null && timeOut == null) {
             return;
         }
-        stages.add(new StageLine(stageName, timeIn, timeOut));
+        stages.add(new StageLine(stageName, timeIn, timeOut, ""));
     }
 
     private String formatTime(LocalDateTime value) {
@@ -225,6 +211,6 @@ public class ReportService {
         return seconds < 0 ? "-" + formatted : formatted;
     }
 
-    private record StageLine(String stageName, LocalDateTime timeIn, LocalDateTime timeOut) {
+    private record StageLine(String stageName, LocalDateTime timeIn, LocalDateTime timeOut, String alert) {
     }
 }

@@ -69,18 +69,18 @@ class ReportServiceTest {
             XSSFSheet stageSheet = workbook.getSheet("Sequences");
             assertThat(stageSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Stage");
             assertThat(stageSheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("AA1111");
-            assertThat(stageSheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive in");
+            assertThat(stageSheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive In");
 
             XSSFSheet eventsSheet = workbook.getSheet("Events");
             assertThat(eventsSheet).isNotNull();
             assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Plate");
-            assertThat(eventsSheet.getRow(0).getCell(4).getStringCellValue())
-                    .isEqualTo("Duration for Out event");
-            assertThat(eventsSheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("Out");
-            assertThat(eventsSheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:05:00");
+            assertThat(eventsSheet.getRow(0).getCell(5).getStringCellValue())
+                    .isEqualTo("Alarms");
+            assertThat(eventsSheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("AA1111");
+            assertThat(eventsSheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Drive In");
+            assertThat(eventsSheet.getRow(1).getCell(4).getStringCellValue()).isEqualTo("00:05:00");
         }
     }
-
 
     @Test
     void shouldCloseServiceStageAtPostInWhenServiceOutIsMissing() throws Exception {
@@ -108,6 +108,31 @@ class ReportServiceTest {
             assertThat(sheet.getRow(3).getCell(3).getStringCellValue()).isEqualTo("00:40:31");
             assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post");
             assertThat(sheet.getRow(4).getCell(2).getStringCellValue()).isEqualTo("");
+        }
+    }
+
+    @Test
+    void shouldRenderBackyardStageOnFlatSheet() throws Exception {
+        AppConfig config = new AppConfig();
+        config.setNotifications(new AppConfig.NotificationsConfig());
+        when(runtimeConfig.get()).thenReturn(config);
+
+        Detection detection = new Detection(1L, "BB2222", 10, 90, LocalDateTime.now());
+        when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
+
+        SequenceRecord record = new SequenceRecord("BB2222", LocalDateTime.of(2026, 3, 16, 12, 0));
+        record.setDriveInOutAt(LocalDateTime.of(2026, 3, 16, 12, 5));
+        record.addBackyardStage(LocalDateTime.of(2026, 3, 16, 12, 6), LocalDateTime.of(2026, 3, 16, 12, 12));
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
+
+        byte[] data = reportService.buildReport();
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
+            XSSFSheet sheet = workbook.getSheet("Events");
+            assertThat(sheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("Backyard");
+            assertThat(sheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("2026-03-16T12:06");
+            assertThat(sheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("2026-03-16T12:12");
+            assertThat(sheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:06:00");
         }
     }
 

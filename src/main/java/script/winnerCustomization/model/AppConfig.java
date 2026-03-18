@@ -171,8 +171,10 @@ public class AppConfig {
         private List<CameraConfig> driveInIn = new ArrayList<>();
         private List<CameraConfig> driveInOut = new ArrayList<>();
         private List<CameraConfig> serviceIn = new ArrayList<>();
+        private List<CameraConfig> driveInToService = new ArrayList<>();
         private List<PostCameraConfig> servicePosts = new ArrayList<>();
         private List<CameraConfig> serviceOut = new ArrayList<>();
+        private List<CameraConfig> serviceToDriveIn = new ArrayList<>();
         private List<CameraConfig> parkingIn = new ArrayList<>();
         private List<CameraConfig> parkingOut = new ArrayList<>();
 
@@ -182,10 +184,14 @@ public class AppConfig {
         public void setDriveInOut(List<CameraConfig> driveInOut) { this.driveInOut = driveInOut; }
         public List<CameraConfig> getServiceIn() { return serviceIn; }
         public void setServiceIn(List<CameraConfig> serviceIn) { this.serviceIn = serviceIn; }
+        public List<CameraConfig> getDriveInToService() { return driveInToService; }
+        public void setDriveInToService(List<CameraConfig> driveInToService) { this.driveInToService = driveInToService; }
         public List<PostCameraConfig> getServicePosts() { return servicePosts; }
         public void setServicePosts(List<PostCameraConfig> servicePosts) { this.servicePosts = servicePosts; }
         public List<CameraConfig> getServiceOut() { return serviceOut; }
         public void setServiceOut(List<CameraConfig> serviceOut) { this.serviceOut = serviceOut; }
+        public List<CameraConfig> getServiceToDriveIn() { return serviceToDriveIn; }
+        public void setServiceToDriveIn(List<CameraConfig> serviceToDriveIn) { this.serviceToDriveIn = serviceToDriveIn; }
         public List<CameraConfig> getParkingIn() { return parkingIn; }
         public void setParkingIn(List<CameraConfig> parkingIn) { this.parkingIn = parkingIn; }
         public List<CameraConfig> getParkingOut() { return parkingOut; }

@@ -22,43 +22,75 @@ public class SequenceEngine {
 
         for (Detection detection : detections) {
             CameraType type = resolveCameraType(detection, config);
-            if (type == CameraType.OTHER) {
-                continue;
-            }
             SequenceRecord current = active.get(detection.plateNumber());
             if (current == null || shouldResetAsNew(current, detection, config)) {
                 if (current != null) {
+                    finalizeOpenStages(current);
                     current.setFinishedAt(detection.createdAt());
                     done.add(current);
                 }
-                if (type != CameraType.DRIVE_IN_IN && type != CameraType.SERVICE_IN && type != CameraType.POST_OUT) {
+                if (!isStartCamera(type)) {
                     continue;
                 }
                 current = new SequenceRecord(detection.plateNumber(), detection.createdAt());
                 active.put(detection.plateNumber(), current);
             }
 
+            handlePendingBackyard(current, type, detection.createdAt());
             applyEvent(current, type, detection.createdAt());
             evaluateAlerts(current, detection.createdAt(), config);
 
             if (type == CameraType.PARKING_OUT) {
+                finalizeOpenStages(current);
                 current.setFinishedAt(detection.createdAt());
                 done.add(current);
                 active.remove(detection.plateNumber());
             }
         }
 
+        active.values().forEach(this::finalizeOpenStages);
         done.addAll(active.values());
         done.sort(Comparator.comparing(SequenceRecord::getStartedAt));
         return done;
     }
 
+    private boolean isStartCamera(CameraType type) {
+        return type == CameraType.DRIVE_IN_IN || type == CameraType.SERVICE_IN || type == CameraType.POST_OUT;
+    }
+
     private boolean shouldResetAsNew(SequenceRecord current, Detection detection, AppConfig config) {
-        LocalDateTime edge = current.getServiceOutAt() != null ? current.getServiceOutAt() : current.getDriveInOutAt();
-        if (edge == null || current.getParkingInAt() != null || current.getServiceInAt() != null) {
+        LocalDateTime edge = current.getTestDriveAnchorAt();
+        if (edge == null) {
             return false;
         }
         return Duration.between(edge, detection.createdAt()).toMinutes() >= config.getTiming().getTestDriveResetMinutes();
+    }
+
+    private void handlePendingBackyard(SequenceRecord current, CameraType type, LocalDateTime at) {
+        LocalDateTime backyardStart = current.getPendingBackyardStartedAt();
+        if (backyardStart == null) {
+            return;
+        }
+
+        boolean expectedServiceIn = current.getPendingBackyardExpectation() == SequenceRecord.PendingBackyardExpectation.SERVICE_IN;
+        boolean expectedServiceToDriveIn = current.getPendingBackyardExpectation() == SequenceRecord.PendingBackyardExpectation.SERVICE_TO_DRIVE_IN;
+        boolean isExpected = (expectedServiceIn && type == CameraType.SERVICE_IN)
+                || (expectedServiceToDriveIn && type == CameraType.SERVICE_TO_DRIVE_IN);
+
+        if (isExpected) {
+            current.clearPendingBackyard();
+            return;
+        }
+
+        current.addBackyardStage(backyardStart, at);
+        current.clearPendingBackyard();
+    }
+
+    private void finalizeOpenStages(SequenceRecord current) {
+        if (current.getPendingBackyardStartedAt() != null) {
+            current.addBackyardStage(current.getPendingBackyardStartedAt(), null);
+            current.clearPendingBackyard();
+        }
     }
 
     private void applyEvent(SequenceRecord current, CameraType type, LocalDateTime at) {
@@ -67,6 +99,14 @@ public class SequenceEngine {
                 if (current.getDriveInOutAt() == null) {
                     current.setDriveInOutAt(at);
                 }
+                current.setTestDriveAnchorAt(current.getDriveInOutAt());
+            }
+            case DRIVE_IN_TO_SERVICE -> {
+                current.setDriveInToServiceAt(at);
+                if (Objects.equals(current.getTestDriveAnchorAt(), current.getDriveInOutAt())) {
+                    current.setTestDriveAnchorAt(null);
+                }
+                current.startPendingBackyard(at, SequenceRecord.PendingBackyardExpectation.SERVICE_IN);
             }
             case SERVICE_IN -> {
                 if (current.getServiceInAt() != null) {
@@ -101,6 +141,11 @@ public class SequenceEngine {
                 } else {
                     current.setServiceOutAt(at);
                 }
+                current.startPendingBackyard(at, SequenceRecord.PendingBackyardExpectation.SERVICE_TO_DRIVE_IN);
+            }
+            case SERVICE_TO_DRIVE_IN -> {
+                current.setServiceToDriveInAt(at);
+                current.setTestDriveAnchorAt(at);
             }
             case PARKING_IN -> {
                 if (current.getParkingInAt() != null) {
@@ -117,7 +162,12 @@ public class SequenceEngine {
                 current.setParkingInAt(at);
             }
             case PARKING_OUT -> current.setParkingOutAt(at);
-            case DRIVE_IN_IN, OTHER -> { }
+            case DRIVE_IN_IN -> {
+                if (Objects.equals(current.getTestDriveAnchorAt(), current.getServiceToDriveInAt())) {
+                    current.setTestDriveAnchorAt(null);
+                }
+            }
+            case OTHER -> { }
         }
     }
 
@@ -134,8 +184,10 @@ public class SequenceEngine {
         AppConfig.CamerasConfig cameras = config.getCameras();
         if (matchesAny(cameras.getDriveInIn(), detection)) return CameraType.DRIVE_IN_IN;
         if (matchesAny(cameras.getDriveInOut(), detection)) return CameraType.DRIVE_IN_OUT;
+        if (matchesAny(cameras.getDriveInToService(), detection)) return CameraType.DRIVE_IN_TO_SERVICE;
         if (matchesAny(cameras.getServiceIn(), detection)) return CameraType.SERVICE_IN;
         if (matchesAny(cameras.getServiceOut(), detection)) return CameraType.SERVICE_OUT;
+        if (matchesAny(cameras.getServiceToDriveIn(), detection)) return CameraType.SERVICE_TO_DRIVE_IN;
         if (matchesAny(cameras.getParkingIn(), detection)) return CameraType.PARKING_IN;
         if (matchesAny(cameras.getParkingOut(), detection)) return CameraType.PARKING_OUT;
 
@@ -159,10 +211,12 @@ public class SequenceEngine {
     enum CameraType {
         DRIVE_IN_IN,
         DRIVE_IN_OUT,
+        DRIVE_IN_TO_SERVICE,
         SERVICE_IN,
         POST_IN,
         POST_OUT,
         SERVICE_OUT,
+        SERVICE_TO_DRIVE_IN,
         PARKING_IN,
         PARKING_OUT,
         OTHER

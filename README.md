@@ -39,8 +39,8 @@ Use `config.json` (not committed) with:
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Root PostgreSQL credentials for first-start bootstrap: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`). Bootstrap now ensures both sequence database and its DB user/permissions.
 - Source detections table name and optional `sourceTable.loadFrom` timestamp (`yyyy-MM-ddTHH:mm:ss`) to load only detections starting from the configured moment.
-- Camera mapping lists for common points (Drive in / Service / Parking), where each point can contain multiple cameras and each camera is matched by analyticsId + directionRange.
-  - `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`
+- Camera mapping lists for common points (Drive in / Service / Parking), plus transition cameras `driveInToService` and `serviceToDriveIn`; each camera is matched by `analyticsId + directionRange`.
+  - `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`.
 - Direction ranges per camera (`from`/`to`) where null means no filtering.
 - Alert timing thresholds.
 - `reports.outputDirectory`: optional folder where each `/report/sequences.xlsx` call also stores `sequences.xlsx`. The folder is created automatically if missing.
@@ -85,9 +85,11 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, timed alert sync/dispatch, report generation, notifications).
 - XLSX report endpoint now returns as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
 - XLSX report now contains two sheets:
-  - `Sequences`: stage-oriented layout with `Stage`, `Time in`, `Time out`, `Duration` (`HH:mm:ss`) and `Alerts`.
-  - `Events`: event log layout with columns `Plate`, `Camera`, `Event type (In / Out)`, `Time`, `Duration for Out event`.
-- Stage split is now: `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and ends at `Post out`, second `Service` starts at `Post out` and ends at `Service out` (or next closing event).
+  - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`).
+  - `Events`: flat stage layout with one row per stage and columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
+- `Backyard` is emitted as a standalone stage whenever the car goes through `Drive-In -> Service` without reaching `Service in`, or leaves `Service out` without reaching `Service -> Drive-In` before another camera detection.
+- Test-drive / left-territory reset logic now starts from `Drive in (out)` when no `Drive-In -> Service` follows, or from `Service -> Drive-In` when no `Drive in (in)` follows.
+- Stage split is now: `Drive In` starts at `Drive in (in)` and ends at `Drive in (out)`, `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and ends at `Post out`, second `Service` starts at `Post out` and ends at `Service out` (or next closing event), `Backyard` spans from its trigger camera to the first subsequent camera detection.
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
 - The app creates `vehicle_sequences` table in sequence DB if it does not exist.
