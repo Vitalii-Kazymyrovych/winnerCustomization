@@ -24,8 +24,10 @@ class SequenceEngineTest {
                 new Detection(4, "A123", 20, 90, t.plusMinutes(12)),
                 new Detection(5, "A123", 20, 250, t.plusMinutes(20)),
                 new Detection(6, "A123", 13, 90, t.plusMinutes(50)),
-                new Detection(7, "A123", 14, 90, t.plusMinutes(52)),
-                new Detection(8, "A123", 15, 90, t.plusMinutes(70))
+                new Detection(7, "A123", 16, 90, t.plusMinutes(51)),
+                new Detection(8, "A123", 10, 90, t.plusMinutes(52)),
+                new Detection(9, "A123", 14, 90, t.plusMinutes(55)),
+                new Detection(10, "A123", 15, 90, t.plusMinutes(70))
         );
 
         List<SequenceRecord> result = engine.build(detections, config);
@@ -33,7 +35,65 @@ class SequenceEngineTest {
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().getFinishedAt()).isEqualTo(t.plusMinutes(70));
         assertThat(result.getFirst().getPostOutAt()).isEqualTo(t.plusMinutes(20));
+        assertThat(result.getFirst().getServiceToDriveInAt()).isEqualTo(t.plusMinutes(51));
         assertThat(result.getFirst().getPath()).contains("Parking (out)");
+    }
+
+    @Test
+    void shouldCreateBackyardAfterDriveInToServiceWhenServiceInMissing() {
+        AppConfig config = baseConfig();
+        LocalDateTime t = LocalDateTime.of(2026, 1, 2, 10, 0);
+
+        List<SequenceRecord> result = engine.build(List.of(
+                new Detection(1, "B234", 10, 90, t),
+                new Detection(2, "B234", 11, 90, t.plusMinutes(5)),
+                new Detection(3, "B234", 17, 90, t.plusMinutes(7)),
+                new Detection(4, "B234", 14, 90, t.plusMinutes(10))
+        ), config);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getBackyardStages()).singleElement().satisfies(stage -> {
+            assertThat(stage.timeIn()).isEqualTo(t.plusMinutes(7));
+            assertThat(stage.timeOut()).isEqualTo(t.plusMinutes(10));
+        });
+    }
+
+    @Test
+    void shouldCreateBackyardAfterServiceOutWhenServiceToDriveInMissing() {
+        AppConfig config = baseConfig();
+        LocalDateTime t = LocalDateTime.of(2026, 1, 3, 10, 0);
+
+        List<SequenceRecord> result = engine.build(List.of(
+                new Detection(1, "C345", 10, 90, t),
+                new Detection(2, "C345", 11, 90, t.plusMinutes(5)),
+                new Detection(3, "C345", 12, 90, t.plusMinutes(8)),
+                new Detection(4, "C345", 13, 90, t.plusMinutes(30)),
+                new Detection(5, "C345", 14, 90, t.plusMinutes(45))
+        ), config);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getBackyardStages()).singleElement().satisfies(stage -> {
+            assertThat(stage.timeIn()).isEqualTo(t.plusMinutes(30));
+            assertThat(stage.timeOut()).isEqualTo(t.plusMinutes(45));
+        });
+    }
+
+    @Test
+    void shouldKeepTestDriveAnchorAfterServiceToDriveInWithoutDriveInIn() {
+        AppConfig config = baseConfig();
+        LocalDateTime t = LocalDateTime.of(2026, 1, 4, 10, 0);
+
+        List<SequenceRecord> result = engine.build(List.of(
+                new Detection(1, "D456", 10, 90, t),
+                new Detection(2, "D456", 11, 90, t.plusMinutes(5)),
+                new Detection(3, "D456", 12, 90, t.plusMinutes(8)),
+                new Detection(4, "D456", 13, 90, t.plusMinutes(30)),
+                new Detection(5, "D456", 16, 90, t.plusMinutes(31)),
+                new Detection(6, "D456", 99, 90, t.plusMinutes(32))
+        ), config);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getTestDriveAnchorAt()).isEqualTo(t.plusMinutes(31));
     }
 
     @Test
@@ -55,8 +115,10 @@ class SequenceEngineTest {
         AppConfig.CamerasConfig cameras = new AppConfig.CamerasConfig();
         cameras.setDriveInIn(List.of(camera(10)));
         cameras.setDriveInOut(List.of(camera(11)));
+        cameras.setDriveInToService(List.of(camera(17)));
         cameras.setServiceIn(List.of(camera(12)));
         cameras.setServiceOut(List.of(camera(13)));
+        cameras.setServiceToDriveIn(List.of(camera(16)));
         cameras.setParkingIn(List.of(camera(14)));
         cameras.setParkingOut(List.of(camera(15)));
 

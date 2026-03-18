@@ -46,3 +46,8 @@
 - Updated `Events` XLSX sheet to remove the separate `Stage` column (stage is now implied by camera) and translated event-sheet headers to English (`Plate`, `Camera`, `Event type (In / Out)`, `Time`, `Duration for Out event`).
 - Updated `ReportServiceTest` assertions for the new `Events` sheet structure and English headers.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document the new `Events` sheet columns.
+
+## 2026-03-18
+- Changed second XLSX sheet to a flat stage-per-row layout with columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`; added report coverage for `Backyard` rows.
+- Added transition-camera support for `Drive-In -> Service` and `Service -> Drive-In`, including new Backyard stage generation and updated test-drive reset anchors in `SequenceEngine`/`SequenceRecord`.
+- Updated `config.json.example`, `README.md`, and `TECHNICAL_SPEC.md` to document the new camera configuration, Backyard rules, and revised second-sheet format.

@@ -34,7 +34,7 @@
 - `notifications`: telegram on/off + token/chat id.
 - `timing`: thresholds for alerts and test-drive reset.
 - `reports.outputDirectory`: optional folder path for saving generated XLSX file copy on each report request.
-- `cameras`: camera lists for Drive in / Service / Parking logical points. Each camera is matched by `analyticsId` and optional direction range.
+- `cameras`: camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range.
 - `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`.
 
 ### `DetectionService`
@@ -53,13 +53,15 @@
   - Tracks active sequence per plate.
   - Handles lifecycle:
     - start on Drive in (in) / Service (in) / Post Out,
-    - append stage events (service, post, service, parking),
+    - append stage events (service, post, service, backyard, parking),
     - auto-close previous stage with timestamp of next stage detection when previous stage is not closed yet,
+    - start pending `Backyard` after `Drive-In -> Service` (until `Service in`) and after `Service out` (until `Service -> Drive-In`),
+    - materialize `Backyard` as a separate stage from the trigger timestamp until the first subsequent detection on any camera,
     - ignore repeated detections for common points and repeated Post In,
     - treat each valid Post Out as overwrite event (`postOutAt` + second service start are updated),
     - close on parking out,
-    - reset as new sequence if test-drive gap exceeds configured reset threshold.
-  - Produces `SequenceRecord` with path, stage durations, alerts.
+    - reset as new sequence if test-drive gap exceeds configured reset threshold from `Drive in (out)` without `Drive-In -> Service`, or from `Service -> Drive-In` without `Drive in (in)`.
+  - Produces `SequenceRecord` with path, stage durations, alerts, test-drive anchor metadata, and zero or more `Backyard` stage windows.
 
 ### `SequenceStorageService`
 - Method: `initialize()`
@@ -112,9 +114,9 @@
 - Internal method: `toXlsx(...)`
   - Creates two worksheets:
     - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
-    - `Events` with columns: `Plate`, `Camera`, `Event type (In / Out)`, `Time`, `Duration for Out event`.
-  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive in`, `Service`, `Post`, `Service`, `Parking`) with dynamic inclusion based on available timestamps. First Service stage ends at `postInAt` when present; Post stage starts at `postInAt` and ends at `postOutAt`; second Service stage starts at `postOutAt` and ends at `serviceOutAt`.
-  - For `Events`: writes one row per present stage transition event with `In`/`Out`; duration is filled only for `Out` rows based on stage start/end timestamps.
+    - `Events` with flat stage columns: `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
+  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, `Post`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. First Service stage ends at `postInAt` when present; Post stage starts at `postInAt` and ends at `postOutAt`; second Service stage starts at `postOutAt` and ends at `serviceOutAt`; `Backyard` stages are sorted into the timeline by their start timestamp.
+  - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row.
   - Computes duration as `HH:mm:ss`; empty when one of timestamps is missing.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 
@@ -171,4 +173,6 @@ Integration test (live PostgreSQL):
 
 ### Updated stage processing rules
 - Automatic stage closure: when next stage is detected and current stage has no end timestamp, previous stage closes at next detection time (without overwriting already closed stage).
+- Transition cameras: `Drive-In -> Service` cancels the default test-drive assumption after `Drive in (out)` and instead opens a pending `Backyard` stage unless `Service in` arrives next; `Service -> Drive-In` cancels pending `Backyard` after `Service out` and starts test-drive monitoring until `Drive in (in)` arrives.
+- Backyard rules: `Drive-In -> Service` without a subsequent `Service in` becomes `Backyard`; `Service out` without a subsequent `Service -> Drive-In` becomes `Backyard`. In both cases the backyard ends at the timestamp of the first subsequent detection on any camera.
 - Repeat handling: repeated detections in the same logical point are ignored; `Post In` is first-only; `Post Out` is always overwrite/update event.

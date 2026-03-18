@@ -58,6 +58,16 @@
         }
       }
     ],
+    "driveInToService": [
+      {
+        "name": "Drive-In -> Service",
+        "analyticsId": 1008,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
     "serviceIn": [
       {
         "name": "Service (in) cam 1",
@@ -86,6 +96,16 @@
       {
         "name": "Service (out)",
         "analyticsId": 1005,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
+    "serviceToDriveIn": [
+      {
+        "name": "Service -> Drive-In",
+        "analyticsId": 1009,
         "directionRange": {
           "from": null,
           "to": null
