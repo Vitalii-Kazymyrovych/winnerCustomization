@@ -80,7 +80,7 @@ class ResultsRegressionTest {
                 .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
                 .containsExactly(
                         tuple("Service", null, LocalDateTime.of(2026, 3, 18, 15, 55, 6, 697_000_000), ""),
-                        tuple("Post", LocalDateTime.of(2026, 3, 18, 15, 55, 7, 697_000_000), null, ""));
+                        tuple("Post 1", LocalDateTime.of(2026, 3, 18, 15, 55, 7, 697_000_000), null, ""));
 
         assertNoOverlaps(records);
     }

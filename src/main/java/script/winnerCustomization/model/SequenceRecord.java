@@ -102,11 +102,14 @@ public class SequenceRecord {
     public record StageWindow(StageType stageType,
                               LocalDateTime timeIn,
                               LocalDateTime timeOut,
+                              String reportLabelOverride,
                               String alert,
                               boolean partial,
                               int eventOrder) {
         public String reportLabel() {
-            return stageType.reportLabel();
+            return reportLabelOverride != null && !reportLabelOverride.isBlank()
+                    ? reportLabelOverride
+                    : stageType.reportLabel();
         }
 
         public LocalDateTime sortTime() {
@@ -114,26 +117,27 @@ public class SequenceRecord {
         }
 
         public StageWindow withTimeIn(LocalDateTime value) {
-            return new StageWindow(stageType, value, timeOut, alert, partial, eventOrder);
+            return new StageWindow(stageType, value, timeOut, reportLabelOverride, alert, partial, eventOrder);
         }
 
         public StageWindow withTimeOut(LocalDateTime value) {
-            return new StageWindow(stageType, timeIn, value, alert, partial, eventOrder);
+            return new StageWindow(stageType, timeIn, value, reportLabelOverride, alert, partial, eventOrder);
         }
 
         public StageWindow withAlert(String value) {
-            return new StageWindow(stageType, timeIn, timeOut, value, partial, eventOrder);
+            return new StageWindow(stageType, timeIn, timeOut, reportLabelOverride, value, partial, eventOrder);
         }
 
         public StageWindow asPartial(boolean value) {
-            return new StageWindow(stageType, timeIn, timeOut, alert, value, eventOrder);
+            return new StageWindow(stageType, timeIn, timeOut, reportLabelOverride, alert, value, eventOrder);
         }
 
         public boolean sameBounds(StageWindow other) {
             return other != null
                     && stageType == other.stageType
                     && Objects.equals(timeIn, other.timeIn)
-                    && Objects.equals(timeOut, other.timeOut);
+                    && Objects.equals(timeOut, other.timeOut)
+                    && Objects.equals(reportLabel(), other.reportLabel());
         }
     }
 

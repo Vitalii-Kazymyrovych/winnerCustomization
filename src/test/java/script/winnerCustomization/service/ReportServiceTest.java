@@ -53,18 +53,21 @@ class ReportServiceTest {
         record.addStage(new StageWindow(StageType.DRIVE_IN,
                 LocalDateTime.of(2026, 3, 18, 10, 0),
                 LocalDateTime.of(2026, 3, 18, 10, 5),
+                null,
                 "",
                 false,
                 1));
         record.addStage(new StageWindow(StageType.SERVICE,
                 LocalDateTime.of(2026, 3, 18, 10, 10),
                 LocalDateTime.of(2026, 3, 18, 10, 24, 59),
+                null,
                 "No Post in within 15 minutes",
                 false,
                 2));
         record.addStage(new StageWindow(StageType.POST,
                 LocalDateTime.of(2026, 3, 18, 10, 25),
                 null,
+                "Post 2",
                 "",
                 false,
                 3));
@@ -84,11 +87,13 @@ class ReportServiceTest {
             assertThat(stageSheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive In");
             assertThat(stageSheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
             assertThat(stageSheet.getRow(3).getCell(4).getStringCellValue()).isEqualTo("No Post in within 15 minutes");
+            assertThat(stageSheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post 2");
 
             XSSFSheet eventsSheet = workbook.getSheet("Events");
             assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Plate");
             assertThat(eventsSheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Drive In");
             assertThat(eventsSheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("Service");
+            assertThat(eventsSheet.getRow(3).getCell(1).getStringCellValue()).isEqualTo("Post 2");
             assertThat(eventsSheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:14:59");
         }
     }
@@ -106,12 +111,14 @@ class ReportServiceTest {
         record.addStage(new StageWindow(StageType.PARKING,
                 null,
                 LocalDateTime.of(2026, 3, 16, 12, 5),
+                null,
                 "",
                 true,
                 1));
         record.addStage(new StageWindow(StageType.BACKYARD,
                 LocalDateTime.of(2026, 3, 16, 12, 5),
                 LocalDateTime.of(2026, 3, 16, 12, 12),
+                null,
                 "",
                 false,
                 2));

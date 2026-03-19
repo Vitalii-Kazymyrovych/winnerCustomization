@@ -57,11 +57,13 @@ class AlertSchedulerServiceTest {
         record.addStage(new StageWindow(StageType.DRIVE_IN,
                 LocalDateTime.of(2026, 1, 1, 10, 0),
                 null,
+                null,
                 "",
                 false,
                 1));
         record.addStage(new StageWindow(StageType.SERVICE,
                 LocalDateTime.of(2026, 1, 1, 10, 5),
+                null,
                 null,
                 "",
                 false,
@@ -101,12 +103,14 @@ class AlertSchedulerServiceTest {
         record.addStage(new StageWindow(StageType.DRIVE_IN,
                 LocalDateTime.of(2026, 1, 1, 10, 0),
                 LocalDateTime.of(2026, 1, 1, 10, 3),
+                null,
                 "",
                 false,
                 1));
         record.addStage(new StageWindow(StageType.SERVICE,
                 LocalDateTime.of(2026, 1, 1, 10, 5),
                 LocalDateTime.of(2026, 1, 1, 10, 7),
+                null,
                 "",
                 false,
                 2));

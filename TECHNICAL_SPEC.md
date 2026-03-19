@@ -35,7 +35,7 @@
 - `timing`: thresholds for alerts and test-drive reset.
 - `reports.outputDirectory`: optional folder path for saving generated XLSX file copy on each report request.
 - `cameras`: camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range.
-- `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`.
+- `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`; `postName` is preserved into `StageWindow.reportLabel()` so reports can show concrete post numbers/names.
 - `DirectionRange.contains(direction)` supports wrap-around intervals that cross `0` degrees (`270 -> 90`) and uses an exclusive upper bound so neighboring ranges can share a border without ambiguous double matches.
 
 ### `DetectionService`
@@ -59,7 +59,7 @@
   - Handles `Test-Drive` as a candidate triggered by `Drive-In Out` or `Service -> Drive-In`; `Service -> Drive-In` first closes any active stage at `eventTime - 1 second`, then materializes `Test-Drive` only after the configured silence window and drops it when the absence reaches the configured timeout.
   - Closes/open-rolls sequences after 48 hours without detections for the same plate.
   - Drops transition-only sequences that finished without any concrete stage windows, preventing synthetic `No stages` records from reaching storage/reporting layers.
-  - Produces `SequenceRecord` with chronological `StageWindow` entries, per-stage alerts, path steps, and storage/report helpers.
+  - Produces `SequenceRecord` with chronological `StageWindow` entries, per-stage alerts, optional report-label overrides (used for post names/numbers), path steps, and storage/report helpers.
 
 ### `SequenceStorageService`
 - Method: `initialize()`
@@ -113,8 +113,8 @@
   - Creates two worksheets:
     - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
     - `Events` with flat stage columns: `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
-  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, `Post`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. Records with zero stage windows are skipped entirely.
-  - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row. Records with zero stage windows are skipped entirely.
+  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, configured post name such as `Post 1`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. Records with zero stage windows are skipped entirely.
+  - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row; post stages use the preserved `postName` label. Records with zero stage windows are skipped entirely.
   - Computes duration as `HH:mm:ss`; empty when one of timestamps is missing.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 

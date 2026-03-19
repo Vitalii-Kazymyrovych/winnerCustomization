@@ -63,3 +63,5 @@
 - Updated direction-range matching to support wrap-around ranges (for example `270 -> 90`) and to use an exclusive upper bound, which removes ambiguous boundary matches like `90`/`270`.
 - Expanded tests with regression coverage for transition-only records, wrapped direction ranges, service-to-test-drive handoff, report omission of empty records, and a committed-results dataset replay (`results/config.json.production` + `results/alpr_detections.sql`).
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document wrap-around direction handling, omission of empty records, and the stricter `Service -> Drive-In` transition behavior.
+- Restored post numbers/names in XLSX reports by preserving `servicePosts[].postName` inside stage windows and rendering it in both `Sequences` and `Events` sheets instead of the generic `Post` label.
+- Updated `SequenceEngineTest`, `ReportServiceTest`, and `ResultsRegressionTest` to cover named post labels, and refreshed `README.md` / `TECHNICAL_SPEC.md` notes for post-name report rendering.
