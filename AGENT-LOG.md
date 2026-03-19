@@ -65,3 +65,6 @@
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document wrap-around direction handling, omission of empty records, and the stricter `Service -> Drive-In` transition behavior.
 - Restored post numbers/names in XLSX reports by preserving `servicePosts[].postName` inside stage windows and rendering it in both `Sequences` and `Events` sheets instead of the generic `Post` label.
 - Updated `SequenceEngineTest`, `ReportServiceTest`, and `ResultsRegressionTest` to cover named post labels, and refreshed `README.md` / `TECHNICAL_SPEC.md` notes for post-name report rendering.
+- Added a second XLSX endpoint `/report/sequences.xlsx/dd-MM-yyyy` that builds sequences only from detections inside the requested day window and returns/persists `sequences-dd-MM-yyyy.xlsx`.
+- Extended `DetectionService`, `ReportService`, and `ReportController` plus tests to support date-bounded detection loading, dated attachment naming, and dated file persistence.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the new day-scoped report behavior and endpoint.

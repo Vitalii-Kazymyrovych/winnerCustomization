@@ -44,6 +44,10 @@
   - If `sourceTable.loadFrom` is configured, adds `where created_at >= ?` to limit data scan window.
   - Reads rows sorted by `created_at, id`.
   - Maps each row to immutable `Detection` record.
+- Method: `loadDetectionsBetween(fromInclusive, toExclusive)`
+  - Builds SQL with `where created_at >= ? and created_at < ?`.
+  - Used by the dated XLSX endpoint so sequence formation is restricted to one requested calendar day.
+  - Reads rows sorted by `created_at, id`.
 
 ### `SequenceEngine`
 - Method: `build(List<Detection>, AppConfig)`
@@ -109,6 +113,10 @@
     5. optionally persist `sequences.xlsx` into `reports.outputDirectory`,
     6. return HTTP response without waiting for DB refresh completion.
   - Does not dispatch Telegram alerts anymore (alerts are handled by timed background workers).
+- Method: `buildReport(reportDate)`
+  - Calculates `fromInclusive = reportDate 00:00:00` and `toExclusive = next day 00:00:00`.
+  - Loads only detections inside that window.
+  - Builds the same XLSX structure, but persists/returns it as `sequences-dd-MM-yyyy.xlsx`.
 - Internal method: `toXlsx(...)`
   - Creates two worksheets:
     - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
@@ -136,7 +144,10 @@
 
 ### `ReportController`
 - HTTP GET `/report/sequences.xlsx`.
-- Returns XLSX attachment produced by `ReportService`.
+  - Returns XLSX attachment produced by `ReportService.buildReport()` with attachment name `sequences.xlsx`.
+- HTTP GET `/report/sequences.xlsx/{reportDate}` where `reportDate` format is `dd-MM-yyyy`.
+  - Returns XLSX attachment produced by `ReportService.buildReport(reportDate)` with attachment name `sequences-dd-MM-yyyy.xlsx`.
+  - Only detections from the requested day window are used to form sequences.
 
 ## Data flow
 
@@ -144,7 +155,7 @@
 2. `AlertSchedulerService.dispatchDueAlerts()` periodically sends only due pending jobs via `TelegramNotifier` and marks them as `SENT`.
 3. Optional trigger request hits `SourceTriggerController` to force source read with cooldown/parallel-call protection.
 4. Report request hits `ReportController`.
-5. `ReportService` asks `DetectionService` for detections.
+5. `ReportService` asks `DetectionService` for either all detections or the requested day-bounded detection window.
 6. `SequenceEngine` computes sequence records.
 7. `ReportService` starts asynchronous `SequenceStorageService` refresh for `vehicle_sequences` (non-blocking for HTTP response).
 8. XLSX is built in-memory and returned immediately to caller while DB refresh continues in background.
@@ -153,9 +164,9 @@
 
 Unit tests are isolated from live infrastructure and cover all services:
 - `SequenceEngineTest`: full sequence including Post Out overwrite semantics + direction filtering.
-- `DetectionServiceTest`: SQL construction and JDBC row mapping.
+- `DetectionServiceTest`: SQL construction, JDBC row mapping, and explicit date-range filtering for dated reports.
 - `SequenceStorageServiceTest`: DDL initialization and replace-all persistence flow.
-- `ReportServiceTest`: orchestration, storage refresh, XLSX content.
+- `ReportServiceTest`: orchestration, storage refresh, XLSX content, dated filename persistence, and day-bounded report generation.
 - `TelegramNotifierTest`: safe no-op behavior for null/disabled notifications.
 - `SourcePullTriggerServiceTest`: trigger success, cooldown behavior, and parallel-run protection.
 - `AlertSchedulerServiceTest`: pending alert-job sync (upsert/cancel) and due-job dispatch flow.

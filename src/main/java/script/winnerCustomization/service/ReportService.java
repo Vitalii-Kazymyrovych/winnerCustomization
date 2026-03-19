@@ -16,13 +16,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 @Service
 public class ReportService {
     private static final Logger log = LoggerFactory.getLogger(ReportService.class);
+    private static final DateTimeFormatter REPORT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy");
 
     private final RuntimeConfig runtimeConfig;
     private final DetectionService detectionService;
@@ -40,16 +43,34 @@ public class ReportService {
     }
 
     public byte[] buildReport() throws IOException {
-        log.info("Report build started");
+        log.info("Report build started for all available detections");
         AppConfig config = runtimeConfig.get();
         List<Detection> detections = detectionService.loadAllDetections();
+        return buildReport(config, detections, "sequences.xlsx");
+    }
+
+    public byte[] buildReport(LocalDate reportDate) throws IOException {
+        LocalDateTime fromInclusive = reportDate.atStartOfDay();
+        LocalDateTime toExclusive = reportDate.plusDays(1).atStartOfDay();
+        String reportFileName = buildDatedReportFileName(reportDate);
+        log.info("Report build started for date {} (from={} toExclusive={})", reportDate, fromInclusive, toExclusive);
+        AppConfig config = runtimeConfig.get();
+        List<Detection> detections = detectionService.loadDetectionsBetween(fromInclusive, toExclusive);
+        return buildReport(config, detections, reportFileName);
+    }
+
+    public String buildDatedReportFileName(LocalDate reportDate) {
+        return "sequences-" + REPORT_DATE_FORMATTER.format(reportDate) + ".xlsx";
+    }
+
+    private byte[] buildReport(AppConfig config, List<Detection> detections, String reportFileName) throws IOException {
         log.info("Building sequences from {} detections", detections.size());
         List<SequenceRecord> records = sequenceEngine.build(detections, config);
         log.info("Built {} sequence records", records.size());
         persistSequencesAsync(records);
         byte[] reportBytes = toXlsx(records);
-        persistReportFile(reportBytes, config);
-        log.info("Report build finished, bytes={}", reportBytes.length);
+        persistReportFile(reportBytes, config, reportFileName);
+        log.info("Report build finished, fileName={}, bytes={}", reportFileName, reportBytes.length);
         return reportBytes;
     }
 
@@ -66,14 +87,14 @@ public class ReportService {
         });
     }
 
-    private void persistReportFile(byte[] reportBytes, AppConfig config) {
+    private void persistReportFile(byte[] reportBytes, AppConfig config, String reportFileName) {
         String outputDirectory = config.getReports() == null ? null : config.getReports().getOutputDirectory();
         if (outputDirectory == null || outputDirectory.isBlank()) {
             log.info("Report output directory is not configured, skipping report file persistence");
             return;
         }
         Path outputPath = Path.of(outputDirectory);
-        Path filePath = outputPath.resolve("sequences.xlsx");
+        Path filePath = outputPath.resolve(reportFileName);
         try {
             Files.createDirectories(outputPath);
             Files.write(filePath, reportBytes);

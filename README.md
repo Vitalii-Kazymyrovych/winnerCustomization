@@ -28,8 +28,11 @@ Spring Boot script that:
    - `http://localhost:8080/source/trigger-pull`
    - returns `200` on success, `409` if a trigger is currently running, `429` during cooldown.
 6. Download report from browser:
-   - `http://localhost:8080/report/sequences.xlsx`
-   - The same report file is additionally saved as `sequences.xlsx` in `reports.outputDirectory` (if configured).
+   - Full report: `http://localhost:8080/report/sequences.xlsx`
+   - Date-scoped report for one calendar day: `http://localhost:8080/report/sequences.xlsx/dd-MM-yyyy`
+   - The date-scoped endpoint uses only detections from `dd-MM-yyyy 00:00:00` up to, but not including, the next day `00:00:00` when forming sequences.
+   - The full report is additionally saved as `sequences.xlsx` in `reports.outputDirectory` (if configured).
+   - The date-scoped report is additionally saved as `sequences-dd-MM-yyyy.xlsx` in `reports.outputDirectory` (if configured).
 
 ## Configuration
 
@@ -44,7 +47,7 @@ Use `config.json` (not committed) with:
   - `postName` is also reused as the visible stage label in both XLSX sheets, so report rows show `Post 1` / `Post 2` instead of the generic `Post` label.
 - Direction ranges per camera (`from`/`to`) where null means no filtering. Ranges support wrap-around through `0` degrees (`270 -> 90`) and use an exclusive upper bound, so adjacent ranges can safely share borders without double-classifying `90`/`270`.
 - Alert timing thresholds.
-- `reports.outputDirectory`: optional folder where each `/report/sequences.xlsx` call also stores `sequences.xlsx`. The folder is created automatically if missing.
+- `reports.outputDirectory`: optional folder where `/report/sequences.xlsx` stores `sequences.xlsx`, and `/report/sequences.xlsx/dd-MM-yyyy` stores `sequences-dd-MM-yyyy.xlsx`. The folder is created automatically if missing.
 - Telegram notifications toggle and credentials.
 
 ## Timed notifications (DB-backed)
@@ -99,7 +102,8 @@ The current engine interprets detections as a chronological sequence of stage oc
 ## Notes
 
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, timed alert sync/dispatch, report generation, notifications).
-- XLSX report endpoint now returns as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
+- XLSX report endpoints now return as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
+- The dated endpoint builds sequences strictly from detections that fall inside the requested calendar day window (`00:00:00` inclusive to next-day `00:00:00` exclusive).
 - XLSX report now contains two sheets:
   - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`). Post rows display the configured `servicePosts[].postName`.
   - `Events`: flat stage layout with one row per stage and columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`. Post rows also display the configured post name.
