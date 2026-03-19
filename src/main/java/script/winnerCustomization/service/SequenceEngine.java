@@ -42,7 +42,7 @@ public class SequenceEngine {
             ActiveSequence current = activeByPlate.get(detection.plateNumber());
 
             if (current != null && shouldCloseBySequenceGap(current, eventTime)) {
-                done.add(finalizeSequence(current, config));
+                addIfNotEmpty(done, finalizeSequence(current, config));
                 activeByPlate.remove(detection.plateNumber());
                 current = null;
             }
@@ -50,7 +50,7 @@ public class SequenceEngine {
             if (current != null && current.hasPendingCandidate()) {
                 CandidateDisposition disposition = handleCandidateBeforeEvent(current, eventTime, config);
                 if (disposition == CandidateDisposition.CLOSE_SEQUENCE) {
-                    done.add(finalizeSequence(current, config));
+                    addIfNotEmpty(done, finalizeSequence(current, config));
                     activeByPlate.remove(detection.plateNumber());
                     current = null;
                 }
@@ -66,7 +66,7 @@ public class SequenceEngine {
         }
 
         for (ActiveSequence active : activeByPlate.values()) {
-            done.add(finalizeSequence(active, config));
+            addIfNotEmpty(done, finalizeSequence(active, config));
         }
 
         done.sort(Comparator.comparing(SequenceRecord::getStartedAt)
@@ -117,6 +117,12 @@ public class SequenceEngine {
         current.record.setFinishedAt(current.lastEventAt);
         annotateAlerts(current.record, config);
         return current.record;
+    }
+
+    private void addIfNotEmpty(List<SequenceRecord> done, SequenceRecord record) {
+        if (!record.getStages().isEmpty()) {
+            done.add(record);
+        }
     }
 
     private void annotateAlerts(SequenceRecord record, AppConfig config) {
@@ -303,7 +309,7 @@ public class SequenceEngine {
     }
 
     private void handleServiceToDriveIn(ActiveSequence current, LocalDateTime eventTime) {
-        if (current.activeStageType() == StageType.BACKYARD) {
+        if (current.activeStageIndex != null) {
             closeActiveAt(current, eventTime.minusSeconds(1));
         }
         current.serviceOpenedByPostOutStageIndex = null;

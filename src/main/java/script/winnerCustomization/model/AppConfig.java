@@ -261,7 +261,13 @@ public class AppConfig {
             if (from == null || to == null || direction == null) {
                 return true;
             }
-            return direction >= from && direction <= to;
+            if (from.equals(to)) {
+                return direction.equals(from);
+            }
+            if (from < to) {
+                return direction >= from && direction < to;
+            }
+            return direction >= from || direction < to;
         }
 
         public Integer getFrom() { return from; }

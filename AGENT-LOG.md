@@ -56,3 +56,10 @@
 - Updated `AlertSchedulerService` to schedule/cancel alerts per eligible `Drive In` / `Service` stage instead of relying on single fixed timestamps.
 - Rewrote `SequenceEngineTest`, `ReportServiceTest`, `AlertSchedulerServiceTest`, and adjusted storage/integration tests to cover recovery flows, duplicate suppression, repeated posts, Test-Drive rules, Backyard generation, overwrite semantics for `Post Out`, report rows, and storage compatibility.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to describe the new sequence-processing rules and reporting model.
+
+## 2026-03-19
+- Fixed `SequenceEngine` so `Service -> Drive-In` always closes the currently active stage before creating a delayed `Test-Drive` candidate; this removes illegal overlaps between `Service` and `Test-Drive`.
+- Added sequence finalization guard so transition-only records without concrete stages are dropped instead of leaking `No stages` into the report.
+- Updated direction-range matching to support wrap-around ranges (for example `270 -> 90`) and to use an exclusive upper bound, which removes ambiguous boundary matches like `90`/`270`.
+- Expanded tests with regression coverage for transition-only records, wrapped direction ranges, service-to-test-drive handoff, report omission of empty records, and a committed-results dataset replay (`results/config.json.production` + `results/alpr_detections.sql`).
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document wrap-around direction handling, omission of empty records, and the stricter `Service -> Drive-In` transition behavior.

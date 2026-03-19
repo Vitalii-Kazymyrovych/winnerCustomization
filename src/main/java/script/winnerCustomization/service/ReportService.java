@@ -105,10 +105,13 @@ public class ReportService {
 
         int rowIndex = 1;
         for (SequenceRecord r : records) {
+            List<StageLine> stages = toStages(r);
+            if (stages.isEmpty()) {
+                continue;
+            }
+
             Row plateRow = sheet.createRow(rowIndex++);
             plateRow.createCell(2).setCellValue(r.getPlateNumber());
-
-            List<StageLine> stages = toStages(r);
             for (StageLine stage : stages) {
                 Row row = sheet.createRow(rowIndex++);
                 row.createCell(0).setCellValue(stage.stageName());
@@ -152,13 +155,9 @@ public class ReportService {
     }
 
     private List<StageLine> toStages(SequenceRecord record) {
-        List<StageLine> stages = record.stagesChronologically().stream()
+        return record.stagesChronologically().stream()
                 .map(stage -> new StageLine(stage.reportLabel(), stage.timeIn(), stage.timeOut(), stage.alert()))
                 .toList();
-        if (!stages.isEmpty()) {
-            return stages;
-        }
-        return List.of(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt(), ""));
     }
 
     private String formatTime(LocalDateTime value) {

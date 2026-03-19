@@ -151,4 +151,27 @@ class ReportServiceTest {
         assertThat(Files.exists(reportPath)).isTrue();
         assertThat(Files.size(reportPath)).isEqualTo(body.length);
     }
+
+    @Test
+    void shouldSkipRecordsWithoutStagesInBothSheets() throws Exception {
+        AppConfig config = new AppConfig();
+        when(runtimeConfig.get()).thenReturn(config);
+
+        Detection detection = new Detection(1L, "ZZ0001", 10, 90, LocalDateTime.now());
+        when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
+
+        SequenceRecord emptyRecord = new SequenceRecord("ZZ0001", LocalDateTime.of(2026, 3, 18, 10, 0));
+        emptyRecord.setFinishedAt(LocalDateTime.of(2026, 3, 18, 10, 0));
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(emptyRecord));
+
+        byte[] data = reportService.buildReport();
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
+            XSSFSheet sequences = workbook.getSheet("Sequences");
+            XSSFSheet events = workbook.getSheet("Events");
+
+            assertThat(sequences.getLastRowNum()).isEqualTo(0);
+            assertThat(events.getLastRowNum()).isEqualTo(0);
+        }
+    }
 }
