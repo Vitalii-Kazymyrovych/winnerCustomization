@@ -18,6 +18,7 @@ import script.winnerCustomization.model.SequenceRecord.StageWindow;
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -49,30 +50,7 @@ class ReportServiceTest {
         Detection detection = new Detection(1L, "AA1111", 10, 90, LocalDateTime.now());
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
 
-        SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.of(2026, 3, 18, 10, 0));
-        record.addStage(new StageWindow(StageType.DRIVE_IN,
-                LocalDateTime.of(2026, 3, 18, 10, 0),
-                LocalDateTime.of(2026, 3, 18, 10, 5),
-                null,
-                "",
-                false,
-                1));
-        record.addStage(new StageWindow(StageType.SERVICE,
-                LocalDateTime.of(2026, 3, 18, 10, 10),
-                LocalDateTime.of(2026, 3, 18, 10, 24, 59),
-                null,
-                "No Post in within 15 minutes",
-                false,
-                2));
-        record.addStage(new StageWindow(StageType.POST,
-                LocalDateTime.of(2026, 3, 18, 10, 25),
-                null,
-                "Post 2",
-                "",
-                false,
-                3));
-        record.setFinishedAt(LocalDateTime.of(2026, 3, 18, 10, 25));
-
+        SequenceRecord record = sampleRecord("AA1111");
         when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
 
         byte[] data = reportService.buildReport();
@@ -96,6 +74,27 @@ class ReportServiceTest {
             assertThat(eventsSheet.getRow(3).getCell(1).getStringCellValue()).isEqualTo("Post 2");
             assertThat(eventsSheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:14:59");
         }
+    }
+
+    @Test
+    void shouldBuildDateScopedReportUsingOnlyRequestedDayDetections() throws Exception {
+        AppConfig config = new AppConfig();
+        when(runtimeConfig.get()).thenReturn(config);
+
+        LocalDate reportDate = LocalDate.of(2026, 3, 19);
+        LocalDateTime detectionTime = LocalDateTime.of(2026, 3, 19, 11, 45);
+        Detection detection = new Detection(5L, "DAY001", 22, 180, detectionTime);
+        when(detectionService.loadDetectionsBetween(reportDate.atStartOfDay(), reportDate.plusDays(1).atStartOfDay()))
+                .thenReturn(List.of(detection));
+
+        SequenceRecord record = sampleRecord("DAY001");
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
+
+        byte[] data = reportService.buildReport(reportDate);
+
+        assertThat(data).isNotEmpty();
+        verify(detectionService).loadDetectionsBetween(reportDate.atStartOfDay(), reportDate.plusDays(1).atStartOfDay());
+        assertThat(reportService.buildDatedReportFileName(reportDate)).isEqualTo("sequences-19-03-2026.xlsx");
     }
 
     @Test
@@ -160,6 +159,30 @@ class ReportServiceTest {
     }
 
     @Test
+    void shouldPersistDatedReportIntoConfiguredFolder(@TempDir Path tempDir) throws Exception {
+        AppConfig config = new AppConfig();
+        AppConfig.ReportsConfig reports = new AppConfig.ReportsConfig();
+        reports.setOutputDirectory(tempDir.resolve("xlsx").toString());
+        config.setReports(reports);
+        when(runtimeConfig.get()).thenReturn(config);
+
+        LocalDate reportDate = LocalDate.of(2026, 3, 19);
+        Detection detection = new Detection(1L, "DD0001", 10, 90, reportDate.atTime(14, 30));
+        when(detectionService.loadDetectionsBetween(reportDate.atStartOfDay(), reportDate.plusDays(1).atStartOfDay()))
+                .thenReturn(List.of(detection));
+
+        SequenceRecord record = new SequenceRecord("DD0001", LocalDateTime.now());
+        record.setFinishedAt(LocalDateTime.now());
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
+
+        byte[] body = reportService.buildReport(reportDate);
+
+        Path reportPath = tempDir.resolve("xlsx").resolve("sequences-19-03-2026.xlsx");
+        assertThat(Files.exists(reportPath)).isTrue();
+        assertThat(Files.size(reportPath)).isEqualTo(body.length);
+    }
+
+    @Test
     void shouldSkipRecordsWithoutStagesInBothSheets() throws Exception {
         AppConfig config = new AppConfig();
         when(runtimeConfig.get()).thenReturn(config);
@@ -180,5 +203,32 @@ class ReportServiceTest {
             assertThat(sequences.getLastRowNum()).isEqualTo(0);
             assertThat(events.getLastRowNum()).isEqualTo(0);
         }
+    }
+
+    private SequenceRecord sampleRecord(String plate) {
+        SequenceRecord record = new SequenceRecord(plate, LocalDateTime.of(2026, 3, 18, 10, 0));
+        record.addStage(new StageWindow(StageType.DRIVE_IN,
+                LocalDateTime.of(2026, 3, 18, 10, 0),
+                LocalDateTime.of(2026, 3, 18, 10, 5),
+                null,
+                "",
+                false,
+                1));
+        record.addStage(new StageWindow(StageType.SERVICE,
+                LocalDateTime.of(2026, 3, 18, 10, 10),
+                LocalDateTime.of(2026, 3, 18, 10, 24, 59),
+                null,
+                "No Post in within 15 minutes",
+                false,
+                2));
+        record.addStage(new StageWindow(StageType.POST,
+                LocalDateTime.of(2026, 3, 18, 10, 25),
+                null,
+                "Post 2",
+                "",
+                false,
+                3));
+        record.setFinishedAt(LocalDateTime.of(2026, 3, 18, 10, 25));
+        return record;
     }
 }

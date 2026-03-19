@@ -35,13 +35,7 @@ class DetectionServiceTest {
 
     @Test
     void shouldBuildSqlFromRuntimeConfigAndMapRows() throws Exception {
-        AppConfig appConfig = new AppConfig();
-        AppConfig.DatabaseConfig sourceDb = new AppConfig.DatabaseConfig();
-        sourceDb.setSchema("videoanalytics");
-        appConfig.setSourceDatabase(sourceDb);
-        AppConfig.SourceTableConfig sourceTable = new AppConfig.SourceTableConfig();
-        sourceTable.setTable("alpr_detections");
-        appConfig.setSourceTable(sourceTable);
+        AppConfig appConfig = appConfig("videoanalytics", "alpr_detections");
         when(runtimeConfig.get()).thenReturn(appConfig);
 
         LocalDateTime createdAt = LocalDateTime.of(2026, 1, 2, 3, 4);
@@ -69,15 +63,9 @@ class DetectionServiceTest {
 
     @Test
     void shouldApplyLoadFromFilterWhenConfigured() {
-        AppConfig appConfig = new AppConfig();
-        AppConfig.DatabaseConfig sourceDb = new AppConfig.DatabaseConfig();
-        sourceDb.setSchema("videoanalytics");
-        appConfig.setSourceDatabase(sourceDb);
-        AppConfig.SourceTableConfig sourceTable = new AppConfig.SourceTableConfig();
-        sourceTable.setTable("alpr_detections");
+        AppConfig appConfig = appConfig("videoanalytics", "alpr_detections");
         LocalDateTime loadFrom = LocalDateTime.of(2026, 3, 17, 9, 30);
-        sourceTable.setLoadFrom(loadFrom);
-        appConfig.setSourceTable(sourceTable);
+        appConfig.getSourceTable().setLoadFrom(loadFrom);
         when(runtimeConfig.get()).thenReturn(appConfig);
         when(sourceJdbc.query(any(String.class), any(RowMapper.class), any())).thenReturn(List.of());
 
@@ -88,5 +76,35 @@ class DetectionServiceTest {
                 any(RowMapper.class),
                 eq(Timestamp.valueOf(loadFrom))
         );
+    }
+
+    @Test
+    void shouldApplyExplicitDateRangeFilterForDatedReportEndpoint() {
+        AppConfig appConfig = appConfig("videoanalytics", "alpr_detections");
+        when(runtimeConfig.get()).thenReturn(appConfig);
+        when(sourceJdbc.query(any(String.class), any(RowMapper.class), any(), any())).thenReturn(List.of());
+
+        LocalDateTime fromInclusive = LocalDateTime.of(2026, 3, 19, 0, 0);
+        LocalDateTime toExclusive = LocalDateTime.of(2026, 3, 20, 0, 0);
+
+        detectionService.loadDetectionsBetween(fromInclusive, toExclusive);
+
+        verify(sourceJdbc).query(
+                eq("select id, plate_number, analytics_id, direction, created_at from videoanalytics.alpr_detections where created_at >= ? and created_at < ? order by created_at asc, id asc"),
+                any(RowMapper.class),
+                eq(Timestamp.valueOf(fromInclusive)),
+                eq(Timestamp.valueOf(toExclusive))
+        );
+    }
+
+    private AppConfig appConfig(String schema, String table) {
+        AppConfig appConfig = new AppConfig();
+        AppConfig.DatabaseConfig sourceDb = new AppConfig.DatabaseConfig();
+        sourceDb.setSchema(schema);
+        appConfig.setSourceDatabase(sourceDb);
+        AppConfig.SourceTableConfig sourceTable = new AppConfig.SourceTableConfig();
+        sourceTable.setTable(table);
+        appConfig.setSourceTable(sourceTable);
+        return appConfig;
     }
 }
