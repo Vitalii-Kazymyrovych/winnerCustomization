@@ -265,9 +265,22 @@ class SequenceEngineTest {
         SequenceRecord postOut = build(baseConfig(), List.of(
                 detection(1, "BB1004", 20, 250, t)
         )).getFirst();
-        assertStages(postOut,
-                tuple("post-1", null, t, ""),
-                tuple("Service", t, null, ""));
+        assertStages(postOut, tuple("post-1", null, t, ""));
+    }
+
+    @Test
+    void shouldNotInsertSyntheticServiceBetweenRecoveryPostOutAndSamePostIn() {
+        LocalDateTime t = LocalDateTime.of(2026, 3, 19, 9, 0);
+
+        SequenceRecord record = build(baseConfig(), List.of(
+                detection(1, "BB1004A", 20, 250, t),
+                detection(2, "BB1004A", 20, 250, t.plusMinutes(2)),
+                detection(3, "BB1004A", 20, 90, t.plusMinutes(5))
+        )).getFirst();
+
+        assertStages(record,
+                tuple("post-1", null, t.plusMinutes(2), ""),
+                tuple("post-1", t.plusMinutes(5), null, ""));
     }
 
     @Test

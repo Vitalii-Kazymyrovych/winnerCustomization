@@ -82,6 +82,33 @@ class ResultsRegressionTest {
                         tuple("Service", null, LocalDateTime.of(2026, 3, 18, 15, 55, 6, 697_000_000), ""),
                         tuple("Post 1", LocalDateTime.of(2026, 3, 18, 15, 55, 7, 697_000_000), null, ""));
 
+        SequenceRecord aa4444po = findRecord(records, "AA4444PO", LocalDateTime.of(2026, 3, 18, 16, 4, 13, 859_000_000));
+        assertThat(aa4444po.stagesChronologically())
+                .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
+                .containsSubsequence(
+                        tuple("Post 1", null, LocalDateTime.of(2026, 3, 18, 16, 5, 37, 953_000_000), ""),
+                        tuple("Post 1", LocalDateTime.of(2026, 3, 18, 16, 6, 37, 999_000_000), LocalDateTime.of(2026, 3, 18, 17, 14, 47, 984_000_000), ""));
+
+        SequenceRecord ka7828bb = findRecord(records, "KA7828BB", LocalDateTime.of(2026, 3, 18, 9, 11, 57, 871_000_000));
+        assertThat(ka7828bb.stagesChronologically())
+                .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
+                .containsSubsequence(
+                        tuple("Post 2", null, LocalDateTime.of(2026, 3, 19, 15, 10, 18, 89_000_000), ""),
+                        tuple("Post 2", LocalDateTime.of(2026, 3, 19, 15, 20, 28, 73_000_000), null, ""));
+
+        SequenceRecord ka1163k = findRecord(records, "KA1163K", LocalDateTime.of(2026, 3, 18, 14, 34, 35, 305_000_000));
+        assertThat(ka1163k.stagesChronologically())
+                .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
+                .containsExactly(
+                        tuple("Post 1", null, LocalDateTime.of(2026, 3, 18, 14, 43, 26, 221_000_000), ""));
+
+        SequenceRecord bk0542ka = findRecord(records, "BK0542KA", LocalDateTime.of(2026, 3, 19, 9, 4, 51, 384_000_000));
+        assertThat(bk0542ka.stagesChronologically())
+                .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
+                .containsSubsequence(
+                        tuple("Post 1", null, LocalDateTime.of(2026, 3, 19, 10, 10, 58, 640_000_000), ""),
+                        tuple("Post 1", LocalDateTime.of(2026, 3, 19, 10, 12, 55, 285_000_000), null, ""));
+
         SequenceRecord repeatedServiceOuts = findRecord(records, "6050PH", LocalDateTime.of(2026, 3, 19, 10, 52, 29, 641_000_000));
         assertThat(repeatedServiceOuts.stagesChronologically())
                 .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
