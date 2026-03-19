@@ -271,6 +271,38 @@ class SequenceEngineTest {
     }
 
     @Test
+    void shouldKeepBackyardOpenWhenServiceOutArrivesInsideBackyard() {
+        LocalDateTime t = LocalDateTime.of(2026, 3, 19, 10, 0);
+
+        SequenceRecord record = build(baseConfig(), List.of(
+                detection(1, "DD1005", 13, 90, t),
+                detection(2, "DD1005", 13, 90, t.plusMinutes(10)),
+                detection(3, "DD1005", 13, 90, t.plusMinutes(20))
+        )).getFirst();
+
+        assertStages(record,
+                tuple("Service", null, t, ""),
+                tuple("Backyard", t, null, ""),
+                tuple("Service", null, t.plusMinutes(10), ""),
+                tuple("Service", null, t.plusMinutes(20), ""));
+    }
+
+    @Test
+    void shouldKeepBackyardOpenWhenParkingOutArrivesInsideBackyard() {
+        LocalDateTime t = LocalDateTime.of(2026, 3, 19, 11, 0);
+
+        SequenceRecord record = build(baseConfig(), List.of(
+                detection(1, "DD1006", 15, 90, t),
+                detection(2, "DD1006", 15, 90, t.plusMinutes(12))
+        )).getFirst();
+
+        assertStages(record,
+                tuple("Parking", null, t, ""),
+                tuple("Backyard", t, null, ""),
+                tuple("Parking", null, t.plusMinutes(12), ""));
+    }
+
+    @Test
     void shouldCreateRecoveryServiceBeforePostInWithoutActiveService() {
         LocalDateTime t = LocalDateTime.of(2026, 3, 18, 20, 0);
 

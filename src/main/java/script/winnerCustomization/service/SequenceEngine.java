@@ -240,6 +240,8 @@ public class SequenceEngine {
 
     private void handleServiceOut(ActiveSequence current, LocalDateTime eventTime) {
         if (current.activeStageType() == StageType.BACKYARD) {
+            current.record.addStage(new StageWindow(StageType.SERVICE, null, eventTime, null, "", true, current.nextEventOrder()));
+            current.record.addPathStep("Service (out)");
             return;
         }
         if (current.activeStageType() == StageType.SERVICE) {
@@ -308,6 +310,8 @@ public class SequenceEngine {
 
     private void handleParkingOut(ActiveSequence current, LocalDateTime eventTime) {
         if (current.activeStageType() == StageType.BACKYARD) {
+            current.record.addStage(new StageWindow(StageType.PARKING, null, eventTime, null, "", true, current.nextEventOrder()));
+            current.record.addPathStep("Parking (out)");
             return;
         }
         if (current.activeStageType() == StageType.PARKING) {

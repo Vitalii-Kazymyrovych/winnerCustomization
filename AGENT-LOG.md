@@ -71,3 +71,7 @@
 - Reworked `SequenceEngine` Post handling into sticky logic: duplicate `Post In` on the same configured post is ignored, duplicate `Post Out` only refreshes `outTimeCandidate`, sticky `Post` closes only on another stage/finalization, and synthetic `Service` is created only when a later transition proves it is needed.
 - Updated `ReportService` so open sticky `Post` rows keep empty `Out time` but still show `Duration` based on `SequenceRecord.finishedAt`.
 - Expanded `SequenceEngineTest` and `ReportServiceTest` coverage for sticky Post duplicates, synthetic service insertion, open Post duration rendering, and cross-post transitions; refreshed `README.md` / `TECHNICAL_SPEC.md` to describe the new Post-stage invariants.
+- Fixed replayed production regressions where `Service Out` / `Parking Out` detections were silently dropped while `Backyard` was already active; such detections are now preserved as partial recovery rows without closing the active `Backyard`.
+- Normalized XLSX timestamp rendering to `yyyy-MM-dd HH:mm:ss` so reports no longer expose Java `LocalDateTime` `T`/nanosecond formatting.
+- Expanded regression coverage with explicit assertions for repeated `Service Out` recoveries inside `Backyard`, `Parking Out` recovery inside `Backyard`, and results-dataset plates that previously lost those rows.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document active-`Backyard` recovery handling and the new XLSX timestamp format.

@@ -63,6 +63,8 @@ class ReportServiceTest {
             assertThat(stageSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Stage");
             assertThat(stageSheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("AA1111");
             assertThat(stageSheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive In");
+            assertThat(stageSheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("2026-03-18 10:00:00");
+            assertThat(stageSheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("2026-03-18 10:05:00");
             assertThat(stageSheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
             assertThat(stageSheet.getRow(3).getCell(4).getStringCellValue()).isEqualTo("No Post in within 15 minutes");
             assertThat(stageSheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post 2");
@@ -70,6 +72,8 @@ class ReportServiceTest {
             XSSFSheet eventsSheet = workbook.getSheet("Events");
             assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Plate");
             assertThat(eventsSheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Drive In");
+            assertThat(eventsSheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("2026-03-18 10:00:00");
+            assertThat(eventsSheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("2026-03-18 10:05:00");
             assertThat(eventsSheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("Service");
             assertThat(eventsSheet.getRow(3).getCell(1).getStringCellValue()).isEqualTo("Post 2");
             assertThat(eventsSheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:14:59");
@@ -130,7 +134,7 @@ class ReportServiceTest {
             XSSFSheet sheet = workbook.getSheet("Events");
             assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Parking");
             assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("");
-            assertThat(sheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("2026-03-16T12:05");
+            assertThat(sheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("2026-03-16 12:05:00");
             assertThat(sheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("Backyard");
             assertThat(sheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:07:00");
         }
