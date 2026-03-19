@@ -70,12 +70,33 @@ class SequenceEngineTest {
         assertStages(record,
                 tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
                 tuple("post-1", t.plusMinutes(5), t.plusMinutes(15), ""),
-                tuple("Service", t.plusMinutes(15), t.plusMinutes(30).minusSeconds(1), ""),
+                tuple("Service", t.plusMinutes(15).plusSeconds(1), t.plusMinutes(30), ""),
                 tuple("Backyard", t.plusMinutes(30), null, ""));
     }
 
     @Test
-    void shouldSupportSeveralPostsInSameSequence() {
+    void shouldKeepPostStickyAcrossDuplicatePostEventsUntilServiceOut() {
+        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 12, 30);
+
+        SequenceRecord record = build(baseConfig(), List.of(
+                detection(1, "KA1163KK", 12, 90, t),
+                detection(2, "KA1163KK", 20, 90, t.plusMinutes(5)),
+                detection(3, "KA1163KK", 20, 90, t.plusMinutes(6)),
+                detection(4, "KA1163KK", 20, 250, t.plusMinutes(8)),
+                detection(5, "KA1163KK", 20, 90, t.plusMinutes(9)),
+                detection(6, "KA1163KK", 20, 250, t.plusMinutes(11)),
+                detection(7, "KA1163KK", 13, 90, t.plusMinutes(20))
+        )).getFirst();
+
+        assertStages(record,
+                tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
+                tuple("post-1", t.plusMinutes(5), t.plusMinutes(11), ""),
+                tuple("Service", t.plusMinutes(11).plusSeconds(1), t.plusMinutes(20), ""),
+                tuple("Backyard", t.plusMinutes(20), null, ""));
+    }
+
+    @Test
+    void shouldTreatRepeatedRecognitionsOnSamePostAsOneStickyPostStage() {
         LocalDateTime t = LocalDateTime.of(2026, 3, 18, 13, 0);
 
         SequenceRecord record = build(baseConfig(), List.of(
@@ -89,10 +110,8 @@ class SequenceEngineTest {
 
         assertStages(record,
                 tuple("Service", t, t.plusMinutes(3).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(3), t.plusMinutes(7), ""),
-                tuple("Service", t.plusMinutes(7), t.plusMinutes(10).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(10), t.plusMinutes(14), ""),
-                tuple("Service", t.plusMinutes(14), t.plusMinutes(18).minusSeconds(1), ""),
+                tuple("post-1", t.plusMinutes(3), t.plusMinutes(14), ""),
+                tuple("Service", t.plusMinutes(14).plusSeconds(1), t.plusMinutes(18), ""),
                 tuple("Backyard", t.plusMinutes(18), null, ""));
     }
 
@@ -298,22 +317,39 @@ class SequenceEngineTest {
     }
 
     @Test
-    void shouldOverwritePostOutAndShiftFollowingServiceStart() {
+    void shouldKeepOpenPostWithoutOutTimeAndUseLastEventAsSequenceEnd() {
         LocalDateTime t = LocalDateTime.of(2026, 3, 18, 23, 0);
 
         SequenceRecord record = build(baseConfig(), List.of(
                 detection(1, "CC1004", 12, 90, t),
                 detection(2, "CC1004", 20, 90, t.plusMinutes(5)),
                 detection(3, "CC1004", 20, 250, t.plusMinutes(8)),
-                detection(4, "CC1004", 20, 250, t.plusMinutes(10)),
-                detection(5, "CC1004", 13, 90, t.plusMinutes(20))
+                detection(4, "CC1004", 20, 90, t.plusMinutes(10))
         )).getFirst();
 
         assertStages(record,
                 tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(5), t.plusMinutes(10), ""),
-                tuple("Service", t.plusMinutes(10), t.plusMinutes(20).minusSeconds(1), ""),
-                tuple("Backyard", t.plusMinutes(20), null, ""));
+                tuple("post-1", t.plusMinutes(5), null, ""));
+        assertThat(record.getFinishedAt()).isEqualTo(t.plusMinutes(10));
+    }
+
+    @Test
+    void shouldInsertSyntheticServiceBetweenDifferentPostsWhenPostOutSeen() {
+        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 23, 30);
+        AppConfig config = baseConfigWithTwoPosts();
+
+        SequenceRecord record = build(config, List.of(
+                detection(1, "CC1004A", 12, 90, t),
+                detection(2, "CC1004A", 20, 90, t.plusMinutes(5)),
+                detection(3, "CC1004A", 20, 250, t.plusMinutes(8)),
+                detection(4, "CC1004A", 21, 90, t.plusMinutes(12))
+        )).getFirst();
+
+        assertStages(record,
+                tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
+                tuple("post-1", t.plusMinutes(5), t.plusMinutes(8), ""),
+                tuple("Service", t.plusMinutes(8).plusSeconds(1), t.plusMinutes(11).plusSeconds(59), ""),
+                tuple("post-2", t.plusMinutes(12), null, ""));
     }
 
     @Test
@@ -412,6 +448,22 @@ class SequenceEngineTest {
 
         c.setCameras(cameras);
         return c;
+    }
+
+    private AppConfig baseConfigWithTwoPosts() {
+        AppConfig config = baseConfig();
+
+        AppConfig.PostCameraConfig post2 = new AppConfig.PostCameraConfig();
+        post2.setPostName("post-2");
+        post2.setAnalyticsId(21);
+        post2.setInDirectionRange(range(0, 180));
+        post2.setOutDirectionRange(range(181, 360));
+
+        config.getCameras().setServicePosts(List.of(
+                config.getCameras().getServicePosts().getFirst(),
+                post2
+        ));
+        return config;
     }
 
     private AppConfig.CameraConfig camera(int id) {

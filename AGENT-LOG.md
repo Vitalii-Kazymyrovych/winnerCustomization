@@ -68,3 +68,6 @@
 - Added a second XLSX endpoint `/report/sequences.xlsx/dd-MM-yyyy` that builds sequences only from detections inside the requested day window and returns/persists `sequences-dd-MM-yyyy.xlsx`.
 - Extended `DetectionService`, `ReportService`, and `ReportController` plus tests to support date-bounded detection loading, dated attachment naming, and dated file persistence.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document the new day-scoped report behavior and endpoint.
+- Reworked `SequenceEngine` Post handling into sticky logic: duplicate `Post In` on the same configured post is ignored, duplicate `Post Out` only refreshes `outTimeCandidate`, sticky `Post` closes only on another stage/finalization, and synthetic `Service` is created only when a later transition proves it is needed.
+- Updated `ReportService` so open sticky `Post` rows keep empty `Out time` but still show `Duration` based on `SequenceRecord.finishedAt`.
+- Expanded `SequenceEngineTest` and `ReportServiceTest` coverage for sticky Post duplicates, synthetic service insertion, open Post duration rendering, and cross-post transitions; refreshed `README.md` / `TECHNICAL_SPEC.md` to describe the new Post-stage invariants.

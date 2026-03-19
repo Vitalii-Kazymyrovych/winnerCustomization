@@ -90,7 +90,9 @@ The current engine interprets detections as a chronological sequence of stage oc
 
 - Only one stage can be active at a time; the next stage closes the previous one at `eventTime - 1 second`.
 - The same stage may appear multiple times in the same sequence (`Service`, `Post`, `Backyard`, etc.). Report rows are never merged.
-- Repeated start events for an already-open stage are ignored as duplicates. The only overwrite exception is `Post Out`: a repeated `Post Out` updates the previous `Post` end and shifts the immediately-following `Service` start.
+- Repeated start events for an already-open stage are ignored as duplicates.
+- `Post` now uses sticky logic per post name/camera mapping: while `Post N` is active, repeated `Post N In` is ignored, repeated `Post N Out` only refreshes an internal `outTimeCandidate`, and the stage is closed only when another stage is detected or when the sequence is finalized.
+- When sticky `Post` closes and an explicit `Service In` is missing, the engine may synthesize an intermediate `Service` stage from `Post Out + 1 second` up to the next closing event. `Post Out` no longer auto-opens `Service` by itself.
 - Exit-only and recovery scenarios create valid partial stages with empty `In` and filled `Out` (`Drive In`, `Service`, `Post`, `Parking`). Partial stages never produce alerts.
 - `Backyard` is a first-class stage. It starts on `Drive-In -> Service`, `Service Out`, or `Parking Out`, and ends on the next stage event. Repeated backyard triggers while `Backyard` is already active are ignored.
 - `Test-Drive` starts as a candidate from `Drive-In Out` or `Service -> Drive-In`. `Service -> Drive-In` first closes the active stage, so `Service` and `Test-Drive` never overlap. `Test-Drive` becomes a reportable stage only when the silence window from `timing.testDriveStartMinutes` elapses and the vehicle returns before the `timing.testDriveResetMinutes` timeout. If the absence reaches the timeout, the current sequence is closed and `Test-Drive` is omitted from the report.
@@ -110,7 +112,8 @@ The current engine interprets detections as a chronological sequence of stage oc
 - Records without stage windows are skipped in both sheets; the report never emits `No stages`.
 - `Backyard` is emitted as a standalone stage whenever the car goes through `Drive-In -> Service` without reaching `Service in`, or leaves `Service out` without reaching `Service -> Drive-In` before another camera detection.
 - Test-drive / left-territory reset logic now starts from `Drive in (out)` when no `Drive-In -> Service` follows, or from `Service -> Drive-In` when no `Drive in (in)` follows.
-- Stage split is now: `Drive In` starts at `Drive in (in)` and ends at `Drive in (out)`, `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and ends at `Post out`, second `Service` starts at `Post out` and ends at `Service out` (or next closing event), `Backyard` spans from its trigger camera to the first subsequent camera detection.
+- Stage split is now: `Drive In` starts at `Drive in (in)` and ends at `Drive in (out)`, `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and keeps running across duplicate `Post In` / `Post Out` events for the same configured post until another stage closes it, synthetic `Service` may fill the gap after sticky `Post`, and `Backyard` spans from its trigger camera to the first subsequent camera detection.
+- Open sticky `Post` rows are still rendered in both XLSX sheets with empty `Out time`; their `Duration` is calculated as `Sequence finishedAt - Post in`, so duplicates on the same post still contribute to visible duration even without a closing stage.
 - `config.json` is in `.gitignore`.
 - Use `config.json.example` as the template.
 - The app creates `vehicle_sequences` table in sequence DB if it does not exist.
@@ -133,4 +136,4 @@ Additionally, `PostgresDatabaseOperationsIntegrationTest` validates end-to-end P
 - source detection read via `DetectionService`;
 - sequence table initialization and write flow via `SequenceStorageService`.
 
-- Post Out detections are treated as overwrite events: each new valid Post Out updates `postOutAt` and restarts second service start time.
+- Sticky `Post Out` detections are treated as candidates, not immediate transitions: each new valid `Post Out` refreshes the future close timestamp used when the sticky `Post` is eventually closed by another stage or by sequence finalization.

@@ -138,7 +138,7 @@ public class ReportService {
                 row.createCell(0).setCellValue(stage.stageName());
                 row.createCell(1).setCellValue(formatTime(stage.timeIn()));
                 row.createCell(2).setCellValue(formatTime(stage.timeOut()));
-                row.createCell(3).setCellValue(formatDuration(stage.timeIn(), stage.timeOut()));
+                row.createCell(3).setCellValue(formatDuration(stage.timeIn(), stage.durationTo()));
                 row.createCell(4).setCellValue(stage.alert());
             }
         }
@@ -165,7 +165,7 @@ public class ReportService {
                 row.createCell(1).setCellValue(stage.stageName());
                 row.createCell(2).setCellValue(formatTime(stage.timeIn()));
                 row.createCell(3).setCellValue(formatTime(stage.timeOut()));
-                row.createCell(4).setCellValue(formatDuration(stage.timeIn(), stage.timeOut()));
+                row.createCell(4).setCellValue(formatDuration(stage.timeIn(), stage.durationTo()));
                 row.createCell(5).setCellValue(stage.alert());
             }
         }
@@ -177,8 +177,23 @@ public class ReportService {
 
     private List<StageLine> toStages(SequenceRecord record) {
         return record.stagesChronologically().stream()
-                .map(stage -> new StageLine(stage.reportLabel(), stage.timeIn(), stage.timeOut(), stage.alert()))
+                .map(stage -> new StageLine(
+                        stage.reportLabel(),
+                        stage.timeIn(),
+                        stage.timeOut(),
+                        resolveDurationEnd(record, stage),
+                        stage.alert()))
                 .toList();
+    }
+
+    private LocalDateTime resolveDurationEnd(SequenceRecord record, SequenceRecord.StageWindow stage) {
+        if (stage.timeOut() != null) {
+            return stage.timeOut();
+        }
+        if (stage.stageType() == SequenceRecord.StageType.POST) {
+            return record.getFinishedAt();
+        }
+        return null;
     }
 
     private String formatTime(LocalDateTime value) {
@@ -196,6 +211,10 @@ public class ReportService {
         return seconds < 0 ? "-" + formatted : formatted;
     }
 
-    private record StageLine(String stageName, LocalDateTime timeIn, LocalDateTime timeOut, String alert) {
+    private record StageLine(String stageName,
+                             LocalDateTime timeIn,
+                             LocalDateTime timeOut,
+                             LocalDateTime durationTo,
+                             String alert) {
     }
 }
