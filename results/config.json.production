@@ -70,11 +70,19 @@
     ],
     "serviceIn": [
       {
-        "name": "Service (in) cam 1",
+        "name": "Service (in) from Drive-In",
         "analyticsId": 19,
         "directionRange": {
           "from": null,
           "to": null
+        }
+      },
+      {
+        "name": "Service (in) from Backyard",
+        "analyticsId": 22,
+        "directionRange": {
+          "from": 130,
+          "to": 310
         }
       }
     ],
@@ -109,8 +117,8 @@
         "name": "Service (out)",
         "analyticsId": 22,
         "directionRange": {
-          "from": null,
-          "to": null
+          "from": 310,
+          "to": 130
         }
       }
     ],
@@ -149,4 +157,3 @@
     "outputDirectory": "C:/Users/vkazymyrovych/Desktop/reports"
   }
 }
-
