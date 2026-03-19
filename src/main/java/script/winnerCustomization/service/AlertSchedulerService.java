@@ -10,6 +10,8 @@ import script.winnerCustomization.model.AlertJobType;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
+import script.winnerCustomization.model.SequenceRecord.StageType;
+import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -49,8 +51,8 @@ public class AlertSchedulerService {
             List<Detection> detections = detectionService.loadAllDetections();
             List<SequenceRecord> records = sequenceEngine.build(detections, config);
             for (SequenceRecord record : records) {
-                upsertOrCancelDriveInAlert(record, config);
-                upsertOrCancelServiceAlert(record, config);
+                syncDriveInAlerts(record, config);
+                syncServiceAlerts(record, config);
             }
             log.debug("Alert sync completed for {} sequence records", records.size());
         } catch (Exception exception) {
@@ -78,39 +80,42 @@ public class AlertSchedulerService {
         }
     }
 
-    private void upsertOrCancelDriveInAlert(SequenceRecord record, AppConfig config) {
-        LocalDateTime triggerAt = record.getStartedAt();
-        if (record.getDriveInOutAt() == null) {
-            int minutes = config.getTiming().getDriveInToDriveOutAlertMinutes();
-            alertJobStorageService.upsertPending(
-                    record.getPlateNumber(),
-                    AlertJobType.DRIVE_IN_OUT_MISSING,
-                    triggerAt,
-                    triggerAt.plusMinutes(minutes),
-                    "No Drive in (out) within " + minutes + " minutes"
-            );
-            return;
-        }
-        alertJobStorageService.cancel(record.getPlateNumber(), AlertJobType.DRIVE_IN_OUT_MISSING, triggerAt);
+    private void syncDriveInAlerts(SequenceRecord record, AppConfig config) {
+        syncStageAlerts(
+                record,
+                StageType.DRIVE_IN,
+                AlertJobType.DRIVE_IN_OUT_MISSING,
+                config.getTiming().getDriveInToDriveOutAlertMinutes(),
+                "No Drive in (out) within " + config.getTiming().getDriveInToDriveOutAlertMinutes() + " minutes"
+        );
     }
 
-    private void upsertOrCancelServiceAlert(SequenceRecord record, AppConfig config) {
-        LocalDateTime triggerAt = record.getServiceInAt();
-        if (triggerAt == null) {
-            return;
-        }
+    private void syncServiceAlerts(SequenceRecord record, AppConfig config) {
+        syncStageAlerts(
+                record,
+                StageType.SERVICE,
+                AlertJobType.SERVICE_POST_IN_MISSING,
+                config.getTiming().getServiceToPostAlertMinutes(),
+                "No Post in within " + config.getTiming().getServiceToPostAlertMinutes() + " minutes"
+        );
+    }
 
-        if (record.getPostInAt() == null) {
-            int minutes = config.getTiming().getServiceToPostAlertMinutes();
-            alertJobStorageService.upsertPending(
-                    record.getPlateNumber(),
-                    AlertJobType.SERVICE_POST_IN_MISSING,
-                    triggerAt,
-                    triggerAt.plusMinutes(minutes),
-                    "No Service post (in) within " + minutes + " minutes"
-            );
-            return;
+    private void syncStageAlerts(SequenceRecord record,
+                                 StageType stageType,
+                                 AlertJobType jobType,
+                                 int thresholdMinutes,
+                                 String message) {
+        for (StageWindow stage : record.getStagesByType(stageType)) {
+            if (stage.partial() || stage.timeIn() == null) {
+                continue;
+            }
+            LocalDateTime triggerAt = stage.timeIn();
+            LocalDateTime dueAt = triggerAt.plusMinutes(thresholdMinutes);
+            if (stage.timeOut() != null && !stage.timeOut().isAfter(dueAt)) {
+                alertJobStorageService.cancel(record.getPlateNumber(), jobType, triggerAt);
+                continue;
+            }
+            alertJobStorageService.upsertPending(record.getPlateNumber(), jobType, triggerAt, dueAt, message);
         }
-        alertJobStorageService.cancel(record.getPlateNumber(), AlertJobType.SERVICE_POST_IN_MISSING, triggerAt);
     }
 }

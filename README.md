@@ -3,7 +3,7 @@
 Spring Boot script that:
 
 1. Reads ALPR detections from source PostgreSQL (`videoanalytics.alpr_detections` or configurable table).
-2. Builds car movement sequences across configured camera stages.
+2. Builds car movement sequences across configured camera stages using a repeatable stage timeline with recovery, Backyard, and delayed Test-Drive materialization.
 3. Stores computed sequences in a separate PostgreSQL database asynchronously (does not block XLSX download response).
 4. Exposes XLSX report download endpoint in a stage-row layout (dynamic per sequence, not fixed stage columns).
 5. Runs DB-backed alert scheduling: pending alert jobs are stored in PostgreSQL and dispatched by background workers close to due time.
@@ -79,6 +79,20 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
   4. Manual validation:
      - `psql -h <rootHost> -p <rootPort> -U <rootUser> -d postgres -c "select datname from pg_database"`
      - `psql -h <seqHost> -p <seqPort> -U <seqUser> -d <sequenceDb>`
+
+## Sequence processing rules
+
+The current engine interprets detections as a chronological sequence of stage occurrences, not as a fixed set of one-off timestamps. Key rules:
+
+- Only one stage can be active at a time; the next stage closes the previous one at `eventTime - 1 second`.
+- The same stage may appear multiple times in the same sequence (`Service`, `Post`, `Backyard`, etc.). Report rows are never merged.
+- Repeated start events for an already-open stage are ignored as duplicates. The only overwrite exception is `Post Out`: a repeated `Post Out` updates the previous `Post` end and shifts the immediately-following `Service` start.
+- Exit-only and recovery scenarios create valid partial stages with empty `In` and filled `Out` (`Drive In`, `Service`, `Post`, `Parking`). Partial stages never produce alerts.
+- `Backyard` is a first-class stage. It starts on `Drive-In -> Service`, `Service Out`, or `Parking Out`, and ends on the next stage event. Repeated backyard triggers while `Backyard` is already active are ignored.
+- `Test-Drive` starts as a candidate from `Drive-In Out` or `Service -> Drive-In`. It becomes a reportable stage only when the silence window from `timing.testDriveStartMinutes` elapses and the vehicle returns before the `timing.testDriveResetMinutes` timeout. If the absence reaches the timeout, the current sequence is closed and `Test-Drive` is omitted from the report.
+- Sequences roll over after 48 hours without events for the same plate.
+- If two detections for the same plate have the same timestamp, the later one is normalized to `+1 second` to keep ordering deterministic.
+- Alerts are created only for full `Drive In` and `Service` stages and are attached to the specific stage row in the XLSX output.
 
 ## Notes
 

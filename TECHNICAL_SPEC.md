@@ -50,18 +50,14 @@
   - Maps every detection to logical camera type by:
     1. `analyticsId` equality,
     2. direction-range pass.
-  - Tracks active sequence per plate.
-  - Handles lifecycle:
-    - start on Drive in (in) / Service (in) / Post Out,
-    - append stage events (service, post, service, backyard, parking),
-    - auto-close previous stage with timestamp of next stage detection when previous stage is not closed yet,
-    - start pending `Backyard` after `Drive-In -> Service` (until `Service in`) and after `Service out` (until `Service -> Drive-In`),
-    - materialize `Backyard` as a separate stage from the trigger timestamp until the first subsequent detection on any camera,
-    - ignore repeated detections for common points and repeated Post In,
-    - treat each valid Post Out as overwrite event (`postOutAt` + second service start are updated),
-    - close on parking out,
-    - reset as new sequence if test-drive gap exceeds configured reset threshold from `Drive in (out)` without `Drive-In -> Service`, or from `Service -> Drive-In` without `Drive in (in)`.
-  - Produces `SequenceRecord` with path, stage durations, alerts, test-drive anchor metadata, and zero or more `Backyard` stage windows.
+  - Tracks one active sequence per plate and normalizes same-timestamp detections for the same plate by shifting later events by `+1 second`.
+  - Maintains a mutable active-stage timeline where only one stage can be open at a time.
+  - Supports repeated stage occurrences (`Drive In`, `Service`, `Post`, `Parking`, `Backyard`, `Test-Drive`) without collapsing them into fixed columns.
+  - Applies recovery rules: any next stage closes the previous one at `eventTime - 1 second`; exit-only events create partial stages with empty `In`; `Post In` without active `Service` injects a recovery `Service`; repeated `Post Out` overwrites the prior `Post` end and the following `Service` start.
+  - Handles `Backyard` as an explicit stage opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`, with duplicate backyard triggers ignored while `Backyard` is active.
+  - Handles `Test-Drive` as a candidate triggered by `Drive-In Out` or `Service -> Drive-In`, materializing it only after the configured silence window and dropping it when the absence reaches the configured timeout.
+  - Closes/open-rolls sequences after 48 hours without detections for the same plate.
+  - Produces `SequenceRecord` with chronological `StageWindow` entries, per-stage alerts, path steps, and storage/report helpers.
 
 ### `SequenceStorageService`
 - Method: `initialize()`
@@ -172,7 +168,12 @@ Integration test (live PostgreSQL):
 
 
 ### Updated stage processing rules
-- Automatic stage closure: when next stage is detected and current stage has no end timestamp, previous stage closes at next detection time (without overwriting already closed stage).
-- Transition cameras: `Drive-In -> Service` cancels the default test-drive assumption after `Drive in (out)` and instead opens a pending `Backyard` stage unless `Service in` arrives next; `Service -> Drive-In` cancels pending `Backyard` after `Service out` and starts test-drive monitoring until `Drive in (in)` arrives.
-- Backyard rules: `Drive-In -> Service` without a subsequent `Service in` becomes `Backyard`; `Service out` without a subsequent `Service -> Drive-In` becomes `Backyard`. In both cases the backyard ends at the timestamp of the first subsequent detection on any camera.
-- Repeat handling: repeated detections in the same logical point are ignored; `Post In` is first-only; `Post Out` is always overwrite/update event.
+- Stage timeline: each sequence is a chronological list of stage windows. The same stage may appear many times, but only one stage may be active at a time.
+- Time normalization: if two detections for the same plate share the same timestamp, the later one is shifted by `+1 second`.
+- Recovery closure: when an event starts the next stage, the previous active stage closes at `eventTime - 1 second`; exit-only recovery stages keep `Out = eventTime` and `In = null`.
+- `Drive In`: `Drive-In In` opens the stage, `Drive-In Out` closes it, and any later stage can also recover-close it.
+- `Service` / `Post`: `Service In` opens `Service`; `Post In` closes `Service` and opens `Post`; `Post Out` closes `Post` and opens the next `Service`; repeated `Post Out` overwrites the previous `Post`/`Service` boundary; `Post In` without active `Service` injects a partial `Service` ending at `Post In - 1 second`.
+- `Parking`: `Parking In` opens `Parking`; `Parking Out` closes it and starts `Backyard` instead of closing the sequence.
+- `Backyard`: opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`; ends on the next stage event; repeated backyard triggers while active are ignored.
+- `Test-Drive`: candidate on `Drive-In Out` / `Service -> Drive-In`; cancelled by an early next event; materialized only after the configured quiet window; removed when the vehicle absence reaches the timeout.
+- Alerts: computed per stage and only for non-partial `Drive In` and `Service` stages. A stage keeps its due alert if it stayed open past the threshold even if it eventually closed later.

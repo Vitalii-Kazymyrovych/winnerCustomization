@@ -7,6 +7,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
 import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.SequenceRecord;
+import script.winnerCustomization.model.SequenceRecord.StageType;
+import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,12 +40,21 @@ class SequenceStorageServiceTest {
     void shouldReplaceAllRowsWithProvidedRecords() {
         SequenceStorageService service = new SequenceStorageService(sequenceJdbc, runtimeConfig);
         SequenceRecord finished = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
-        finished.setDriveInOutAt(LocalDateTime.of(2026, 1, 1, 10, 10));
+        finished.addStage(new StageWindow(StageType.DRIVE_IN,
+                LocalDateTime.of(2026, 1, 1, 10, 0),
+                LocalDateTime.of(2026, 1, 1, 10, 10),
+                "slow",
+                false,
+                1));
         finished.setFinishedAt(LocalDateTime.of(2026, 1, 1, 11, 0));
-        finished.addAlert("slow");
 
         SequenceRecord open = new SequenceRecord("BB2222", LocalDateTime.of(2026, 1, 1, 12, 0));
-        open.setServiceInAt(LocalDateTime.of(2026, 1, 1, 12, 5));
+        open.addStage(new StageWindow(StageType.SERVICE,
+                LocalDateTime.of(2026, 1, 1, 12, 5),
+                null,
+                "",
+                false,
+                1));
 
         service.replaceAll(List.of(finished, open));
 
