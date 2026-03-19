@@ -157,6 +157,9 @@ public class SequenceEngine {
     }
 
     private void applyEvent(ActiveSequence current, CameraMatch cameraMatch, LocalDateTime eventTime) {
+        if (handlePendingPostRecovery(current, cameraMatch, eventTime)) {
+            return;
+        }
         if (handleStickyPostTransition(current, cameraMatch, eventTime)) {
             return;
         }
@@ -174,6 +177,37 @@ public class SequenceEngine {
             case OTHER -> {
             }
         }
+    }
+
+    private boolean handlePendingPostRecovery(ActiveSequence current, CameraMatch cameraMatch, LocalDateTime eventTime) {
+        if (!current.hasPendingPostRecovery()) {
+            return false;
+        }
+
+        if (cameraMatch.type() == CameraType.POST_OUT
+                && Objects.equals(current.pendingPostLabel, cameraMatch.reportLabel())) {
+            current.updatePendingPostRecoveryTime(eventTime);
+            if (current.lastEventType != CameraType.POST_OUT) {
+                current.record.addPathStep("Post (out)");
+            }
+            current.lastEventType = CameraType.POST_OUT;
+            return true;
+        }
+
+        if (cameraMatch.type() == CameraType.POST_IN
+                && Objects.equals(current.pendingPostLabel, cameraMatch.reportLabel())) {
+            current.clearPendingPostRecovery();
+            openStage(current, StageType.POST, eventTime, false, cameraMatch.reportLabel());
+            current.record.addPathStep("Post (in)");
+            return true;
+        }
+
+        LocalDateTime syntheticServiceStart = current.pendingPostServiceAt;
+        current.clearPendingPostRecovery();
+        if (cameraMatch.type() != CameraType.SERVICE_IN) {
+            addSyntheticServiceStage(current, syntheticServiceStart, eventTime.minusSeconds(1));
+        }
+        return false;
     }
 
     private boolean handleStickyPostTransition(ActiveSequence current, CameraMatch cameraMatch, LocalDateTime eventTime) {
@@ -289,7 +323,12 @@ public class SequenceEngine {
             closeStickyPostAt(current, eventTime);
         } else {
             closeActiveAt(current, eventTime.minusSeconds(1));
+            int stageIndex = current.record.getStages().size();
             current.record.addStage(new StageWindow(StageType.POST, null, eventTime, postLabel, "", true, current.nextEventOrder()));
+            current.rememberPendingPostRecovery(stageIndex, postLabel, eventTime);
+            current.record.addPathStep("Post (out)");
+            current.lastEventType = CameraType.POST_OUT;
+            return;
         }
 
         openStage(current, StageType.SERVICE, eventTime, false, null);
@@ -453,6 +492,9 @@ public class SequenceEngine {
         private int eventOrder;
         private TestDriveCandidate candidate;
         private LocalDateTime postOutCandidateAt;
+        private Integer pendingPostRecoveryIndex;
+        private String pendingPostLabel;
+        private LocalDateTime pendingPostServiceAt;
         private CameraType lastEventType;
 
         private ActiveSequence(String plateNumber, LocalDateTime startedAt) {
@@ -481,6 +523,31 @@ public class SequenceEngine {
 
         private boolean hasPendingCandidate() {
             return candidate != null;
+        }
+
+        private boolean hasPendingPostRecovery() {
+            return pendingPostRecoveryIndex != null && pendingPostServiceAt != null;
+        }
+
+        private void rememberPendingPostRecovery(int stageIndex, String postLabel, LocalDateTime serviceStartAt) {
+            this.pendingPostRecoveryIndex = stageIndex;
+            this.pendingPostLabel = postLabel;
+            this.pendingPostServiceAt = serviceStartAt;
+        }
+
+        private void updatePendingPostRecoveryTime(LocalDateTime eventTime) {
+            if (pendingPostRecoveryIndex == null) {
+                return;
+            }
+            StageWindow pendingStage = record.getStages().get(pendingPostRecoveryIndex);
+            record.getStages().set(pendingPostRecoveryIndex, pendingStage.withTimeOut(eventTime));
+            pendingPostServiceAt = eventTime;
+        }
+
+        private void clearPendingPostRecovery() {
+            this.pendingPostRecoveryIndex = null;
+            this.pendingPostLabel = null;
+            this.pendingPostServiceAt = null;
         }
 
         private StageType latestStageType() {

@@ -58,6 +58,9 @@
 - Updated `README.md` and `TECHNICAL_SPEC.md` to describe the new sequence-processing rules and reporting model.
 
 ## 2026-03-19
+- Deferred synthetic `Service` creation after recovery-only `Post Out`: repeated same-post `Post Out`/`Post In` detections now stay as Post-only rows instead of producing noisy `Post -> Service -> Post` transitions.
+- Added `SequenceEngineTest` and `ResultsRegressionTest` coverage for production plates (`AA4444PO`, `KA7828BB`, `KA1163K`, `BK0542KA`) that previously showed those false transitions.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the delayed post-recovery service materialization rule.
 - Fixed `SequenceEngine` so `Service -> Drive-In` always closes the currently active stage before creating a delayed `Test-Drive` candidate; this removes illegal overlaps between `Service` and `Test-Drive`.
 - Added sequence finalization guard so transition-only records without concrete stages are dropped instead of leaking `No stages` into the report.
 - Updated direction-range matching to support wrap-around ranges (for example `270 -> 90`) and to use an exclusive upper bound, which removes ambiguous boundary matches like `90`/`270`.
