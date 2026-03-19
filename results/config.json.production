@@ -1,0 +1,152 @@
+{
+  "sourceDatabase": {
+    "host": "SOURCE_DB_HOST",
+    "port": 5432,
+    "db": "source_database_name",
+    "schema": "videoanalytics",
+    "user": "source_user",
+    "password": "source_password"
+  },
+  "sequenceDatabase": {
+    "host": "SEQUENCE_DB_HOST",
+    "port": 5432,
+    "db": "sequences_database_name",
+    "schema": "public",
+    "user": "sequence_user",
+    "password": "sequence_password"
+  },
+  "rootDatabase": {
+    "host": "SEQUENCE_DB_HOST",
+    "port": 5432,
+    "user": "postgres_root_user",
+    "password": "postgres_root_password",
+    "maintenanceDb": "postgres"
+  },
+  "sourceTable": {
+    "table": "alpr_detections",
+    "loadFrom": "2026-03-16T00:00:00"
+  },
+  "notifications": {
+    "enabled": false,
+    "telegramBotToken": "BOT_TOKEN_IF_ENABLED",
+    "telegramChatId": "CHAT_ID_IF_ENABLED"
+  },
+  "timing": {
+    "driveInToDriveOutAlertMinutes": 15,
+    "serviceToPostAlertMinutes": 15,
+    "testDriveStartMinutes": 5,
+    "testDriveResetMinutes": 60
+  },
+  "cameras": {
+    "driveInIn": [
+      {
+        "name": "Drive in (in) cam 1",
+        "analyticsId": 14,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
+    "driveInOut": [
+      {
+        "name": "Drive in (out) cam 1",
+        "analyticsId": 15,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
+    "driveInToService": [
+      {
+        "name": "Drive-In -> Service",
+        "analyticsId": 17,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
+    "serviceIn": [
+      {
+        "name": "Service (in) cam 1",
+        "analyticsId": 19,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
+    "servicePosts": [
+      {
+        "postName": "Post 1",
+        "analyticsId": 23,
+        "inDirectionRange": {
+          "from": 260,
+          "to": 80
+        },
+        "outDirectionRange": {
+          "from": 80,
+          "to": 260
+        }
+      },
+      {
+        "postName": "Post 2",
+        "analyticsId": 23,
+        "inDirectionRange": {
+          "from": 280,
+          "to": 100
+        },
+        "outDirectionRange": {
+          "from": 100,
+          "to": 280
+        }
+      }
+    ],
+    "serviceOut": [
+      {
+        "name": "Service (out)",
+        "analyticsId": 22,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
+    "serviceToDriveIn": [
+      {
+        "name": "Service -> Drive-In",
+        "analyticsId": 13,
+        "directionRange": {
+          "from": null,
+          "to": null
+        }
+      }
+    ],
+    "parkingIn": [
+      {
+        "name": "Parking (in)",
+        "analyticsId": 20,
+        "directionRange": {
+          "from": 270,
+          "to": 90
+        }
+      }
+    ],
+    "parkingOut": [
+      {
+        "name": "Parking (out)",
+        "analyticsId": 20,
+        "directionRange": {
+          "from": 90,
+          "to": 270
+        }
+      }
+    ]
+  },
+  "reports": {
+    "outputDirectory": "C:/Users/vkazymyrovych/Desktop/reports"
+  }
+}
+
