@@ -58,10 +58,10 @@
   - Tracks one active sequence per plate and normalizes same-timestamp detections for the same plate by shifting later events by `+1 second`.
   - Maintains a mutable active-stage timeline where only one stage can be open at a time.
   - Supports repeated stage occurrences (`Drive In`, `Service`, `Post`, `Parking`, `Backyard`, `Test-Drive`) without collapsing them into fixed columns.
-  - Applies recovery rules: any next stage closes the previous one at `eventTime - 1 second`; exit-only events create partial stages with empty `In`; `Post In` without active `Service` injects a recovery `Service`.
+  - Applies recovery rules: any next stage closes the previous one at `eventTime - 1 second`; exit-only events create partial stages with empty `In`; `Post In` without active `Service` injects a recovery `Service`; `Service Out` / `Parking Out` detected during an already-open `Backyard` are preserved as additional partial recovery windows instead of being dropped.
   - Applies sticky-post rules per configured post label: while `Post N` is active, repeated `Post N In` is ignored, repeated `Post N Out` only updates an in-memory `outTimeCandidate`, and the `Post` window closes only on another stage or sequence finalization.
   - When sticky `Post` closes without an explicit `Service In`, may emit a synthetic `Service` window between the resolved `Post` end and the next non-service event; open sticky `Post` stages keep `Out = null`.
-  - Handles `Backyard` as an explicit stage opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`, with duplicate backyard triggers ignored while `Backyard` is active.
+  - Handles `Backyard` as an explicit stage opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`, with duplicate backyard triggers ignored while `Backyard` is active, yet still allowing exit-only recovery windows to be appended during that active backyard span.
   - Handles `Test-Drive` as a candidate triggered by `Drive-In Out` or `Service -> Drive-In`; `Service -> Drive-In` first closes any active stage at `eventTime - 1 second`, then materializes `Test-Drive` only after the configured silence window and drops it when the absence reaches the configured timeout.
   - Closes/open-rolls sequences after 48 hours without detections for the same plate.
   - Drops transition-only sequences that finished without any concrete stage windows, preventing synthetic `No stages` records from reaching storage/reporting layers.
@@ -125,7 +125,7 @@
     - `Events` with flat stage columns: `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
   - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, configured post name such as `Post 1`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. Records with zero stage windows are skipped entirely.
   - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row; post stages use the preserved `postName` label. Records with zero stage windows are skipped entirely.
-  - Computes duration as `HH:mm:ss`; empty when one of timestamps is missing, except for open `Post` stages where duration uses `SequenceRecord.finishedAt` while `Out time` remains empty.
+  - Formats timestamps as `yyyy-MM-dd HH:mm:ss` and computes duration as `HH:mm:ss`; duration is empty when one of timestamps is missing, except for open `Post` stages where duration uses `SequenceRecord.finishedAt` while `Out time` remains empty.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 
 ### `SourcePullTriggerService`
@@ -185,11 +185,11 @@ Integration test (live PostgreSQL):
 ### Updated stage processing rules
 - Stage timeline: each sequence is a chronological list of stage windows. The same stage may appear many times, but only one stage may be active at a time.
 - Time normalization: if two detections for the same plate share the same timestamp, the later one is shifted by `+1 second`.
-- Recovery closure: when an event starts the next stage, the previous active stage closes at `eventTime - 1 second`; exit-only recovery stages keep `Out = eventTime` and `In = null`.
+- Recovery closure: when an event starts the next stage, the previous active stage closes at `eventTime - 1 second`; exit-only recovery stages keep `Out = eventTime` and `In = null`; if `Service Out` or `Parking Out` arrives while `Backyard` is already active, the recovery stage is appended without closing that active backyard window.
 - `Drive In`: `Drive-In In` opens the stage, `Drive-In Out` closes it, and any later stage can also recover-close it.
 - `Service` / `Post`: `Service In` opens `Service`; `Post In` closes `Service` and opens sticky `Post`; duplicate `Post In` on the same configured post is ignored; `Post Out` on the same post only updates `outTimeCandidate`; another stage (including another post) closes sticky `Post` using `outTimeCandidate` or `nextEvent - 1 second`; `Post In` without active `Service` injects a partial `Service` ending at `Post In - 1 second`.
 - Synthetic service after sticky `Post`: when sticky `Post` closes and an explicit `Service In` is missing, `SequenceEngine` may create a synthetic `Service` from `resolvedPostOut + 1 second` until `Service Out` or `nextEvent - 1 second`; if sticky `Post` never closes before sequence finalization, it remains open with `Out = null`.
-- `Parking`: `Parking In` opens `Parking`; `Parking Out` closes it and starts `Backyard` instead of closing the sequence.
-- `Backyard`: opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`; ends on the next stage event; repeated backyard triggers while active are ignored.
+- `Parking`: `Parking In` opens `Parking`; `Parking Out` closes it and starts `Backyard` instead of closing the sequence; if `Parking Out` arrives while `Backyard` is already active, it is retained as a partial `Parking` recovery row.
+- `Backyard`: opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`; ends on the next stage event; repeated backyard triggers while active are ignored, but exit-only recovery rows may still coexist chronologically inside the same backyard span.
 - `Test-Drive`: candidate on `Drive-In Out` / `Service -> Drive-In`; `Service -> Drive-In` first closes the active stage so no overlap remains; candidate is cancelled by an early next event; materialized only after the configured quiet window; removed when the vehicle absence reaches the timeout.
 - Alerts: computed per stage and only for non-partial `Drive In` and `Service` stages. A stage keeps its due alert if it stayed open past the threshold even if it eventually closed later.

@@ -93,8 +93,8 @@ The current engine interprets detections as a chronological sequence of stage oc
 - Repeated start events for an already-open stage are ignored as duplicates.
 - `Post` now uses sticky logic per post name/camera mapping: while `Post N` is active, repeated `Post N In` is ignored, repeated `Post N Out` only refreshes an internal `outTimeCandidate`, and the stage is closed only when another stage is detected or when the sequence is finalized.
 - When sticky `Post` closes and an explicit `Service In` is missing, the engine may synthesize an intermediate `Service` stage from `Post Out + 1 second` up to the next closing event. `Post Out` no longer auto-opens `Service` by itself.
-- Exit-only and recovery scenarios create valid partial stages with empty `In` and filled `Out` (`Drive In`, `Service`, `Post`, `Parking`). Partial stages never produce alerts.
-- `Backyard` is a first-class stage. It starts on `Drive-In -> Service`, `Service Out`, or `Parking Out`, and ends on the next stage event. Repeated backyard triggers while `Backyard` is already active are ignored.
+- Exit-only and recovery scenarios create valid partial stages with empty `In` and filled `Out` (`Drive In`, `Service`, `Post`, `Parking`). Partial stages never produce alerts, and `Service Out` / `Parking Out` are still recorded as partial recovery rows even if the vehicle is already inside `Backyard`.
+- `Backyard` is a first-class stage. It starts on `Drive-In -> Service`, `Service Out`, or `Parking Out`, and ends on the next stage event. Repeated backyard triggers while `Backyard` is already active are ignored, but exit-only detections inside an already-open `Backyard` still append partial recovery rows without closing `Backyard`.
 - `Test-Drive` starts as a candidate from `Drive-In Out` or `Service -> Drive-In`. `Service -> Drive-In` first closes the active stage, so `Service` and `Test-Drive` never overlap. `Test-Drive` becomes a reportable stage only when the silence window from `timing.testDriveStartMinutes` elapses and the vehicle returns before the `timing.testDriveResetMinutes` timeout. If the absence reaches the timeout, the current sequence is closed and `Test-Drive` is omitted from the report.
 - Sequences roll over after 48 hours without events for the same plate.
 - If two detections for the same plate have the same timestamp, the later one is normalized to `+1 second` to keep ordering deterministic.
@@ -109,6 +109,7 @@ The current engine interprets detections as a chronological sequence of stage oc
 - XLSX report now contains two sheets:
   - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`). Post rows display the configured `servicePosts[].postName`.
   - `Events`: flat stage layout with one row per stage and columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`. Post rows also display the configured post name.
+- All XLSX timestamps are rendered as `yyyy-MM-dd HH:mm:ss` (without `T` separator or fractional seconds) for easier manual comparison with DB exports.
 - Records without stage windows are skipped in both sheets; the report never emits `No stages`.
 - `Backyard` is emitted as a standalone stage whenever the car goes through `Drive-In -> Service` without reaching `Service in`, or leaves `Service out` without reaching `Service -> Drive-In` before another camera detection.
 - Test-drive / left-territory reset logic now starts from `Drive in (out)` when no `Drive-In -> Service` follows, or from `Service -> Drive-In` when no `Drive in (in)` follows.

@@ -26,6 +26,7 @@ import java.util.concurrent.CompletableFuture;
 public class ReportService {
     private static final Logger log = LoggerFactory.getLogger(ReportService.class);
     private static final DateTimeFormatter REPORT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+    private static final DateTimeFormatter REPORT_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final RuntimeConfig runtimeConfig;
     private final DetectionService detectionService;
@@ -197,7 +198,7 @@ public class ReportService {
     }
 
     private String formatTime(LocalDateTime value) {
-        return value == null ? "" : String.valueOf(value);
+        return value == null ? "" : REPORT_TIMESTAMP_FORMATTER.format(value);
     }
 
     private String formatDuration(LocalDateTime from, LocalDateTime to) {

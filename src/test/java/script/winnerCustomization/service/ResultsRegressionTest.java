@@ -82,6 +82,36 @@ class ResultsRegressionTest {
                         tuple("Service", null, LocalDateTime.of(2026, 3, 18, 15, 55, 6, 697_000_000), ""),
                         tuple("Post 1", LocalDateTime.of(2026, 3, 18, 15, 55, 7, 697_000_000), null, ""));
 
+        SequenceRecord repeatedServiceOuts = findRecord(records, "6050PH", LocalDateTime.of(2026, 3, 19, 10, 52, 29, 641_000_000));
+        assertThat(repeatedServiceOuts.stagesChronologically())
+                .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
+                .containsExactly(
+                        tuple("Service", null, LocalDateTime.of(2026, 3, 19, 10, 52, 29, 641_000_000), ""),
+                        tuple("Backyard", LocalDateTime.of(2026, 3, 19, 10, 52, 29, 641_000_000), null, ""),
+                        tuple("Service", null, LocalDateTime.of(2026, 3, 19, 10, 53, 41, 225_000_000), ""),
+                        tuple("Service", null, LocalDateTime.of(2026, 3, 19, 10, 55, 7, 398_000_000), ""),
+                        tuple("Service", null, LocalDateTime.of(2026, 3, 19, 10, 56, 35, 44_000_000), ""),
+                        tuple("Service", null, LocalDateTime.of(2026, 3, 19, 11, 9, 5, 428_000_000), ""),
+                        tuple("Service", null, LocalDateTime.of(2026, 3, 19, 11, 10, 17, 901_000_000), ""),
+                        tuple("Service", null, LocalDateTime.of(2026, 3, 19, 11, 11, 19, 701_000_000), ""));
+
+        SequenceRecord backyardParkingRecovery = findRecord(records, "AA0009MH", LocalDateTime.of(2026, 3, 19, 8, 59, 23, 622_000_000));
+        assertThat(backyardParkingRecovery.stagesChronologically())
+                .extracting(StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
+                .containsExactly(
+                        tuple("Test-Drive",
+                                LocalDateTime.of(2026, 3, 19, 8, 59, 23, 622_000_000),
+                                LocalDateTime.of(2026, 3, 19, 9, 17, 37, 301_000_000),
+                                ""),
+                        tuple("Backyard",
+                                LocalDateTime.of(2026, 3, 19, 9, 17, 38, 301_000_000),
+                                null,
+                                ""),
+                        tuple("Parking",
+                                null,
+                                LocalDateTime.of(2026, 3, 19, 9, 19, 31, 103_000_000),
+                                ""));
+
         assertNoOverlaps(records);
     }
 
