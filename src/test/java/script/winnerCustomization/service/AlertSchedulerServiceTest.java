@@ -11,6 +11,8 @@ import script.winnerCustomization.model.AlertJobType;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
+import script.winnerCustomization.model.SequenceRecord.StageType;
+import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -52,7 +54,19 @@ class AlertSchedulerServiceTest {
 
         Detection detection = new Detection(1L, "AA1111", 10, 90, LocalDateTime.now());
         SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
-        record.setServiceInAt(LocalDateTime.of(2026, 1, 1, 10, 5));
+        record.addStage(new StageWindow(StageType.DRIVE_IN,
+                LocalDateTime.of(2026, 1, 1, 10, 0),
+                null,
+                "",
+                false,
+                1));
+        record.addStage(new StageWindow(StageType.SERVICE,
+                LocalDateTime.of(2026, 1, 1, 10, 5),
+                null,
+                "",
+                false,
+                2));
+        record.setFinishedAt(LocalDateTime.of(2026, 1, 1, 10, 5));
 
         when(runtimeConfig.get()).thenReturn(config);
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
@@ -73,20 +87,30 @@ class AlertSchedulerServiceTest {
                 AlertJobType.SERVICE_POST_IN_MISSING,
                 LocalDateTime.of(2026, 1, 1, 10, 5),
                 LocalDateTime.of(2026, 1, 1, 10, 25),
-                "No Service post (in) within 20 minutes"
+                "No Post in within 20 minutes"
         );
     }
 
     @Test
-    void shouldCancelJobsWhenStagesClosed() {
+    void shouldCancelJobsWhenStagesClosedBeforeDeadline() {
         AppConfig config = new AppConfig();
         config.setTiming(new AppConfig.TimingConfig());
 
         Detection detection = new Detection(1L, "AA1111", 10, 90, LocalDateTime.now());
         SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
-        record.setDriveInOutAt(LocalDateTime.of(2026, 1, 1, 10, 3));
-        record.setServiceInAt(LocalDateTime.of(2026, 1, 1, 10, 5));
-        record.setPostInAt(LocalDateTime.of(2026, 1, 1, 10, 7));
+        record.addStage(new StageWindow(StageType.DRIVE_IN,
+                LocalDateTime.of(2026, 1, 1, 10, 0),
+                LocalDateTime.of(2026, 1, 1, 10, 3),
+                "",
+                false,
+                1));
+        record.addStage(new StageWindow(StageType.SERVICE,
+                LocalDateTime.of(2026, 1, 1, 10, 5),
+                LocalDateTime.of(2026, 1, 1, 10, 7),
+                "",
+                false,
+                2));
+        record.setFinishedAt(LocalDateTime.of(2026, 1, 1, 10, 7));
 
         when(runtimeConfig.get()).thenReturn(config);
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));

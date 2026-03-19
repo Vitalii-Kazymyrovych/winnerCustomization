@@ -51,3 +51,8 @@
 - Changed second XLSX sheet to a flat stage-per-row layout with columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`; added report coverage for `Backyard` rows.
 - Added transition-camera support for `Drive-In -> Service` and `Service -> Drive-In`, including new Backyard stage generation and updated test-drive reset anchors in `SequenceEngine`/`SequenceRecord`.
 - Updated `config.json.example`, `README.md`, and `TECHNICAL_SPEC.md` to document the new camera configuration, Backyard rules, and revised second-sheet format.
+- Replaced `SequenceEngine` with a repeatable stage-timeline model that supports multiple occurrences of the same stage, one active stage at a time, 48-hour sequence rollover, timestamp normalization (`+1s` on equal timestamps), recovery/partial stages for exit-only events, Backyard as an explicit stage, and delayed Test-Drive materialization with timeout removal.
+- Refactored `SequenceRecord` to store chronological stage windows (`Drive In`, `Service`, `Post`, `Parking`, `Backyard`, `Test-Drive`) with per-stage alerts, partial markers, and chronological report rendering.
+- Updated `AlertSchedulerService` to schedule/cancel alerts per eligible `Drive In` / `Service` stage instead of relying on single fixed timestamps.
+- Rewrote `SequenceEngineTest`, `ReportServiceTest`, `AlertSchedulerServiceTest`, and adjusted storage/integration tests to cover recovery flows, duplicate suppression, repeated posts, Test-Drive rules, Backyard generation, overwrite semantics for `Post Out`, report rows, and storage compatibility.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to describe the new sequence-processing rules and reporting model.

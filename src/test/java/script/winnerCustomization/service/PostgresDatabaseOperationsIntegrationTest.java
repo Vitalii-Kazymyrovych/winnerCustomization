@@ -9,6 +9,8 @@ import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
+import script.winnerCustomization.model.SequenceRecord.StageType;
+import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -82,9 +84,13 @@ class PostgresDatabaseOperationsIntegrationTest {
         sequenceStorageService.initialize();
 
         SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.parse("2026-03-15T10:00:00"));
-        record.setDriveInOutAt(LocalDateTime.parse("2026-03-15T10:10:00"));
+        record.addStage(new StageWindow(StageType.DRIVE_IN,
+                LocalDateTime.parse("2026-03-15T10:00:00"),
+                LocalDateTime.parse("2026-03-15T10:10:00"),
+                "Exceeded 15 min",
+                false,
+                1));
         record.setFinishedAt(LocalDateTime.parse("2026-03-15T10:12:00"));
-        record.addAlert("Exceeded 15 min");
         sequenceStorageService.replaceAll(List.of(record));
 
         JdbcTemplate sequenceJdbc = new JdbcTemplate(dataSource("sequences_it"));

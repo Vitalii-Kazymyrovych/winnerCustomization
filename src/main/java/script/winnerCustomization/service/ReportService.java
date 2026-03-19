@@ -17,8 +17,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -154,46 +152,13 @@ public class ReportService {
     }
 
     private List<StageLine> toStages(SequenceRecord record) {
-        List<StageLine> stages = new ArrayList<>();
-        addStage(stages, "Drive In", record.getStartedAt(), record.getDriveInOutAt());
-        addStage(stages, "Service", record.getServiceInAt(), record.getServiceFirstFinishedAt());
-        addStage(stages, "Post", record.getPostInAt(), record.getPostOutAt());
-        addStage(stages, "Service", record.getSecondServiceInAt(), record.getServiceOutAt());
-        for (SequenceRecord.StageWindow backyardStage : record.getBackyardStages()) {
-            addStage(stages, backyardStage.stageName(), backyardStage.timeIn(), backyardStage.timeOut());
-        }
-        addStage(stages, "Parking", record.getParkingInAt(), record.getParkingOutAt());
-        if (stages.isEmpty()) {
-            stages.add(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt(), alertForIndex(record, 0)));
+        List<StageLine> stages = record.stagesChronologically().stream()
+                .map(stage -> new StageLine(stage.reportLabel(), stage.timeIn(), stage.timeOut(), stage.alert()))
+                .toList();
+        if (!stages.isEmpty()) {
             return stages;
         }
-
-        stages.sort(Comparator
-                .comparing(StageLine::timeIn, Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(StageLine::timeOut, Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(StageLine::stageName));
-
-        List<StageLine> withAlerts = new ArrayList<>();
-        for (int i = 0; i < stages.size(); i++) {
-            StageLine stage = stages.get(i);
-            withAlerts.add(new StageLine(stage.stageName(), stage.timeIn(), stage.timeOut(), alertForIndex(record, i)));
-        }
-        return withAlerts;
-    }
-
-    private String alertForIndex(SequenceRecord record, int stageIndex) {
-        List<String> alerts = record.getAlerts();
-        if (alerts.isEmpty()) {
-            return stageIndex == 0 ? "none" : "";
-        }
-        return stageIndex < alerts.size() ? alerts.get(stageIndex) : "";
-    }
-
-    private void addStage(List<StageLine> stages, String stageName, LocalDateTime timeIn, LocalDateTime timeOut) {
-        if (timeIn == null && timeOut == null) {
-            return;
-        }
-        stages.add(new StageLine(stageName, timeIn, timeOut, ""));
+        return List.of(new StageLine("No stages", record.getStartedAt(), record.getFinishedAt(), ""));
     }
 
     private String formatTime(LocalDateTime value) {

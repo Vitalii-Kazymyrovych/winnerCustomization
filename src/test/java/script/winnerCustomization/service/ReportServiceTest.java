@@ -12,6 +12,8 @@ import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
+import script.winnerCustomization.model.SequenceRecord.StageType;
+import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -39,7 +41,7 @@ class ReportServiceTest {
     private ReportService reportService;
 
     @Test
-    void shouldBuildReportPersistRecordsAndCreateSecondSheet() throws Exception {
+    void shouldBuildReportPersistRecordsAndCreateStageRows() throws Exception {
         AppConfig config = new AppConfig();
         config.setNotifications(new AppConfig.NotificationsConfig());
         when(runtimeConfig.get()).thenReturn(config);
@@ -47,72 +49,52 @@ class ReportServiceTest {
         Detection detection = new Detection(1L, "AA1111", 10, 90, LocalDateTime.now());
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
 
-        SequenceRecord first = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
-        first.setDriveInOutAt(LocalDateTime.of(2026, 1, 1, 10, 5));
-        first.setServiceInAt(LocalDateTime.of(2026, 1, 1, 10, 10));
-        first.setPostInAt(LocalDateTime.of(2026, 1, 1, 10, 20));
-        first.setPostOutAt(LocalDateTime.of(2026, 1, 1, 10, 25));
-        first.setSecondServiceInAt(LocalDateTime.of(2026, 1, 1, 10, 25));
-        first.setServiceOutAt(LocalDateTime.of(2026, 1, 1, 10, 40));
-        first.setParkingInAt(LocalDateTime.of(2026, 1, 1, 10, 50));
-        first.setParkingOutAt(LocalDateTime.of(2026, 1, 1, 10, 55));
-        first.setFinishedAt(LocalDateTime.of(2026, 1, 1, 10, 55));
-        first.addAlert("Exceeded 15 min");
-
-        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(first));
-
-        byte[] data = reportService.buildReport();
-
-        verify(sequenceStorageService, timeout(1000)).initialize();
-        verify(sequenceStorageService, timeout(1000)).replaceAll(List.of(first));
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
-            XSSFSheet stageSheet = workbook.getSheet("Sequences");
-            assertThat(stageSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Stage");
-            assertThat(stageSheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("AA1111");
-            assertThat(stageSheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive In");
-
-            XSSFSheet eventsSheet = workbook.getSheet("Events");
-            assertThat(eventsSheet).isNotNull();
-            assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Plate");
-            assertThat(eventsSheet.getRow(0).getCell(5).getStringCellValue())
-                    .isEqualTo("Alarms");
-            assertThat(eventsSheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("AA1111");
-            assertThat(eventsSheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Drive In");
-            assertThat(eventsSheet.getRow(1).getCell(4).getStringCellValue()).isEqualTo("00:05:00");
-        }
-    }
-
-    @Test
-    void shouldCloseServiceStageAtPostInWhenServiceOutIsMissing() throws Exception {
-        AppConfig config = new AppConfig();
-        config.setNotifications(new AppConfig.NotificationsConfig());
-        when(runtimeConfig.get()).thenReturn(config);
-
-        Detection detection = new Detection(1L, "AA0029TT", 10, 90, LocalDateTime.now());
-        when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
-
-        SequenceRecord record = new SequenceRecord("AA0029TT", LocalDateTime.of(2026, 3, 16, 12, 31, 51, 453_000_000));
-        record.setDriveInOutAt(LocalDateTime.of(2026, 3, 16, 12, 36, 38, 186_000_000));
-        record.setServiceInAt(LocalDateTime.of(2026, 3, 16, 12, 40, 48, 531_000_000));
-        record.setPostInAt(LocalDateTime.of(2026, 3, 16, 13, 21, 19, 644_000_000));
-        record.setServiceFirstFinishedAt(LocalDateTime.of(2026, 3, 16, 13, 21, 19, 644_000_000));
+        SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.of(2026, 3, 18, 10, 0));
+        record.addStage(new StageWindow(StageType.DRIVE_IN,
+                LocalDateTime.of(2026, 3, 18, 10, 0),
+                LocalDateTime.of(2026, 3, 18, 10, 5),
+                "",
+                false,
+                1));
+        record.addStage(new StageWindow(StageType.SERVICE,
+                LocalDateTime.of(2026, 3, 18, 10, 10),
+                LocalDateTime.of(2026, 3, 18, 10, 24, 59),
+                "No Post in within 15 minutes",
+                false,
+                2));
+        record.addStage(new StageWindow(StageType.POST,
+                LocalDateTime.of(2026, 3, 18, 10, 25),
+                null,
+                "",
+                false,
+                3));
+        record.setFinishedAt(LocalDateTime.of(2026, 3, 18, 10, 25));
 
         when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
 
         byte[] data = reportService.buildReport();
 
+        verify(sequenceStorageService, timeout(1000)).initialize();
+        verify(sequenceStorageService, timeout(1000)).replaceAll(List.of(record));
+
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
-            XSSFSheet sheet = workbook.getSheet("Sequences");
-            assertThat(sheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
-            assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("2026-03-16T13:21:19.644");
-            assertThat(sheet.getRow(3).getCell(3).getStringCellValue()).isEqualTo("00:40:31");
-            assertThat(sheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post");
-            assertThat(sheet.getRow(4).getCell(2).getStringCellValue()).isEqualTo("");
+            XSSFSheet stageSheet = workbook.getSheet("Sequences");
+            assertThat(stageSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Stage");
+            assertThat(stageSheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("AA1111");
+            assertThat(stageSheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive In");
+            assertThat(stageSheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
+            assertThat(stageSheet.getRow(3).getCell(4).getStringCellValue()).isEqualTo("No Post in within 15 minutes");
+
+            XSSFSheet eventsSheet = workbook.getSheet("Events");
+            assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Plate");
+            assertThat(eventsSheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Drive In");
+            assertThat(eventsSheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("Service");
+            assertThat(eventsSheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:14:59");
         }
     }
 
     @Test
-    void shouldRenderBackyardStageOnFlatSheet() throws Exception {
+    void shouldRenderPartialAndBackyardStagesOnFlatSheet() throws Exception {
         AppConfig config = new AppConfig();
         config.setNotifications(new AppConfig.NotificationsConfig());
         when(runtimeConfig.get()).thenReturn(config);
@@ -121,18 +103,30 @@ class ReportServiceTest {
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
 
         SequenceRecord record = new SequenceRecord("BB2222", LocalDateTime.of(2026, 3, 16, 12, 0));
-        record.setDriveInOutAt(LocalDateTime.of(2026, 3, 16, 12, 5));
-        record.addBackyardStage(LocalDateTime.of(2026, 3, 16, 12, 6), LocalDateTime.of(2026, 3, 16, 12, 12));
+        record.addStage(new StageWindow(StageType.PARKING,
+                null,
+                LocalDateTime.of(2026, 3, 16, 12, 5),
+                "",
+                true,
+                1));
+        record.addStage(new StageWindow(StageType.BACKYARD,
+                LocalDateTime.of(2026, 3, 16, 12, 5),
+                LocalDateTime.of(2026, 3, 16, 12, 12),
+                "",
+                false,
+                2));
+        record.setFinishedAt(LocalDateTime.of(2026, 3, 16, 12, 12));
         when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
 
         byte[] data = reportService.buildReport();
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
             XSSFSheet sheet = workbook.getSheet("Events");
+            assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Parking");
+            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("");
+            assertThat(sheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("2026-03-16T12:05");
             assertThat(sheet.getRow(2).getCell(1).getStringCellValue()).isEqualTo("Backyard");
-            assertThat(sheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("2026-03-16T12:06");
-            assertThat(sheet.getRow(2).getCell(3).getStringCellValue()).isEqualTo("2026-03-16T12:12");
-            assertThat(sheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:06:00");
+            assertThat(sheet.getRow(2).getCell(4).getStringCellValue()).isEqualTo("00:07:00");
         }
     }
 
@@ -146,7 +140,10 @@ class ReportServiceTest {
 
         Detection detection = new Detection(1L, "CC0001", 10, 90, LocalDateTime.now());
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
-        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(new SequenceRecord("CC0001", LocalDateTime.now())));
+
+        SequenceRecord record = new SequenceRecord("CC0001", LocalDateTime.now());
+        record.setFinishedAt(LocalDateTime.now());
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
 
         byte[] body = reportService.buildReport();
 
