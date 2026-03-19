@@ -36,6 +36,7 @@
 - `reports.outputDirectory`: optional folder path for saving generated XLSX file copy on each report request.
 - `cameras`: camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range.
 - `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`.
+- `DirectionRange.contains(direction)` supports wrap-around intervals that cross `0` degrees (`270 -> 90`) and uses an exclusive upper bound so neighboring ranges can share a border without ambiguous double matches.
 
 ### `DetectionService`
 - Method: `loadAllDetections()`
@@ -55,8 +56,9 @@
   - Supports repeated stage occurrences (`Drive In`, `Service`, `Post`, `Parking`, `Backyard`, `Test-Drive`) without collapsing them into fixed columns.
   - Applies recovery rules: any next stage closes the previous one at `eventTime - 1 second`; exit-only events create partial stages with empty `In`; `Post In` without active `Service` injects a recovery `Service`; repeated `Post Out` overwrites the prior `Post` end and the following `Service` start.
   - Handles `Backyard` as an explicit stage opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`, with duplicate backyard triggers ignored while `Backyard` is active.
-  - Handles `Test-Drive` as a candidate triggered by `Drive-In Out` or `Service -> Drive-In`, materializing it only after the configured silence window and dropping it when the absence reaches the configured timeout.
+  - Handles `Test-Drive` as a candidate triggered by `Drive-In Out` or `Service -> Drive-In`; `Service -> Drive-In` first closes any active stage at `eventTime - 1 second`, then materializes `Test-Drive` only after the configured silence window and drops it when the absence reaches the configured timeout.
   - Closes/open-rolls sequences after 48 hours without detections for the same plate.
+  - Drops transition-only sequences that finished without any concrete stage windows, preventing synthetic `No stages` records from reaching storage/reporting layers.
   - Produces `SequenceRecord` with chronological `StageWindow` entries, per-stage alerts, path steps, and storage/report helpers.
 
 ### `SequenceStorageService`
@@ -111,8 +113,8 @@
   - Creates two worksheets:
     - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
     - `Events` with flat stage columns: `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
-  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, `Post`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. First Service stage ends at `postInAt` when present; Post stage starts at `postInAt` and ends at `postOutAt`; second Service stage starts at `postOutAt` and ends at `serviceOutAt`; `Backyard` stages are sorted into the timeline by their start timestamp.
-  - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row.
+  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, `Post`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. Records with zero stage windows are skipped entirely.
+  - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row. Records with zero stage windows are skipped entirely.
   - Computes duration as `HH:mm:ss`; empty when one of timestamps is missing.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.
 
@@ -175,5 +177,5 @@ Integration test (live PostgreSQL):
 - `Service` / `Post`: `Service In` opens `Service`; `Post In` closes `Service` and opens `Post`; `Post Out` closes `Post` and opens the next `Service`; repeated `Post Out` overwrites the previous `Post`/`Service` boundary; `Post In` without active `Service` injects a partial `Service` ending at `Post In - 1 second`.
 - `Parking`: `Parking In` opens `Parking`; `Parking Out` closes it and starts `Backyard` instead of closing the sequence.
 - `Backyard`: opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`; ends on the next stage event; repeated backyard triggers while active are ignored.
-- `Test-Drive`: candidate on `Drive-In Out` / `Service -> Drive-In`; cancelled by an early next event; materialized only after the configured quiet window; removed when the vehicle absence reaches the timeout.
+- `Test-Drive`: candidate on `Drive-In Out` / `Service -> Drive-In`; `Service -> Drive-In` first closes the active stage so no overlap remains; candidate is cancelled by an early next event; materialized only after the configured quiet window; removed when the vehicle absence reaches the timeout.
 - Alerts: computed per stage and only for non-partial `Drive In` and `Service` stages. A stage keeps its due alert if it stayed open past the threshold even if it eventually closed later.

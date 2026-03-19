@@ -156,6 +156,25 @@ class SequenceEngineTest {
     }
 
     @Test
+    void shouldCloseServiceBeforeStartingTestDriveFromServiceToDriveIn() {
+        AppConfig config = baseConfig();
+        config.getTiming().setTestDriveStartMinutes(5);
+        config.getTiming().setTestDriveResetMinutes(60);
+        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 16, 30);
+
+        SequenceRecord record = build(config, List.of(
+                detection(1, "AA1118A", 12, 90, t),
+                detection(2, "AA1118A", 16, 90, t.plusMinutes(7)),
+                detection(3, "AA1118A", 17, 90, t.plusMinutes(20))
+        )).getFirst();
+
+        assertStages(record,
+                tuple("Service", t, t.plusMinutes(7).minusSeconds(1), ""),
+                tuple("Test-Drive", t.plusMinutes(7), t.plusMinutes(20).minusSeconds(1), ""),
+                tuple("Backyard", t.plusMinutes(20), null, ""));
+    }
+
+    @Test
     void shouldNotCreateTestDriveWhenNextEventArrivesTooSoon() {
         AppConfig config = baseConfig();
         config.getTiming().setTestDriveStartMinutes(10);
@@ -188,6 +207,17 @@ class SequenceEngineTest {
         assertThat(records).hasSize(2);
         assertStages(records.get(0), tuple("Drive In", t, t.plusMinutes(3), ""));
         assertStages(records.get(1), tuple("Drive In", t.plusMinutes(70), null, ""));
+    }
+
+    @Test
+    void shouldDropTransitionOnlySequenceWithoutConcreteStages() {
+        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 18, 30);
+
+        List<SequenceRecord> records = build(baseConfig(), List.of(
+                detection(1, "AA1120A", 16, 90, t)
+        ));
+
+        assertThat(records).isEmpty();
     }
 
     @Test
@@ -314,6 +344,32 @@ class SequenceEngineTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void shouldSupportWrappedDirectionRangesWithoutBoundaryOverlap() {
+        AppConfig config = baseConfig();
+        config.getCameras().setDriveInIn(List.of());
+        config.getCameras().setDriveInOut(List.of());
+        config.getCameras().setServiceIn(List.of());
+        config.getCameras().setServiceOut(List.of());
+        config.getCameras().setDriveInToService(List.of());
+        config.getCameras().setServiceToDriveIn(List.of());
+        config.getCameras().setParkingIn(List.of(camera(14, 270, 90)));
+        config.getCameras().setParkingOut(List.of(camera(15, 90, 270)));
+
+        List<SequenceRecord> records = build(config, List.of(
+                detection(1, "DD1002", 14, 0, LocalDateTime.of(2026, 3, 18, 12, 0)),
+                detection(2, "DD1003", 15, 90, LocalDateTime.of(2026, 3, 18, 12, 5)),
+                detection(3, "DD1004", 14, 270, LocalDateTime.of(2026, 3, 18, 12, 10))
+        ));
+
+        assertThat(records).hasSize(3);
+        assertStages(records.get(0), tuple("Parking", LocalDateTime.of(2026, 3, 18, 12, 0), null, ""));
+        assertStages(records.get(1),
+                tuple("Parking", null, LocalDateTime.of(2026, 3, 18, 12, 5), ""),
+                tuple("Backyard", LocalDateTime.of(2026, 3, 18, 12, 5), null, ""));
+        assertStages(records.get(2), tuple("Parking", LocalDateTime.of(2026, 3, 18, 12, 10), null, ""));
+    }
+
     private List<SequenceRecord> build(AppConfig config, List<Detection> detections) {
         return engine.build(detections, config);
     }
@@ -362,6 +418,12 @@ class SequenceEngineTest {
         AppConfig.CameraConfig camera = new AppConfig.CameraConfig();
         camera.setAnalyticsId(id);
         camera.setDirectionRange(new AppConfig.DirectionRange());
+        return camera;
+    }
+
+    private AppConfig.CameraConfig camera(int id, int from, int to) {
+        AppConfig.CameraConfig camera = camera(id);
+        camera.setDirectionRange(range(from, to));
         return camera;
     }
 

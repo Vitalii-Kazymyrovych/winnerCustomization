@@ -41,7 +41,7 @@ Use `config.json` (not committed) with:
 - Source detections table name and optional `sourceTable.loadFrom` timestamp (`yyyy-MM-ddTHH:mm:ss`) to load only detections starting from the configured moment.
 - Camera mapping lists for common points (Drive in / Service / Parking), plus transition cameras `driveInToService` and `serviceToDriveIn`; each camera is matched by `analyticsId + directionRange`.
   - `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`.
-- Direction ranges per camera (`from`/`to`) where null means no filtering.
+- Direction ranges per camera (`from`/`to`) where null means no filtering. Ranges support wrap-around through `0` degrees (`270 -> 90`) and use an exclusive upper bound, so adjacent ranges can safely share borders without double-classifying `90`/`270`.
 - Alert timing thresholds.
 - `reports.outputDirectory`: optional folder where each `/report/sequences.xlsx` call also stores `sequences.xlsx`. The folder is created automatically if missing.
 - Telegram notifications toggle and credentials.
@@ -89,10 +89,11 @@ The current engine interprets detections as a chronological sequence of stage oc
 - Repeated start events for an already-open stage are ignored as duplicates. The only overwrite exception is `Post Out`: a repeated `Post Out` updates the previous `Post` end and shifts the immediately-following `Service` start.
 - Exit-only and recovery scenarios create valid partial stages with empty `In` and filled `Out` (`Drive In`, `Service`, `Post`, `Parking`). Partial stages never produce alerts.
 - `Backyard` is a first-class stage. It starts on `Drive-In -> Service`, `Service Out`, or `Parking Out`, and ends on the next stage event. Repeated backyard triggers while `Backyard` is already active are ignored.
-- `Test-Drive` starts as a candidate from `Drive-In Out` or `Service -> Drive-In`. It becomes a reportable stage only when the silence window from `timing.testDriveStartMinutes` elapses and the vehicle returns before the `timing.testDriveResetMinutes` timeout. If the absence reaches the timeout, the current sequence is closed and `Test-Drive` is omitted from the report.
+- `Test-Drive` starts as a candidate from `Drive-In Out` or `Service -> Drive-In`. `Service -> Drive-In` first closes the active stage, so `Service` and `Test-Drive` never overlap. `Test-Drive` becomes a reportable stage only when the silence window from `timing.testDriveStartMinutes` elapses and the vehicle returns before the `timing.testDriveResetMinutes` timeout. If the absence reaches the timeout, the current sequence is closed and `Test-Drive` is omitted from the report.
 - Sequences roll over after 48 hours without events for the same plate.
 - If two detections for the same plate have the same timestamp, the later one is normalized to `+1 second` to keep ordering deterministic.
 - Alerts are created only for full `Drive In` and `Service` stages and are attached to the specific stage row in the XLSX output.
+- Transition-only chains that never materialize any real stage are dropped from the final output instead of appearing as synthetic `No stages` rows.
 
 ## Notes
 
@@ -101,6 +102,7 @@ The current engine interprets detections as a chronological sequence of stage oc
 - XLSX report now contains two sheets:
   - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`).
   - `Events`: flat stage layout with one row per stage and columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
+- Records without stage windows are skipped in both sheets; the report never emits `No stages`.
 - `Backyard` is emitted as a standalone stage whenever the car goes through `Drive-In -> Service` without reaching `Service in`, or leaves `Service out` without reaching `Service -> Drive-In` before another camera detection.
 - Test-drive / left-territory reset logic now starts from `Drive in (out)` when no `Drive-In -> Service` follows, or from `Service -> Drive-In` when no `Drive in (in)` follows.
 - Stage split is now: `Drive In` starts at `Drive in (in)` and ends at `Drive in (out)`, `Service` starts at `Service in` and ends at `Post in` (or next closing event), `Post` starts at `Post in` and ends at `Post out`, second `Service` starts at `Post out` and ends at `Service out` (or next closing event), `Backyard` spans from its trigger camera to the first subsequent camera detection.
