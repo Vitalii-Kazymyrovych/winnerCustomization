@@ -137,6 +137,38 @@ class ReportServiceTest {
     }
 
     @Test
+    void shouldCalculateDurationForOpenPostUsingSequenceFinishedAt() throws Exception {
+        AppConfig config = new AppConfig();
+        when(runtimeConfig.get()).thenReturn(config);
+
+        Detection detection = new Detection(1L, "POST01", 20, 90, LocalDateTime.now());
+        when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
+
+        SequenceRecord record = new SequenceRecord("POST01", LocalDateTime.of(2026, 3, 19, 9, 0));
+        record.addStage(new StageWindow(StageType.POST,
+                LocalDateTime.of(2026, 3, 19, 9, 10),
+                null,
+                "Post 1",
+                "",
+                false,
+                1));
+        record.setFinishedAt(LocalDateTime.of(2026, 3, 19, 9, 25));
+        when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
+
+        byte[] data = reportService.buildReport();
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(data))) {
+            XSSFSheet sequences = workbook.getSheet("Sequences");
+            XSSFSheet events = workbook.getSheet("Events");
+
+            assertThat(sequences.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Post 1");
+            assertThat(sequences.getRow(2).getCell(2).getStringCellValue()).isEqualTo("");
+            assertThat(sequences.getRow(2).getCell(3).getStringCellValue()).isEqualTo("00:15:00");
+            assertThat(events.getRow(1).getCell(4).getStringCellValue()).isEqualTo("00:15:00");
+        }
+    }
+
+    @Test
     void shouldPersistReportIntoConfiguredFolder(@TempDir Path tempDir) throws Exception {
         AppConfig config = new AppConfig();
         AppConfig.ReportsConfig reports = new AppConfig.ReportsConfig();

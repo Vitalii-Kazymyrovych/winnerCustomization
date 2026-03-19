@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Component
 public class SequenceEngine {
@@ -156,6 +157,9 @@ public class SequenceEngine {
     }
 
     private void applyEvent(ActiveSequence current, CameraMatch cameraMatch, LocalDateTime eventTime) {
+        if (handleStickyPostTransition(current, cameraMatch, eventTime)) {
+            return;
+        }
         switch (cameraMatch.type()) {
             case DRIVE_IN_IN -> handleDriveInIn(current, eventTime);
             case DRIVE_IN_OUT -> handleDriveInOut(current, eventTime);
@@ -172,13 +176,39 @@ public class SequenceEngine {
         }
     }
 
+    private boolean handleStickyPostTransition(ActiveSequence current, CameraMatch cameraMatch, LocalDateTime eventTime) {
+        if (current.activeStageType() != StageType.POST) {
+            return false;
+        }
+        if (cameraMatch.type() == CameraType.POST_IN
+                && Objects.equals(current.activeStageLabel(), cameraMatch.reportLabel())) {
+            return false;
+        }
+        if (cameraMatch.type() == CameraType.POST_OUT
+                && Objects.equals(current.activeStageLabel(), cameraMatch.reportLabel())) {
+            return false;
+        }
+
+        LocalDateTime postOutTime = closeStickyPostAt(current, eventTime);
+        if (cameraMatch.type() == CameraType.SERVICE_OUT) {
+            addSyntheticServiceStage(current, postOutTime.plusSeconds(1), eventTime);
+            openStage(current, StageType.BACKYARD, eventTime, false);
+            current.record.addPathStep("Service (out)");
+            return true;
+        }
+        if (cameraMatch.type() != CameraType.SERVICE_IN && current.postOutCandidateAt != null) {
+            addSyntheticServiceStage(current, postOutTime.plusSeconds(1), eventTime.minusSeconds(1));
+        }
+        current.postOutCandidateAt = null;
+        return false;
+    }
+
     private void handleDriveInIn(ActiveSequence current, LocalDateTime eventTime) {
         if (current.activeStageType() == StageType.DRIVE_IN) {
             return;
         }
         closeActiveAt(current, eventTime.minusSeconds(1));
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = null;
+        current.postOutCandidateAt = null;
         openStage(current, StageType.DRIVE_IN, eventTime, false);
         current.record.addPathStep("Drive in (in)");
     }
@@ -203,8 +233,7 @@ public class SequenceEngine {
             return;
         }
         closeActiveAt(current, eventTime.minusSeconds(1));
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = null;
+        current.postOutCandidateAt = null;
         openStage(current, StageType.SERVICE, eventTime, false);
         current.record.addPathStep("Service (in)");
     }
@@ -219,56 +248,52 @@ public class SequenceEngine {
             closeActiveAt(current, eventTime.minusSeconds(1));
             current.record.addStage(new StageWindow(StageType.SERVICE, null, eventTime, null, "", true, current.nextEventOrder()));
         }
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = null;
+        current.postOutCandidateAt = null;
         openStage(current, StageType.BACKYARD, eventTime, false);
         current.record.addPathStep("Service (out)");
     }
 
     private void handlePostIn(ActiveSequence current, LocalDateTime eventTime, String postLabel) {
-        if (current.activeStageType() == StageType.POST) {
+        if (current.activeStageType() == StageType.POST
+                && Objects.equals(current.activeStageLabel(), postLabel)) {
             return;
         }
         if (current.activeStageType() == StageType.SERVICE) {
             closeActiveAt(current, eventTime.minusSeconds(1));
+        } else if (current.latestStageType() == StageType.SERVICE
+                && Objects.equals(current.latestStageTimeOut(), eventTime.minusSeconds(1))) {
+            // synthetic/previous service already ends right before this Post start
         } else {
             closeActiveAt(current, eventTime.minusSeconds(1));
             current.record.addStage(new StageWindow(StageType.SERVICE, null, eventTime.minusSeconds(1), null, "", true, current.nextEventOrder()));
         }
         openStage(current, StageType.POST, eventTime, false, postLabel);
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = current.activeStageIndex;
+        current.postOutCandidateAt = null;
         current.record.addPathStep("Post (in)");
     }
 
     private void handlePostOut(ActiveSequence current, LocalDateTime eventTime, String postLabel) {
-        if (current.canOverwritePostOut()) {
-            overwritePostOut(current, eventTime);
-            current.record.addPathStep("Post (out)");
+        if (current.activeStageType() == StageType.POST
+                && Objects.equals(current.activeStageLabel(), postLabel)) {
+            current.postOutCandidateAt = eventTime;
+            if (current.lastEventType != CameraType.POST_OUT) {
+                current.record.addPathStep("Post (out)");
+            }
             current.lastEventType = CameraType.POST_OUT;
             return;
         }
 
         if (current.activeStageType() == StageType.POST) {
-            closeActiveAt(current, eventTime);
+            closeStickyPostAt(current, eventTime);
         } else {
             closeActiveAt(current, eventTime.minusSeconds(1));
             current.record.addStage(new StageWindow(StageType.POST, null, eventTime, postLabel, "", true, current.nextEventOrder()));
-            current.postAwaitingOverwriteStageIndex = current.record.getStages().size() - 1;
         }
 
         openStage(current, StageType.SERVICE, eventTime, false, null);
-        current.serviceOpenedByPostOutStageIndex = current.activeStageIndex;
+        current.postOutCandidateAt = null;
         current.record.addPathStep("Post (out)");
         current.lastEventType = CameraType.POST_OUT;
-    }
-
-    private void overwritePostOut(ActiveSequence current, LocalDateTime eventTime) {
-        StageWindow post = current.record.getStages().get(current.postAwaitingOverwriteStageIndex);
-        current.record.getStages().set(current.postAwaitingOverwriteStageIndex, post.withTimeOut(eventTime));
-        StageWindow service = current.record.getStages().get(current.serviceOpenedByPostOutStageIndex);
-        current.record.getStages().set(current.serviceOpenedByPostOutStageIndex, service.withTimeIn(eventTime));
-        current.lastEventAt = eventTime;
     }
 
     private void handleParkingIn(ActiveSequence current, LocalDateTime eventTime) {
@@ -276,8 +301,7 @@ public class SequenceEngine {
             return;
         }
         closeActiveAt(current, eventTime.minusSeconds(1));
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = null;
+        current.postOutCandidateAt = null;
         openStage(current, StageType.PARKING, eventTime, false);
         current.record.addPathStep("Parking (in)");
     }
@@ -292,8 +316,7 @@ public class SequenceEngine {
             closeActiveAt(current, eventTime.minusSeconds(1));
             current.record.addStage(new StageWindow(StageType.PARKING, null, eventTime, null, "", true, current.nextEventOrder()));
         }
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = null;
+        current.postOutCandidateAt = null;
         openStage(current, StageType.BACKYARD, eventTime, false);
         current.record.addPathStep("Parking (out)");
     }
@@ -303,8 +326,7 @@ public class SequenceEngine {
             return;
         }
         closeActiveAt(current, eventTime.minusSeconds(1));
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = null;
+        current.postOutCandidateAt = null;
         openStage(current, StageType.BACKYARD, eventTime, false);
         current.record.addPathStep("Drive-In -> Service");
     }
@@ -313,11 +335,30 @@ public class SequenceEngine {
         if (current.activeStageIndex != null) {
             closeActiveAt(current, eventTime.minusSeconds(1));
         }
-        current.serviceOpenedByPostOutStageIndex = null;
-        current.postAwaitingOverwriteStageIndex = null;
+        current.postOutCandidateAt = null;
         current.record.addPathStep("Service -> Drive-In");
         createCandidateIfAbsent(current, eventTime);
         current.lastEventType = CameraType.SERVICE_TO_DRIVE_IN;
+    }
+
+    private LocalDateTime closeStickyPostAt(ActiveSequence current, LocalDateTime nextEventTime) {
+        if (current.activeStageIndex == null || current.activeStageType() != StageType.POST) {
+            return nextEventTime.minusSeconds(1);
+        }
+        LocalDateTime postOutTime = current.postOutCandidateAt != null
+                ? current.postOutCandidateAt
+                : nextEventTime.minusSeconds(1);
+        StageWindow active = current.record.getStages().get(current.activeStageIndex);
+        current.record.getStages().set(current.activeStageIndex, active.withTimeOut(postOutTime));
+        current.activeStageIndex = null;
+        return postOutTime;
+    }
+
+    private void addSyntheticServiceStage(ActiveSequence current, LocalDateTime timeIn, LocalDateTime timeOut) {
+        if (timeIn == null || timeOut == null || timeIn.isAfter(timeOut)) {
+            return;
+        }
+        current.record.addStage(new StageWindow(StageType.SERVICE, timeIn, timeOut, null, "", false, current.nextEventOrder()));
     }
 
     private void createCandidateIfAbsent(ActiveSequence current, LocalDateTime eventTime) {
@@ -346,10 +387,6 @@ public class SequenceEngine {
             current.record.getStages().set(closingStageIndex, active.withTimeOut(timeOut));
         }
         current.activeStageIndex = null;
-        if (closingStageIndex.equals(current.serviceOpenedByPostOutStageIndex)) {
-            current.serviceOpenedByPostOutStageIndex = null;
-            current.postAwaitingOverwriteStageIndex = null;
-        }
     }
 
     private CameraMatch resolveCameraMatch(Detection detection, AppConfig config) {
@@ -411,8 +448,7 @@ public class SequenceEngine {
         private Integer activeStageIndex;
         private int eventOrder;
         private TestDriveCandidate candidate;
-        private Integer postAwaitingOverwriteStageIndex;
-        private Integer serviceOpenedByPostOutStageIndex;
+        private LocalDateTime postOutCandidateAt;
         private CameraType lastEventType;
 
         private ActiveSequence(String plateNumber, LocalDateTime startedAt) {
@@ -432,16 +468,29 @@ public class SequenceEngine {
             return record.getStages().get(activeStageIndex).stageType();
         }
 
+        private String activeStageLabel() {
+            if (activeStageIndex == null) {
+                return null;
+            }
+            return record.getStages().get(activeStageIndex).reportLabel();
+        }
+
         private boolean hasPendingCandidate() {
             return candidate != null;
         }
 
-        private boolean canOverwritePostOut() {
-            return postAwaitingOverwriteStageIndex != null
-                    && serviceOpenedByPostOutStageIndex != null
-                    && activeStageIndex != null
-                    && activeStageIndex.equals(serviceOpenedByPostOutStageIndex)
-                    && activeStageType() == StageType.SERVICE;
+        private StageType latestStageType() {
+            if (record.getStages().isEmpty()) {
+                return null;
+            }
+            return record.getStages().getLast().stageType();
+        }
+
+        private LocalDateTime latestStageTimeOut() {
+            if (record.getStages().isEmpty()) {
+                return null;
+            }
+            return record.getStages().getLast().timeOut();
         }
     }
 }
