@@ -43,6 +43,7 @@ class SequenceStorageServiceTest {
         finished.addStage(new StageWindow(StageType.DRIVE_IN,
                 LocalDateTime.of(2026, 1, 1, 10, 0),
                 LocalDateTime.of(2026, 1, 1, 10, 10),
+                null,
                 "slow",
                 false,
                 1));
@@ -51,6 +52,7 @@ class SequenceStorageServiceTest {
         SequenceRecord open = new SequenceRecord("BB2222", LocalDateTime.of(2026, 1, 1, 12, 0));
         open.addStage(new StageWindow(StageType.SERVICE,
                 LocalDateTime.of(2026, 1, 1, 12, 5),
+                null,
                 null,
                 "",
                 false,

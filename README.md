@@ -40,7 +40,8 @@ Use `config.json` (not committed) with:
 - Root PostgreSQL credentials for first-start bootstrap: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`). Bootstrap now ensures both sequence database and its DB user/permissions.
 - Source detections table name and optional `sourceTable.loadFrom` timestamp (`yyyy-MM-ddTHH:mm:ss`) to load only detections starting from the configured moment.
 - Camera mapping lists for common points (Drive in / Service / Parking), plus transition cameras `driveInToService` and `serviceToDriveIn`; each camera is matched by `analyticsId + directionRange`.
-  - `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`.
+- `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`.
+  - `postName` is also reused as the visible stage label in both XLSX sheets, so report rows show `Post 1` / `Post 2` instead of the generic `Post` label.
 - Direction ranges per camera (`from`/`to`) where null means no filtering. Ranges support wrap-around through `0` degrees (`270 -> 90`) and use an exclusive upper bound, so adjacent ranges can safely share borders without double-classifying `90`/`270`.
 - Alert timing thresholds.
 - `reports.outputDirectory`: optional folder where each `/report/sequences.xlsx` call also stores `sequences.xlsx`. The folder is created automatically if missing.
@@ -100,8 +101,8 @@ The current engine interprets detections as a chronological sequence of stage oc
 - Detailed console logging is enabled for runtime actions (config load, endpoint calls, source pull triggers, sequence build/storage, timed alert sync/dispatch, report generation, notifications).
 - XLSX report endpoint now returns as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
 - XLSX report now contains two sheets:
-  - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`).
-  - `Events`: flat stage layout with one row per stage and columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
+  - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`). Post rows display the configured `servicePosts[].postName`.
+  - `Events`: flat stage layout with one row per stage and columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`. Post rows also display the configured post name.
 - Records without stage windows are skipped in both sheets; the report never emits `No stages`.
 - `Backyard` is emitted as a standalone stage whenever the car goes through `Drive-In -> Service` without reaching `Service in`, or leaves `Service out` without reaching `Service -> Drive-In` before another camera detection.
 - Test-drive / left-territory reset logic now starts from `Drive in (out)` when no `Drive-In -> Service` follows, or from `Service -> Drive-In` when no `Drive in (in)` follows.

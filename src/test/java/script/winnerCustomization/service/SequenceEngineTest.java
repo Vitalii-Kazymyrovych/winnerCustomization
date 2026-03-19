@@ -69,7 +69,7 @@ class SequenceEngineTest {
 
         assertStages(record,
                 tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("Post", t.plusMinutes(5), t.plusMinutes(15), ""),
+                tuple("post-1", t.plusMinutes(5), t.plusMinutes(15), ""),
                 tuple("Service", t.plusMinutes(15), t.plusMinutes(30).minusSeconds(1), ""),
                 tuple("Backyard", t.plusMinutes(30), null, ""));
     }
@@ -89,9 +89,9 @@ class SequenceEngineTest {
 
         assertStages(record,
                 tuple("Service", t, t.plusMinutes(3).minusSeconds(1), ""),
-                tuple("Post", t.plusMinutes(3), t.plusMinutes(7), ""),
+                tuple("post-1", t.plusMinutes(3), t.plusMinutes(7), ""),
                 tuple("Service", t.plusMinutes(7), t.plusMinutes(10).minusSeconds(1), ""),
-                tuple("Post", t.plusMinutes(10), t.plusMinutes(14), ""),
+                tuple("post-1", t.plusMinutes(10), t.plusMinutes(14), ""),
                 tuple("Service", t.plusMinutes(14), t.plusMinutes(18).minusSeconds(1), ""),
                 tuple("Backyard", t.plusMinutes(18), null, ""));
     }
@@ -247,7 +247,7 @@ class SequenceEngineTest {
                 detection(1, "BB1004", 20, 250, t)
         )).getFirst();
         assertStages(postOut,
-                tuple("Post", null, t, ""),
+                tuple("post-1", null, t, ""),
                 tuple("Service", t, null, ""));
     }
 
@@ -261,7 +261,7 @@ class SequenceEngineTest {
 
         assertStages(record,
                 tuple("Service", null, t.minusSeconds(1), ""),
-                tuple("Post", t, null, ""));
+                tuple("post-1", t, null, ""));
     }
 
     @Test
@@ -311,7 +311,7 @@ class SequenceEngineTest {
 
         assertStages(record,
                 tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("Post", t.plusMinutes(5), t.plusMinutes(10), ""),
+                tuple("post-1", t.plusMinutes(5), t.plusMinutes(10), ""),
                 tuple("Service", t.plusMinutes(10), t.plusMinutes(20).minusSeconds(1), ""),
                 tuple("Backyard", t.plusMinutes(20), null, ""));
     }

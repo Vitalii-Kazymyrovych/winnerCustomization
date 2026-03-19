@@ -87,6 +87,7 @@ class PostgresDatabaseOperationsIntegrationTest {
         record.addStage(new StageWindow(StageType.DRIVE_IN,
                 LocalDateTime.parse("2026-03-15T10:00:00"),
                 LocalDateTime.parse("2026-03-15T10:10:00"),
+                null,
                 "Exceeded 15 min",
                 false,
                 1));
