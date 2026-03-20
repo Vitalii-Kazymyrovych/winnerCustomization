@@ -29,6 +29,8 @@ Spring Boot script that:
    - HTML editor: `http://localhost:8080/config`
    - JSON API: `GET /config`, `POST /config`
    - Successful saves rewrite `config.json` and update the in-memory configuration immediately without restart.
+   - `workflow`, `sourceTable`, `notifications`, and `reports` changes affect subsequent sequence/report operations immediately.
+   - Database connection changes (`sourceDatabase`, `sequenceDatabase`, `rootDatabase`) are persisted by the UI too, but existing JDBC beans are created only at startup, so DB host/port/user/password changes require an application restart.
 6. Optional manual trigger (for external analytics callbacks):
    - `http://localhost:8080/source/trigger-pull`
    - returns `200` on success, `409` if a trigger is currently running, `429` during cooldown.
@@ -47,17 +49,35 @@ Use `config.json` (not committed) with:
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Root PostgreSQL credentials for first-start bootstrap: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`). Bootstrap now ensures both sequence database and its DB user/permissions.
 - Source detections table name and optional `sourceTable.loadFrom` timestamp (`yyyy-MM-ddTHH:mm:ss`) to load only detections starting from the configured moment.
-- Camera mapping lists for common points (Drive in / Service / Parking), plus transition cameras `driveInToService` and `serviceToDriveIn`; each camera is matched by `analyticsId + directionRange`.
-- `servicePosts` maps one camera per post with two direction ranges: `inDirectionRange` and `outDirectionRange`.
+- `workflow`: declarative stage/trigger model used by the new configuration screen. Each stage can define `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate handling, transition stage references, and per-trigger notification settings.
+- `workflow` is now the preferred and sufficient way to describe business logic; a config that already contains `workflow.stages[]` does **not** need the legacy `cameras` block.
+- Legacy `cameras` + `timing` are still supported only as a backward-compatible fallback. If `workflow` is omitted, the application derives an equivalent default workflow from those legacy blocks so old configs continue to work.
+- Legacy camera fallback fields, when used, are: common camera lists for Drive in / Service / Parking, transition cameras `driveInToService` and `serviceToDriveIn`, plus `servicePosts` with `inDirectionRange` / `outDirectionRange`.
   - `postName` is also reused as the visible stage label in both XLSX sheets, so report rows show `Post 1` / `Post 2` instead of the generic `Post` label.
-- Direction ranges per camera (`from`/`to`) where null means no filtering. Ranges support wrap-around through `0` degrees (`270 -> 90`) and use an exclusive upper bound, so adjacent ranges can safely share borders without double-classifying `90`/`270`.
-- Alert timing thresholds.
+  - Direction ranges per camera (`from`/`to`) where null means no filtering. Ranges support wrap-around through `0` degrees (`270 -> 90`) and use an exclusive upper bound, so adjacent ranges can safely share borders without double-classifying `90`/`270`.
 - `reports.outputDirectory`: optional folder where `/report/sequences.xlsx` stores `sequences.xlsx`, and `/report/sequences.xlsx/dd-MM-yyyy` stores `sequences-dd-MM-yyyy.xlsx`. The folder is created automatically if missing.
 - Telegram notifications toggle and credentials.
-
-- `workflow`: declarative stage/trigger model used by the new configuration screen. Each stage can define `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate handling, transition stage references, and per-trigger notification settings. If `workflow` is omitted, the application derives an equivalent default workflow from the legacy `cameras` + `timing` blocks so existing configs continue to work.
 - `GET /config` returns the effective runtime config, so operators can inspect the generated workflow before editing it.
 - `POST /config` validates required fields, positive timeouts, unique stage names, supported mode/policy values, and references such as `allowedNextStages`, `timeoutTransitionToStage`, and `intermediateStageOnTransition` before saving.
+
+### What is required for startup
+
+At minimum, a practical startup config must contain:
+
+- `sourceDatabase.host|port|db|schema|user|password`
+- `sequenceDatabase.host|port|db|schema|user|password`
+- `rootDatabase.host|port|user|password` (required by the current startup bootstrap that ensures the sequence DB exists)
+- `sourceTable.table`
+- either:
+  - `workflow.defaultSequenceCloseTimeoutMinutes` + `workflow.stages[]`, or
+  - legacy `cameras` (optionally with `timing`) so the app can synthesize `workflow`
+
+Optional at startup:
+
+- `sourceTable.loadFrom`
+- `notifications`
+- `reports.outputDirectory`
+- `timing` when `workflow` is already fully defined
 
 ## Timed notifications (DB-backed)
 
