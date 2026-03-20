@@ -115,7 +115,12 @@
 ### `ConfigController`
 - HTTP GET `/config`
   - Returns effective runtime config as JSON when JSON is requested.
-  - Returns a primitive HTML page with a `<textarea>` editor and POST form when HTML is requested.
+  - Returns a workflow-oriented HTML editor when HTML is requested. The page embeds the runtime config JSON, renders `workflow.stages[]` as individual cards, and keeps non-workflow config sections intact in the browser state.
+  - The HTML editor includes global workflow settings, per-stage fields, separate `Start triggers` / `Finish triggers` sections, add/remove buttons, simple CSS styling, and native-JS save logic that submits `application/json` back to `/config`.
+- HTTP GET `/config/help`
+  - Returns a static HTML instruction page that documents stage/trigger concepts, mode and timeout meanings, required business stages, transitional stages, valid/invalid configuration examples, and validation behavior.
+- HTTP GET `/config/task.pdf`
+  - Streams the repository task PDF (`<working_dir>/task.pdf`) with inline content disposition so the help page can link to the full specification.
 - HTTP POST `/config`
   - Accepts either raw JSON or form-urlencoded `json` payload.
   - Validates and persists the config through `RuntimeConfig.save(...)`, then updates the in-memory runtime config immediately.

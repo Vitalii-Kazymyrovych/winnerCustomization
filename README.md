@@ -7,7 +7,7 @@ Spring Boot script that:
 3. Stores computed sequences in a separate PostgreSQL database asynchronously (does not block XLSX download response).
 4. Exposes XLSX report download endpoint in a stage-row layout (dynamic per sequence, not fixed stage columns).
 5. Runs DB-backed alert scheduling: pending alert jobs are stored in PostgreSQL and dispatched by background workers close to due time.
-6. Provides a simple live configuration UI/API at `/config` for viewing and saving `config.json` without restarting the service.
+6. Provides a live configuration UI/API at `/config` with a stage/trigger form editor for saving `config.json` without restarting the service.
 7. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
 
 ## Run
@@ -26,8 +26,12 @@ Spring Boot script that:
    java -jar target/winnerCustomization-0.0.1-SNAPSHOT.jar
    ```
 5. Edit runtime configuration in browser or via API:
-   - HTML editor: `http://localhost:8080/config`
+   - Workflow editor: `http://localhost:8080/config`
+   - Help page: `http://localhost:8080/config/help`
+   - Technical task PDF: `http://localhost:8080/config/task.pdf`
    - JSON API: `GET /config`, `POST /config`
+   - The HTML editor renders each workflow stage as a separate card with stage fields, `Start triggers`, and `Finish triggers`, plus `New Stage` / `New Trigger` buttons and delete actions.
+   - The page preserves non-workflow sections of `config.json`; the browser serializes the edited workflow back to JSON and sends it as `application/json` to `POST /config`.
    - Successful saves rewrite `config.json` and update the in-memory configuration immediately without restart.
    - `workflow`, `sourceTable`, `notifications`, and `reports` changes affect subsequent sequence/report operations immediately.
    - Database connection changes (`sourceDatabase`, `sequenceDatabase`, `rootDatabase`) are persisted by the UI too, but existing JDBC beans are created only at startup, so DB host/port/user/password changes require an application restart.
@@ -49,7 +53,7 @@ Use `config.json` (not committed) with:
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Root PostgreSQL credentials for first-start bootstrap: `rootDatabase.host`, `rootDatabase.port`, `rootDatabase.user`, `rootDatabase.password`, optional `rootDatabase.maintenanceDb` (default `postgres`). Bootstrap now ensures both sequence database and its DB user/permissions.
 - Source detections table name and optional `sourceTable.loadFrom` timestamp (`yyyy-MM-ddTHH:mm:ss`) to load only detections starting from the configured moment.
-- `workflow`: declarative stage/trigger model used by the new configuration screen. Each stage can define `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate handling, transition stage references, and per-trigger notification settings.
+- `workflow`: declarative stage/trigger model used by the configuration screen. Each stage can define `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, `startMode`, `finishMode`, candidate/sticky timeout settings, duplicate handling, transition stage references, booleans such as `transitional` / `allowPartialFromFinish`, list fields such as `allowedNextStages` / `candidateCancelOnEvents`, and per-trigger notification settings.
 - `workflow` is now the preferred and sufficient way to describe business logic; a config that already contains `workflow.stages[]` does **not** need the legacy `cameras` block.
 - Legacy `cameras` + `timing` are still supported only as a backward-compatible fallback. If `workflow` is omitted, the application derives an equivalent default workflow from those legacy blocks so old configs continue to work.
 - Legacy camera fallback fields, when used, are: common camera lists for Drive in / Service / Parking, transition cameras `driveInToService` and `serviceToDriveIn`, plus `servicePosts` with `inDirectionRange` / `outDirectionRange`.
@@ -57,7 +61,9 @@ Use `config.json` (not committed) with:
   - Direction ranges per camera (`from`/`to`) where null means no filtering. Ranges support wrap-around through `0` degrees (`270 -> 90`) and use an exclusive upper bound, so adjacent ranges can safely share borders without double-classifying `90`/`270`.
 - `reports.outputDirectory`: optional folder where `/report/sequences.xlsx` stores `sequences.xlsx`, and `/report/sequences.xlsx/dd-MM-yyyy` stores `sequences-dd-MM-yyyy.xlsx`. The folder is created automatically if missing.
 - Telegram notifications toggle and credentials.
-- `GET /config` returns the effective runtime config, so operators can inspect the generated workflow before editing it.
+- `GET /config` returns the effective runtime config, so operators can inspect the generated workflow before editing it. The HTML representation also pre-populates the stage/trigger cards from the same runtime config.
+- `GET /config/help` returns a static instruction page that explains Stage/Trigger semantics, mode/policy meanings, required stages (`drive_in`, `service`, `parking`), transitional stages, and links to the bundled PDF task.
+- `GET /config/task.pdf` streams the project technical task PDF directly from the application working directory.
 - `POST /config` validates required fields, positive timeouts, unique stage names, supported mode/policy values, and references such as `allowedNextStages`, `timeoutTransitionToStage`, and `intermediateStageOnTransition` before saving.
 
 ### What is required for startup
