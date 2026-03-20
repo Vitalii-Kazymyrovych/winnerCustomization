@@ -116,7 +116,8 @@
 - HTTP GET `/config`
   - Returns effective runtime config as JSON when JSON is requested.
   - Returns a workflow-oriented HTML editor when HTML is requested. The page embeds the runtime config JSON, renders `workflow.stages[]` as individual cards, and keeps non-workflow config sections intact in the browser state.
-  - The HTML editor includes global workflow settings, per-stage fields, separate `Start triggers` / `Finish triggers` sections, add/remove buttons, simple CSS styling, and native-JS save logic that submits `application/json` back to `/config`.
+  - The HTML editor includes global workflow settings, per-stage fields, separate `Start triggers` / `Finish triggers` sections, add/remove buttons, a minimal compatibility-first CSS layout, and native-JS save logic that submits `application/json` back to `/config`.
+  - Existing stages are rendered immediately from the runtime config on first load, and the JavaScript uses a compatibility fallback (`structuredClone` when available, JSON deep-clone otherwise) so the editor still works in browsers that do not support newer cloning APIs.
 - HTTP GET `/config/help`
   - Returns a static HTML instruction page that documents stage/trigger concepts, mode and timeout meanings, required business stages, transitional stages, valid/invalid configuration examples, and validation behavior.
 - HTTP GET `/config/task.pdf`

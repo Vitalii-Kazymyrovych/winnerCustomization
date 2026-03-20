@@ -81,6 +81,9 @@
 
 ## 2026-03-20
 
+- Fixed the `/config` workflow editor for older/locked-down browsers by removing the hard dependency on `structuredClone`; the page now falls back to JSON cloning so existing stages render immediately and `New Stage` / `New Trigger` buttons work again.
+- Simplified `/config` HTML styling and added a small stage summary row so operators can immediately see how many stages/triggers were loaded from runtime config.
+- Expanded `ConfigControllerTest` to assert the compatibility helper and stage-summary markup, and updated `README.md` / `TECHNICAL_SPEC.md` to document the simpler, compatibility-focused UI.
 - Replaced the `/config` textarea with a native-JS workflow form editor: stages now render as cards with structured fields, separate start/finish trigger editors, add/remove controls, multiline list inputs, and JSON save via `POST /config`.
 - Added `/config/help` static instruction page plus `/config/task.pdf` endpoint so operators can read field explanations, required-stage guidance, examples, and open the bundled PDF task from the UI.
 - Updated `ConfigControllerTest`, `README.md`, and `TECHNICAL_SPEC.md` to cover the new configuration/help endpoints and workflow-editor behavior.

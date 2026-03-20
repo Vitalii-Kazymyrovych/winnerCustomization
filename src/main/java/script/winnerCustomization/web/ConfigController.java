@@ -192,100 +192,101 @@ public class ConfigController {
                     }
                     body {
                       margin: 0;
-                      background: #f8fafc;
-                      color: #1f2937;
+                      background: #f3f4f6;
+                      color: #111827;
                     }
                     .page {
-                      max-width: 1400px;
+                      max-width: 1280px;
                       margin: 0 auto;
-                      padding: 2rem;
+                      padding: 24px;
                     }
                     .toolbar, .workflow-settings, .panel, .trigger-list, .stage-header, .trigger-header {
                       display: flex;
-                      gap: 0.75rem;
+                      gap: 12px;
                       flex-wrap: wrap;
                       align-items: center;
                     }
                     .toolbar {
                       justify-content: space-between;
-                      margin-bottom: 1rem;
+                      margin-bottom: 16px;
                     }
                     .button-row {
                       display: flex;
-                      gap: 0.75rem;
+                      gap: 12px;
                       flex-wrap: wrap;
                     }
                     button, .link-button {
-                      border: 0;
-                      border-radius: 10px;
-                      padding: 0.75rem 1rem;
-                      font-size: 0.95rem;
+                      border: 1px solid #9ca3af;
+                      border-radius: 6px;
+                      padding: 10px 14px;
+                      font-size: 14px;
                       cursor: pointer;
                       text-decoration: none;
+                      background: #ffffff;
+                      color: #111827;
                     }
-                    .primary { background: #2563eb; color: white; }
-                    .secondary { background: #e2e8f0; color: #0f172a; }
-                    .danger { background: #fee2e2; color: #991b1b; }
-                    .page-note, .panel, .stage-card, .trigger-card {
+                    .primary { background: #2563eb; border-color: #2563eb; color: white; }
+                    .secondary { background: #ffffff; }
+                    .danger { background: #ffffff; border-color: #dc2626; color: #b91c1c; }
+                    .page-note, .panel, .stage-card, .trigger-card, .trigger-column {
                       background: white;
-                      border: 1px solid #dbe4f0;
-                      border-radius: 14px;
-                      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+                      border: 1px solid #d1d5db;
+                      border-radius: 6px;
                     }
                     .page-note, .panel {
-                      padding: 1rem 1.25rem;
-                      margin-bottom: 1rem;
+                      padding: 16px;
+                      margin-bottom: 16px;
                     }
                     .page-note {
                       display: flex;
                       justify-content: space-between;
-                      gap: 1rem;
+                      gap: 16px;
                       align-items: center;
                     }
                     .panel h2, .stage-card h2, .trigger-column h3, .trigger-group h3 {
                       margin-top: 0;
                     }
                     .workflow-settings {
-                      margin-top: 1rem;
+                      margin-top: 16px;
                     }
                     .field-grid {
                       display: grid;
                       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                      gap: 0.9rem;
+                      gap: 12px;
                     }
                     .field {
                       display: flex;
                       flex-direction: column;
-                      gap: 0.35rem;
+                      gap: 6px;
                     }
                     .field.wide {
                       grid-column: 1 / -1;
                     }
                     label {
-                      font-size: 0.9rem;
+                      font-size: 13px;
                       font-weight: 600;
                     }
                     input, select, textarea {
                       width: 100%%;
                       box-sizing: border-box;
-                      border: 1px solid #cbd5e1;
-                      border-radius: 10px;
-                      padding: 0.7rem 0.8rem;
+                      border: 1px solid #9ca3af;
+                      border-radius: 4px;
+                      padding: 8px 10px;
                       font: inherit;
                       background: white;
                     }
                     textarea {
-                      min-height: 5.5rem;
+                      min-height: 88px;
                       resize: vertical;
                     }
                     .hint {
-                      font-size: 0.8rem;
-                      color: #64748b;
+                      font-size: 12px;
+                      color: #6b7280;
                     }
                     .status {
-                      margin-bottom: 1rem;
-                      padding: 0.9rem 1rem;
-                      border-radius: 12px;
+                      margin-bottom: 16px;
+                      padding: 12px 14px;
+                      border-radius: 6px;
                       display: none;
                       white-space: pre-wrap;
                     }
@@ -294,53 +295,62 @@ public class ConfigController {
                     .stage-list {
                       display: flex;
                       flex-direction: column;
-                      gap: 1rem;
+                      gap: 16px;
                     }
                     .stage-card {
-                      padding: 1rem;
+                      padding: 16px;
                     }
                     .stage-header {
                       justify-content: space-between;
-                      margin-bottom: 1rem;
+                      margin-bottom: 16px;
                     }
                     .stage-title {
-                      font-size: 1.15rem;
+                      font-size: 18px;
                       font-weight: 700;
                     }
                     .triggers-layout {
                       display: grid;
                       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-                      gap: 1rem;
-                      margin-top: 1rem;
+                      gap: 16px;
+                      margin-top: 16px;
                     }
                     .trigger-column {
-                      background: #f8fafc;
-                      border: 1px solid #e2e8f0;
-                      border-radius: 12px;
-                      padding: 0.9rem;
+                      padding: 12px;
                     }
                     .trigger-list {
                       flex-direction: column;
                       align-items: stretch;
-                      margin-top: 0.75rem;
+                      margin-top: 12px;
                     }
                     .trigger-card {
-                      padding: 0.9rem;
+                      padding: 12px;
                     }
                     .trigger-header {
                       justify-content: space-between;
-                      margin-bottom: 0.75rem;
+                      margin-bottom: 12px;
                     }
                     .muted {
-                      color: #64748b;
+                      color: #6b7280;
                     }
                     code {
-                      background: #eff6ff;
-                      border-radius: 6px;
-                      padding: 0.15rem 0.35rem;
+                      background: #f3f4f6;
+                      border-radius: 4px;
+                      padding: 2px 5px;
+                    }
+                    .summary-row {
+                      display: flex;
+                      flex-wrap: wrap;
+                      gap: 12px;
+                      margin-bottom: 12px;
+                    }
+                    .summary-item {
+                      padding: 8px 10px;
+                      border: 1px solid #d1d5db;
+                      border-radius: 4px;
+                      background: #ffffff;
                     }
                     @media (max-width: 720px) {
-                      .page { padding: 1rem; }
+                      .page { padding: 12px; }
                       .page-note { align-items: flex-start; flex-direction: column; }
                     }
                   </style>
@@ -350,7 +360,7 @@ public class ConfigController {
                     <div class=\"toolbar\">
                       <div>
                         <h1>Runtime workflow configuration</h1>
-                        <p class=\"muted\">Edit workflow stages/triggers visually. Non-workflow config stays unchanged and is preserved during save.</p>
+                        <p class=\"muted\">All existing stages are loaded immediately. Edit them directly, add new ones if needed, and keep the interface simple and working.</p>
                       </div>
                       <div class=\"button-row\">
                         <button id=\"new-stage-button\" type=\"button\" class=\"secondary\">New Stage</button>
@@ -379,6 +389,7 @@ public class ConfigController {
                       </div>
                     </section>
 
+                    <div id=\"stage-summary\" class=\"summary-row\"></div>
                     <div id=\"stage-list\" class=\"stage-list\"></div>
                   </div>
 
@@ -394,6 +405,7 @@ public class ConfigController {
 
                     const initialConfig = JSON.parse(document.getElementById("initial-config").textContent || "{}");
                     const stageList = document.getElementById("stage-list");
+                    const stageSummary = document.getElementById("stage-summary");
                     const statusBox = document.getElementById("status");
                     const defaultSequenceCloseTimeoutInput = document.getElementById("default-sequence-close-timeout");
 
@@ -411,7 +423,7 @@ public class ConfigController {
                     render();
 
                     function normalizeConfig(config) {
-                      const normalized = structuredClone(config || {});
+                      const normalized = cloneValue(config || {});
                       if (!normalized.workflow) {
                         normalized.workflow = {};
                       }
@@ -426,7 +438,7 @@ public class ConfigController {
                     }
 
                     function normalizeStage(stage) {
-                      const normalized = structuredClone(stage || {});
+                      const normalized = cloneValue(stage || {});
                       normalized.name = normalized.name || "";
                       normalized.labelTemplate = normalized.labelTemplate || "";
                       normalized.startMode = normalized.startMode || "immediate";
@@ -445,7 +457,7 @@ public class ConfigController {
                     }
 
                     function normalizeTrigger(trigger) {
-                      const normalized = structuredClone(trigger || {});
+                      const normalized = cloneValue(trigger || {});
                       normalized.cameraId = normalized.cameraId ?? "";
                       normalized.eventType = normalized.eventType || "in";
                       normalized.eventKey = normalized.eventKey || "";
@@ -490,8 +502,33 @@ public class ConfigController {
                       });
                     }
 
+                    function cloneValue(value) {
+                      if (typeof structuredClone === "function") {
+                        return structuredClone(value);
+                      }
+                      return JSON.parse(JSON.stringify(value));
+                    }
+
+                    function renderSummary() {
+                      const stages = state.config.workflow.stages;
+                      const triggerCount = stages.reduce((sum, stage) => sum + stage.startTriggers.length + stage.finishTriggers.length, 0);
+                      const stageNames = stages.map(stage => stage.name).filter(Boolean);
+                      stageSummary.innerHTML = "";
+                      [
+                        `Stages: ${stages.length}`,
+                        `Triggers: ${triggerCount}`,
+                        stageNames.length > 0 ? `Loaded: ${stageNames.join(", ")}` : "Loaded: none"
+                      ].forEach(text => {
+                        const item = document.createElement("div");
+                        item.className = "summary-item";
+                        item.textContent = text;
+                        stageSummary.appendChild(item);
+                      });
+                    }
+
                     function render() {
                       defaultSequenceCloseTimeoutInput.value = state.config.workflow.defaultSequenceCloseTimeoutMinutes ?? "";
+                      renderSummary();
                       stageList.innerHTML = "";
                       if (state.config.workflow.stages.length === 0) {
                         const empty = document.createElement("section");

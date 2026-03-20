@@ -53,6 +53,8 @@ class ConfigControllerTest {
         mockMvc.perform(get("/config").accept(MediaType.TEXT_HTML))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("New Stage")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("stage-summary")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("cloneValue")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Start triggers")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("drive_in")));
     }

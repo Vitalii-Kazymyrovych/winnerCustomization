@@ -30,8 +30,9 @@ Spring Boot script that:
    - Help page: `http://localhost:8080/config/help`
    - Technical task PDF: `http://localhost:8080/config/task.pdf`
    - JSON API: `GET /config`, `POST /config`
-   - The HTML editor renders each workflow stage as a separate card with stage fields, `Start triggers`, and `Finish triggers`, plus `New Stage` / `New Trigger` buttons and delete actions.
+   - The HTML editor renders every existing `workflow.stages[]` entry immediately as a separate card with editable stage fields, `Start triggers`, and `Finish triggers`, plus working `New Stage` / `New Trigger` buttons and delete actions.
    - The page preserves non-workflow sections of `config.json`; the browser serializes the edited workflow back to JSON and sends it as `application/json` to `POST /config`.
+   - The `/config` UI intentionally uses minimal styling and a compatibility-safe native-JS implementation so it still works in older Windows/browser environments where newer APIs such as `structuredClone` may be unavailable.
    - Successful saves rewrite `config.json` and update the in-memory configuration immediately without restart.
    - `workflow`, `sourceTable`, `notifications`, and `reports` changes affect subsequent sequence/report operations immediately.
    - Database connection changes (`sourceDatabase`, `sequenceDatabase`, `rootDatabase`) are persisted by the UI too, but existing JDBC beans are created only at startup, so DB host/port/user/password changes require an application restart.
