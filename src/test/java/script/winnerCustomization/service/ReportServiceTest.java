@@ -12,7 +12,6 @@ import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
-import script.winnerCustomization.model.SequenceRecord.StageType;
 import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.io.ByteArrayInputStream;
@@ -113,19 +112,23 @@ class ReportServiceTest {
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
 
         SequenceRecord record = new SequenceRecord("BB2222", LocalDateTime.of(2026, 3, 16, 12, 0));
-        record.addStage(new StageWindow(StageType.PARKING,
+        record.addStage(new StageWindow("parking", "Parking",
                 null,
                 LocalDateTime.of(2026, 3, 16, 12, 5),
-                null,
                 "",
                 true,
+                false,
+                false,
+                true,
                 1));
-        record.addStage(new StageWindow(StageType.BACKYARD,
+        record.addStage(new StageWindow("backyard", "Backyard",
                 LocalDateTime.of(2026, 3, 16, 12, 5),
                 LocalDateTime.of(2026, 3, 16, 12, 12),
-                null,
                 "",
                 false,
+                false,
+                true,
+                true,
                 2));
         record.setFinishedAt(LocalDateTime.of(2026, 3, 16, 12, 12));
         when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
@@ -143,7 +146,7 @@ class ReportServiceTest {
     }
 
     @Test
-    void shouldCalculateDurationForOpenPostUsingSequenceFinishedAt() throws Exception {
+    void shouldCalculateDurationForOpenStickyStageUsingSequenceFinishedAt() throws Exception {
         AppConfig config = new AppConfig();
         when(runtimeConfig.get()).thenReturn(config);
 
@@ -151,12 +154,14 @@ class ReportServiceTest {
         when(detectionService.loadAllDetections()).thenReturn(List.of(detection));
 
         SequenceRecord record = new SequenceRecord("POST01", LocalDateTime.of(2026, 3, 19, 9, 0));
-        record.addStage(new StageWindow(StageType.POST,
+        record.addStage(new StageWindow("post_1", "Post 1",
                 LocalDateTime.of(2026, 3, 19, 9, 10),
                 null,
-                "Post 1",
                 "",
                 false,
+                true,
+                false,
+                true,
                 1));
         record.setFinishedAt(LocalDateTime.of(2026, 3, 19, 9, 25));
         when(sequenceEngine.build(List.of(detection), config)).thenReturn(List.of(record));
@@ -246,26 +251,32 @@ class ReportServiceTest {
 
     private SequenceRecord sampleRecord(String plate) {
         SequenceRecord record = new SequenceRecord(plate, LocalDateTime.of(2026, 3, 18, 10, 0));
-        record.addStage(new StageWindow(StageType.DRIVE_IN,
+        record.addStage(new StageWindow("drive_in", "Drive In",
                 LocalDateTime.of(2026, 3, 18, 10, 0),
                 LocalDateTime.of(2026, 3, 18, 10, 5),
-                null,
                 "",
                 false,
+                false,
+                false,
+                true,
                 1));
-        record.addStage(new StageWindow(StageType.SERVICE,
+        record.addStage(new StageWindow("service", "Service",
                 LocalDateTime.of(2026, 3, 18, 10, 10),
                 LocalDateTime.of(2026, 3, 18, 10, 24, 59),
-                null,
                 "No Post in within 15 minutes",
                 false,
+                false,
+                false,
+                true,
                 2));
-        record.addStage(new StageWindow(StageType.POST,
+        record.addStage(new StageWindow("post_2", "Post 2",
                 LocalDateTime.of(2026, 3, 18, 10, 25),
                 null,
-                "Post 2",
                 "",
                 false,
+                true,
+                false,
+                true,
                 3));
         record.setFinishedAt(LocalDateTime.of(2026, 3, 18, 10, 25));
         return record;

@@ -9,7 +9,6 @@ import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
-import script.winnerCustomization.model.SequenceRecord.StageType;
 import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import javax.sql.DataSource;
@@ -84,12 +83,14 @@ class PostgresDatabaseOperationsIntegrationTest {
         sequenceStorageService.initialize();
 
         SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.parse("2026-03-15T10:00:00"));
-        record.addStage(new StageWindow(StageType.DRIVE_IN,
+        record.addStage(new StageWindow("drive_in", "Drive In",
                 LocalDateTime.parse("2026-03-15T10:00:00"),
                 LocalDateTime.parse("2026-03-15T10:10:00"),
-                null,
                 "Exceeded 15 min",
                 false,
+                false,
+                false,
+                true,
                 1));
         record.setFinishedAt(LocalDateTime.parse("2026-03-15T10:12:00"));
         sequenceStorageService.replaceAll(List.of(record));

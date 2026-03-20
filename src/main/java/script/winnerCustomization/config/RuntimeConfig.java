@@ -95,6 +95,11 @@ public class RuntimeConfig {
                 throw new IllegalArgumentException("workflow stage labelTemplate is required for " + stage.getName());
             }
             validateTriggers(stage.getStartTriggers(), stage.getName(), "startTriggers");
+            validateEnum(stage.getStartMode(), Set.of("immediate", "candidate"), "startMode", stage.getName());
+            validateEnum(stage.getFinishMode(), Set.of("immediate", "sticky"), "finishMode", stage.getName());
+            validateEnum(stage.getUnexpectedNextStagePolicy(), Set.of("close_current_and_start_next", "insert_intermediate_and_start_next", "ignore", "start_partial_next"), "unexpectedNextStagePolicy", stage.getName());
+            validateEnum(stage.getStartDuplicatePolicy(), Set.of("ignore", "restart", "refresh_candidate"), "startDuplicatePolicy", stage.getName());
+            validateEnum(stage.getFinishDuplicatePolicy(), Set.of("ignore", "update_sticky"), "finishDuplicatePolicy", stage.getName());
             validateTriggers(stage.getFinishTriggers(), stage.getName(), "finishTriggers");
             if (stage.getCandidateTimeoutMinutes() != null && stage.getCandidateTimeoutMinutes() <= 0) {
                 throw new IllegalArgumentException("candidateTimeoutMinutes must be positive for " + stage.getName());
@@ -148,6 +153,15 @@ public class RuntimeConfig {
         }
         if (!stageNames.contains(reference)) {
             throw new IllegalArgumentException(fieldName + " references missing stage '" + reference + "' from " + stageName);
+        }
+    }
+
+    private void validateEnum(String value, Set<String> allowed, String fieldName, String stageName) {
+        if (isBlank(value)) {
+            return;
+        }
+        if (!allowed.contains(value)) {
+            throw new IllegalArgumentException(fieldName + " has unsupported value '" + value + "' for " + stageName);
         }
     }
 

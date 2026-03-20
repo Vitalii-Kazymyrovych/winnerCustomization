@@ -86,77 +86,55 @@ public class SequenceRecord {
         return joiner.toString();
     }
 
-    public List<StageWindow> getStagesByType(StageType type) {
+    public List<StageWindow> getStagesByName(String stageName) {
         return stagesChronologically().stream()
-                .filter(stage -> stage.stageType() == type)
+                .filter(stage -> Objects.equals(stage.stageName(), stageName))
                 .toList();
     }
 
-    public StageWindow findLatestStage(StageType type) {
+    public StageWindow findLatestStage(String stageName) {
         return stagesChronologically().stream()
-                .filter(stage -> stage.stageType() == type)
+                .filter(stage -> Objects.equals(stage.stageName(), stageName))
                 .reduce((first, second) -> second)
                 .orElse(null);
     }
 
-    public record StageWindow(StageType stageType,
+    public record StageWindow(String stageName,
+                              String reportLabel,
                               LocalDateTime timeIn,
                               LocalDateTime timeOut,
-                              String reportLabelOverride,
                               String alert,
                               boolean partial,
+                              boolean sticky,
+                              boolean transitional,
+                              boolean saveAfterSequenceClosed,
                               int eventOrder) {
-        public String reportLabel() {
-            return reportLabelOverride != null && !reportLabelOverride.isBlank()
-                    ? reportLabelOverride
-                    : stageType.reportLabel();
-        }
-
         public LocalDateTime sortTime() {
             return timeIn != null ? timeIn : timeOut;
         }
 
         public StageWindow withTimeIn(LocalDateTime value) {
-            return new StageWindow(stageType, value, timeOut, reportLabelOverride, alert, partial, eventOrder);
+            return new StageWindow(stageName, reportLabel, value, timeOut, alert, partial, sticky, transitional, saveAfterSequenceClosed, eventOrder);
         }
 
         public StageWindow withTimeOut(LocalDateTime value) {
-            return new StageWindow(stageType, timeIn, value, reportLabelOverride, alert, partial, eventOrder);
+            return new StageWindow(stageName, reportLabel, timeIn, value, alert, partial, sticky, transitional, saveAfterSequenceClosed, eventOrder);
         }
 
         public StageWindow withAlert(String value) {
-            return new StageWindow(stageType, timeIn, timeOut, reportLabelOverride, value, partial, eventOrder);
+            return new StageWindow(stageName, reportLabel, timeIn, timeOut, value, partial, sticky, transitional, saveAfterSequenceClosed, eventOrder);
         }
 
         public StageWindow asPartial(boolean value) {
-            return new StageWindow(stageType, timeIn, timeOut, reportLabelOverride, alert, value, eventOrder);
+            return new StageWindow(stageName, reportLabel, timeIn, timeOut, alert, value, sticky, transitional, saveAfterSequenceClosed, eventOrder);
         }
 
         public boolean sameBounds(StageWindow other) {
             return other != null
-                    && stageType == other.stageType
+                    && Objects.equals(stageName, other.stageName)
                     && Objects.equals(timeIn, other.timeIn)
                     && Objects.equals(timeOut, other.timeOut)
-                    && Objects.equals(reportLabel(), other.reportLabel());
-        }
-    }
-
-    public enum StageType {
-        DRIVE_IN("Drive In"),
-        SERVICE("Service"),
-        POST("Post"),
-        PARKING("Parking"),
-        BACKYARD("Backyard"),
-        TEST_DRIVE("Test-Drive");
-
-        private final String reportLabel;
-
-        StageType(String reportLabel) {
-            this.reportLabel = reportLabel;
-        }
-
-        public String reportLabel() {
-            return reportLabel;
+                    && Objects.equals(reportLabel, other.reportLabel);
         }
     }
 }

@@ -11,7 +11,6 @@ import script.winnerCustomization.model.AlertJobType;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
-import script.winnerCustomization.model.SequenceRecord.StageType;
 import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.time.Clock;
@@ -46,28 +45,14 @@ class AlertSchedulerServiceTest {
 
     @Test
     void shouldCreatePendingJobsDuringSync() {
-        AppConfig config = new AppConfig();
-        AppConfig.TimingConfig timing = new AppConfig.TimingConfig();
-        timing.setDriveInToDriveOutAlertMinutes(15);
-        timing.setServiceToPostAlertMinutes(20);
-        config.setTiming(timing);
+        AppConfig config = workflowConfig();
 
         Detection detection = new Detection(1L, "AA1111", 10, 90, LocalDateTime.now());
         SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
-        record.addStage(new StageWindow(StageType.DRIVE_IN,
-                LocalDateTime.of(2026, 1, 1, 10, 0),
-                null,
-                null,
-                "",
-                false,
-                1));
-        record.addStage(new StageWindow(StageType.SERVICE,
-                LocalDateTime.of(2026, 1, 1, 10, 5),
-                null,
-                null,
-                "",
-                false,
-                2));
+        record.addStage(new StageWindow("drive_in", "Drive In",
+                LocalDateTime.of(2026, 1, 1, 10, 0), null, "", false, false, false, true, 1));
+        record.addStage(new StageWindow("service", "Service",
+                LocalDateTime.of(2026, 1, 1, 10, 5), null, "", false, false, false, true, 2));
         record.setFinishedAt(LocalDateTime.of(2026, 1, 1, 10, 5));
 
         when(runtimeConfig.get()).thenReturn(config);
@@ -95,25 +80,14 @@ class AlertSchedulerServiceTest {
 
     @Test
     void shouldCancelJobsWhenStagesClosedBeforeDeadline() {
-        AppConfig config = new AppConfig();
-        config.setTiming(new AppConfig.TimingConfig());
+        AppConfig config = workflowConfig();
 
         Detection detection = new Detection(1L, "AA1111", 10, 90, LocalDateTime.now());
         SequenceRecord record = new SequenceRecord("AA1111", LocalDateTime.of(2026, 1, 1, 10, 0));
-        record.addStage(new StageWindow(StageType.DRIVE_IN,
-                LocalDateTime.of(2026, 1, 1, 10, 0),
-                LocalDateTime.of(2026, 1, 1, 10, 3),
-                null,
-                "",
-                false,
-                1));
-        record.addStage(new StageWindow(StageType.SERVICE,
-                LocalDateTime.of(2026, 1, 1, 10, 5),
-                LocalDateTime.of(2026, 1, 1, 10, 7),
-                null,
-                "",
-                false,
-                2));
+        record.addStage(new StageWindow("drive_in", "Drive In",
+                LocalDateTime.of(2026, 1, 1, 10, 0), LocalDateTime.of(2026, 1, 1, 10, 3), "", false, false, false, true, 1));
+        record.addStage(new StageWindow("service", "Service",
+                LocalDateTime.of(2026, 1, 1, 10, 5), LocalDateTime.of(2026, 1, 1, 10, 7), "", false, false, false, true, 2));
         record.setFinishedAt(LocalDateTime.of(2026, 1, 1, 10, 7));
 
         when(runtimeConfig.get()).thenReturn(config);
@@ -164,5 +138,36 @@ class AlertSchedulerServiceTest {
 
         verify(telegramNotifier, never()).sendIfEnabled(any(), any());
         verify(alertJobStorageService, never()).markSent(anyLong(), any());
+    }
+
+    private AppConfig workflowConfig() {
+        AppConfig config = new AppConfig();
+        AppConfig.WorkflowConfig workflow = new AppConfig.WorkflowConfig();
+
+        AppConfig.StageConfig driveIn = new AppConfig.StageConfig();
+        driveIn.setName("drive_in");
+        driveIn.setLabelTemplate("Drive In");
+        AppConfig.TriggerConfig driveInTrigger = new AppConfig.TriggerConfig();
+        AppConfig.NotificationRule driveInNotification = new AppConfig.NotificationRule();
+        driveInNotification.setEnabled(true);
+        driveInNotification.setDelayMinutes(15);
+        driveInNotification.setTemplate("No Drive in (out) within {{threshold}} minutes");
+        driveInTrigger.setNotification(driveInNotification);
+        driveIn.setStartTriggers(List.of(driveInTrigger));
+
+        AppConfig.StageConfig service = new AppConfig.StageConfig();
+        service.setName("service");
+        service.setLabelTemplate("Service");
+        AppConfig.TriggerConfig serviceTrigger = new AppConfig.TriggerConfig();
+        AppConfig.NotificationRule serviceNotification = new AppConfig.NotificationRule();
+        serviceNotification.setEnabled(true);
+        serviceNotification.setDelayMinutes(20);
+        serviceNotification.setTemplate("No Post in within {{threshold}} minutes");
+        serviceTrigger.setNotification(serviceNotification);
+        service.setStartTriggers(List.of(serviceTrigger));
+
+        workflow.setStages(List.of(driveIn, service));
+        config.setWorkflow(workflow);
+        return config;
     }
 }

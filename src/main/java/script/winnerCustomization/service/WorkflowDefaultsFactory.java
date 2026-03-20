@@ -5,6 +5,8 @@ import script.winnerCustomization.model.AppConfig;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
 
 @Component
 public class WorkflowDefaultsFactory {
@@ -23,12 +25,29 @@ public class WorkflowDefaultsFactory {
         AppConfig.WorkflowConfig workflow = new AppConfig.WorkflowConfig();
         workflow.setDefaultSequenceCloseTimeoutMinutes(48 * 60);
         List<AppConfig.StageConfig> stages = new ArrayList<>();
-        stages.add(driveInStage(config));
-        stages.add(serviceStage(config));
-        stages.addAll(postStages(config));
-        stages.add(parkingStage(config));
-        stages.add(backyardStage(config));
-        stages.add(testDriveStage(config));
+        AppConfig.StageConfig driveIn = driveInStage(config);
+        AppConfig.StageConfig service = serviceStage(config);
+        List<AppConfig.StageConfig> posts = postStages(config);
+        AppConfig.StageConfig parking = parkingStage(config);
+        AppConfig.StageConfig backyard = backyardStage(config);
+        AppConfig.StageConfig testDrive = testDriveStage(config);
+
+        driveIn.setAllowedNextStages(List.of(service.getName(), backyard.getName(), parking.getName(), testDrive.getName()));
+        service.setAllowedNextStages(buildAllowedServiceNext(posts, backyard, testDrive));
+        for (AppConfig.StageConfig post : posts) {
+            post.setAllowedNextStages(buildAllowedPostNext(posts, service, parking, backyard, driveIn));
+            post.setUnexpectedNextStagePolicy("close_current_and_start_next");
+        }
+        parking.setAllowedNextStages(List.of(backyard.getName(), driveIn.getName(), service.getName()));
+        backyard.setAllowedNextStages(List.of(driveIn.getName(), service.getName(), parking.getName()));
+        testDrive.setAllowedNextStages(List.of(driveIn.getName(), service.getName(), parking.getName(), backyard.getName()));
+
+        stages.add(driveIn);
+        stages.add(service);
+        stages.addAll(posts);
+        stages.add(parking);
+        stages.add(backyard);
+        stages.add(testDrive);
         workflow.setStages(stages);
         return workflow;
     }
@@ -63,28 +82,34 @@ public class WorkflowDefaultsFactory {
         }
         for (AppConfig.PostCameraConfig postCamera : config.getCameras().getServicePosts()) {
             AppConfig.StageConfig stage = new AppConfig.StageConfig();
-            stage.setName("post_" + sanitize(postCamera.getPostName()));
-            stage.setLabelTemplate(postCamera.getPostName());
+            String instance = postCamera.getPostName();
+            stage.setName("post_" + sanitize(instance));
+            stage.setLabelTemplate("{{instance}}");
             stage.setFinishMode("sticky");
+            stage.setStickyCloseTimeoutMinutes(config.getTiming() == null ? 60 : config.getTiming().getTestDriveResetMinutes());
             stage.setAllowPartialFromFinish(true);
             stage.setTimeoutTransitionToStage("service");
-            AppConfig.TriggerConfig in = new AppConfig.TriggerConfig();
-            in.setCameraId(postCamera.getAnalyticsId());
-            in.setDirectionRange(postCamera.getInDirectionRange());
-            in.setEventType("in");
-            in.setEventKey(stage.getName().toUpperCase() + "_IN");
-            in.setDerivedStageInstance(postCamera.getPostName());
-            AppConfig.TriggerConfig out = new AppConfig.TriggerConfig();
-            out.setCameraId(postCamera.getAnalyticsId());
-            out.setDirectionRange(postCamera.getOutDirectionRange());
-            out.setEventType("out");
-            out.setEventKey(stage.getName().toUpperCase() + "_OUT");
-            out.setDerivedStageInstance(postCamera.getPostName());
-            stage.setStartTriggers(List.of(in));
-            stage.setFinishTriggers(List.of(out));
+            stage.setStartTriggers(List.of(postTrigger(stage.getName(), postCamera.getAnalyticsId(), postCamera.getInDirectionRange(), "in", stage.getName().toUpperCase(Locale.ROOT) + "_IN", instance)));
+            stage.setFinishTriggers(List.of(postTrigger(stage.getName(), postCamera.getAnalyticsId(), postCamera.getOutDirectionRange(), "out", stage.getName().toUpperCase(Locale.ROOT) + "_OUT", instance)));
             stages.add(stage);
         }
         return stages;
+    }
+
+    private AppConfig.TriggerConfig postTrigger(String stageName,
+                                                int cameraId,
+                                                AppConfig.DirectionRange range,
+                                                String eventType,
+                                                String eventKey,
+                                                String instance) {
+        AppConfig.TriggerConfig trigger = new AppConfig.TriggerConfig();
+        trigger.setName(stageName + "-" + eventType);
+        trigger.setCameraId(cameraId);
+        trigger.setDirectionRange(range);
+        trigger.setEventType(eventType);
+        trigger.setEventKey(eventKey);
+        trigger.setDerivedStageInstance(instance);
+        return trigger;
     }
 
     private AppConfig.StageConfig parkingStage(AppConfig config) {
@@ -118,11 +143,34 @@ public class WorkflowDefaultsFactory {
         stage.setCandidateTimeoutMinutes(candidateTimeout);
         stage.setCandidateCloseTimeoutMinutes(candidateCloseTimeout);
         stage.setSaveStageAfterSequenceClosed(false);
+        stage.setCandidateCancelOnEvents(List.of("SERVICE_IN", "PARKING_IN", "DRIVE_IN_IN", "DRIVE_IN_TO_SERVICE"));
         List<AppConfig.TriggerConfig> triggers = new ArrayList<>();
         triggers.addAll(toTriggers(config.getCameras() == null ? List.of() : config.getCameras().getDriveInOut(), "candidate", "DRIVE_IN_OUT", null, null));
         triggers.addAll(toTriggers(config.getCameras() == null ? List.of() : config.getCameras().getServiceToDriveIn(), "candidate", "SERVICE_TO_DRIVE_IN", null, null));
         stage.setStartTriggers(triggers);
         return stage;
+    }
+
+    private List<String> buildAllowedServiceNext(List<AppConfig.StageConfig> posts,
+                                                 AppConfig.StageConfig backyard,
+                                                 AppConfig.StageConfig testDrive) {
+        List<String> result = posts.stream().map(AppConfig.StageConfig::getName).collect(Collectors.toCollection(ArrayList::new));
+        result.add(backyard.getName());
+        result.add(testDrive.getName());
+        return result;
+    }
+
+    private List<String> buildAllowedPostNext(List<AppConfig.StageConfig> posts,
+                                              AppConfig.StageConfig service,
+                                              AppConfig.StageConfig parking,
+                                              AppConfig.StageConfig backyard,
+                                              AppConfig.StageConfig driveIn) {
+        List<String> result = posts.stream().map(AppConfig.StageConfig::getName).collect(Collectors.toCollection(ArrayList::new));
+        result.add(service.getName());
+        result.add(parking.getName());
+        result.add(backyard.getName());
+        result.add(driveIn.getName());
+        return result;
     }
 
     private List<AppConfig.TriggerConfig> toTriggers(List<AppConfig.CameraConfig> cameras,
@@ -154,6 +202,6 @@ public class WorkflowDefaultsFactory {
     }
 
     private String sanitize(String value) {
-        return value == null ? "post" : value.toLowerCase().replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        return value == null ? "post" : value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
     }
 }
