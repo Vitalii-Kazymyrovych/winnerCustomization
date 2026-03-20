@@ -81,6 +81,10 @@
 
 ## 2026-03-20
 
+- Replaced the `/config` textarea with a native-JS workflow form editor: stages now render as cards with structured fields, separate start/finish trigger editors, add/remove controls, multiline list inputs, and JSON save via `POST /config`.
+- Added `/config/help` static instruction page plus `/config/task.pdf` endpoint so operators can read field explanations, required-stage guidance, examples, and open the bundled PDF task from the UI.
+- Updated `ConfigControllerTest`, `README.md`, and `TECHNICAL_SPEC.md` to cover the new configuration/help endpoints and workflow-editor behavior.
+
 - Clarified that `workflow` is now the preferred runtime config, removed duplicate legacy `cameras`/`timing` blocks from `config.json.example`, and updated `README.md` / `TECHNICAL_SPEC.md` to document which config sections are required at startup versus editable live in the web UI (with DB credential changes still requiring restart).
 
 - Installed PostgreSQL 16 locally, created `source_database_name` / `sequences_database_name`, imported `results/alpr_detections.sql`, configured local `config.json` from the legacy production camera mapping, validated the running jar endpoints (`/config`, `/report/sequences.xlsx`, `/report/sequences.xlsx/18-03-2026`, `/source/trigger-pull`), and documented the operational verification in `OPERATION_REPORT.md`.

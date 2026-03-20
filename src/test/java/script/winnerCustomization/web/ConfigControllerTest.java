@@ -12,6 +12,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import script.winnerCustomization.config.RuntimeConfig;
 import script.winnerCustomization.model.AppConfig;
 
+import java.nio.file.Path;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,14 +45,26 @@ class ConfigControllerTest {
     }
 
     @Test
-    void shouldRenderPrimitiveHtmlEditor() throws Exception {
+    void shouldRenderWorkflowHtmlEditor() throws Exception {
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ConfigController(runtimeConfig, objectMapper)).build();
         when(runtimeConfig.get()).thenReturn(sampleConfig());
+        when(runtimeConfig.getConfigPath()).thenReturn(Path.of("/workspace/winnerCustomization/config.json"));
 
         mockMvc.perform(get("/config").accept(MediaType.TEXT_HTML))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("<textarea name=\"json\">")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("New Stage")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Start triggers")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("drive_in")));
+    }
+
+    @Test
+    void shouldRenderHelpPage() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ConfigController(runtimeConfig, objectMapper)).build();
+
+        mockMvc.perform(get("/config/help").accept(MediaType.TEXT_HTML))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Workflow configuration help")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("/config/task.pdf")));
     }
 
     @Test
@@ -74,6 +88,7 @@ class ConfigControllerTest {
         AppConfig config = sampleConfig();
         when(runtimeConfig.save(any(AppConfig.class))).thenReturn(config);
         when(runtimeConfig.get()).thenReturn(config);
+        when(runtimeConfig.getConfigPath()).thenReturn(Path.of("/workspace/winnerCustomization/config.json"));
 
         mockMvc.perform(post("/config")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
