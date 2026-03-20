@@ -43,14 +43,27 @@ class ConfigControllerTest {
     }
 
     @Test
-    void shouldRenderPrimitiveHtmlEditor() throws Exception {
+    void shouldRenderHtmlEditorWithHelpLink() throws Exception {
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ConfigController(runtimeConfig, objectMapper)).build();
         when(runtimeConfig.get()).thenReturn(sampleConfig());
 
         mockMvc.perform(get("/config").accept(MediaType.TEXT_HTML))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("<textarea name=\"json\">")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("/config/help")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Редагування конфігурації")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("drive_in")));
+    }
+
+    @Test
+    void shouldRenderDetailedHelpPageInUkrainian() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ConfigController(runtimeConfig, objectMapper)).build();
+
+        mockMvc.perform(get("/config/help").accept(MediaType.TEXT_HTML))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("як налаштовувати конфігурацію")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("workflow")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Повернутися до редактора конфігурації")));
     }
 
     @Test
@@ -80,7 +93,7 @@ class ConfigControllerTest {
                         .param("json", objectMapper.writeValueAsString(config))
                         .accept(MediaType.TEXT_HTML))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Save configuration")));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Зберегти конфігурацію")));
     }
 
     private AppConfig sampleConfig() {

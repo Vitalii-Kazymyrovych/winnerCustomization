@@ -92,3 +92,6 @@
 - Reworked `SequenceEngine` into a workflow-driven builder that reads dynamic stages/triggers from `workflow.stages[]`, supports generic candidate/sticky/partial/intermediate transition policies, and stores dynamic stage names/labels in `SequenceRecord` instead of a fixed enum.
 - Updated `WorkflowDefaultsFactory` to generate richer default workflow metadata (`allowedNextStages`, sticky timeouts, candidate cancel events, dynamic post labels) from legacy camera/timing config.
 - Switched report/alert/test models to dynamic `StageWindow` metadata, added workflow-mode validation in `RuntimeConfig`, and refreshed tests/docs (`README.md`, `TECHNICAL_SPEC.md`) to cover dynamic workflow behavior, `/config` validation, and dataset regression handling.
+
+- Added a dedicated Ukrainian `/config/help` page plus richer `/config` HTML navigation so operators can read detailed setup instructions directly in the app.
+- Extended `ConfigControllerTest` coverage for the help page and updated `README.md` / `TECHNICAL_SPEC.md` to document the new config-help route.
