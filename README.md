@@ -7,7 +7,8 @@ Spring Boot script that:
 3. Stores computed sequences in a separate PostgreSQL database asynchronously (does not block XLSX download response).
 4. Exposes XLSX report download endpoint in a stage-row layout (dynamic per sequence, not fixed stage columns).
 5. Runs DB-backed alert scheduling: pending alert jobs are stored in PostgreSQL and dispatched by background workers close to due time.
-6. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
+6. Provides a simple live configuration UI/API at `/config` for viewing and saving `config.json` without restarting the service.
+7. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
 
 ## Run
 
@@ -24,10 +25,14 @@ Spring Boot script that:
    ```bash
    java -jar target/winnerCustomization-0.0.1-SNAPSHOT.jar
    ```
-5. Optional manual trigger (for external analytics callbacks):
+5. Edit runtime configuration in browser or via API:
+   - HTML editor: `http://localhost:8080/config`
+   - JSON API: `GET /config`, `POST /config`
+   - Successful saves rewrite `config.json` and update the in-memory configuration immediately without restart.
+6. Optional manual trigger (for external analytics callbacks):
    - `http://localhost:8080/source/trigger-pull`
    - returns `200` on success, `409` if a trigger is currently running, `429` during cooldown.
-6. Download report from browser:
+7. Download report from browser:
    - Full report: `http://localhost:8080/report/sequences.xlsx`
    - Date-scoped report for one calendar day: `http://localhost:8080/report/sequences.xlsx/dd-MM-yyyy`
    - The date-scoped endpoint uses only detections from `dd-MM-yyyy 00:00:00` up to, but not including, the next day `00:00:00` when forming sequences.
@@ -49,6 +54,10 @@ Use `config.json` (not committed) with:
 - Alert timing thresholds.
 - `reports.outputDirectory`: optional folder where `/report/sequences.xlsx` stores `sequences.xlsx`, and `/report/sequences.xlsx/dd-MM-yyyy` stores `sequences-dd-MM-yyyy.xlsx`. The folder is created automatically if missing.
 - Telegram notifications toggle and credentials.
+
+- `workflow`: declarative stage/trigger model used by the new configuration screen. Each stage can define `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate handling, transition stage references, and per-trigger notification settings. If `workflow` is omitted, the application derives an equivalent default workflow from the legacy `cameras` + `timing` blocks so existing configs continue to work.
+- `GET /config` returns the effective runtime config, so operators can inspect the generated workflow before editing it.
+- `POST /config` validates required fields, positive timeouts, unique stage names, and references such as `allowedNextStages`, `timeoutTransitionToStage`, and `intermediateStageOnTransition` before saving.
 
 ## Timed notifications (DB-backed)
 
@@ -108,7 +117,7 @@ The current engine interprets detections as a chronological sequence of stage oc
 - XLSX report endpoints now return as soon as XLSX bytes are ready; sequence-table refresh runs in background to avoid browser download delay.
 - The dated endpoint builds sequences strictly from detections that fall inside the requested calendar day window (`00:00:00` inclusive to next-day `00:00:00` exclusive).
 - XLSX report now contains two sheets:
-  - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`). Post rows display the configured `servicePosts[].postName`.
+  - `Sequences`: grouped stage layout with a plate marker row followed by stage rows (`Stage`, `Time in`, `Time out`, `Duration`, `Alerts`). Post rows display the configured `servicePosts[].postName`. After every closed non-empty sequence the sheet also appends a `Sequence Closed` row with `finishedAt` in the `Time out` column.
   - `Events`: flat stage layout with one row per stage and columns `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`. Post rows also display the configured post name.
 - All XLSX timestamps are rendered as `yyyy-MM-dd HH:mm:ss` (without `T` separator or fractional seconds) for easier manual comparison with DB exports.
 - Records without stage windows are skipped in both sheets; the report never emits `No stages`.

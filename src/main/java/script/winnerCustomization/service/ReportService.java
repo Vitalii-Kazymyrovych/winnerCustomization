@@ -127,7 +127,7 @@ public class ReportService {
 
         int rowIndex = 1;
         for (SequenceRecord r : records) {
-            List<StageLine> stages = toStages(r);
+            List<StageLine> stages = toStages(r, true);
             if (stages.isEmpty()) {
                 continue;
             }
@@ -160,7 +160,7 @@ public class ReportService {
 
         int rowIndex = 1;
         for (SequenceRecord record : records) {
-            for (StageLine stage : toStages(record)) {
+            for (StageLine stage : toStages(record, false)) {
                 Row row = sheet.createRow(rowIndex++);
                 row.createCell(0).setCellValue(record.getPlateNumber());
                 row.createCell(1).setCellValue(stage.stageName());
@@ -176,15 +176,19 @@ public class ReportService {
         }
     }
 
-    private List<StageLine> toStages(SequenceRecord record) {
-        return record.stagesChronologically().stream()
+    private List<StageLine> toStages(SequenceRecord record, boolean includeSequenceClosed) {
+        List<StageLine> lines = new java.util.ArrayList<>(record.stagesChronologically().stream()
                 .map(stage -> new StageLine(
                         stage.reportLabel(),
                         stage.timeIn(),
                         stage.timeOut(),
                         resolveDurationEnd(record, stage),
                         stage.alert()))
-                .toList();
+                .toList());
+        if (includeSequenceClosed && !lines.isEmpty() && record.getFinishedAt() != null) {
+            lines.add(new StageLine("Sequence Closed", null, record.getFinishedAt(), null, ""));
+        }
+        return lines;
     }
 
     private LocalDateTime resolveDurationEnd(SequenceRecord record, SequenceRecord.StageWindow stage) {

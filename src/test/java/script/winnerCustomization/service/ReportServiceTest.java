@@ -68,6 +68,8 @@ class ReportServiceTest {
             assertThat(stageSheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Service");
             assertThat(stageSheet.getRow(3).getCell(4).getStringCellValue()).isEqualTo("No Post in within 15 minutes");
             assertThat(stageSheet.getRow(4).getCell(0).getStringCellValue()).isEqualTo("Post 2");
+            assertThat(stageSheet.getRow(5).getCell(0).getStringCellValue()).isEqualTo("Sequence Closed");
+            assertThat(stageSheet.getRow(5).getCell(2).getStringCellValue()).isEqualTo("2026-03-18 10:25:00");
 
             XSSFSheet eventsSheet = workbook.getSheet("Events");
             assertThat(eventsSheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Plate");
@@ -168,6 +170,7 @@ class ReportServiceTest {
             assertThat(sequences.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Post 1");
             assertThat(sequences.getRow(2).getCell(2).getStringCellValue()).isEqualTo("");
             assertThat(sequences.getRow(2).getCell(3).getStringCellValue()).isEqualTo("00:15:00");
+            assertThat(sequences.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Sequence Closed");
             assertThat(events.getRow(1).getCell(4).getStringCellValue()).isEqualTo("00:15:00");
         }
     }
