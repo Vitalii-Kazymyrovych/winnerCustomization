@@ -11,6 +11,7 @@
 - Loads runtime JSON configuration from `<working_dir>/config.json` at startup.
 - Stores the active config in an `AtomicReference<AppConfig>` so controllers/services always read the latest committed version.
 - Enriches legacy configs with a generated `workflow` section through `WorkflowDefaultsFactory`, validates workflow references/timeouts, and can persist updated config back into `config.json` without restart.
+- Runtime config mutation is only fully live for services that read values directly from `RuntimeConfig` on each operation (`workflow`, `sourceTable`, `notifications`, `reports`). JDBC connection beans are still singleton startup beans, so DB host/port/user/password changes are persisted but require application restart to recreate data sources.
 
 ### `JdbcConfig`
 - Creates two PostgreSQL data sources and JDBC templates:
@@ -33,10 +34,10 @@
 - `rootDatabase`: PostgreSQL root/admin connection used at startup to auto-create the sequence database if missing.
 - `sourceTable`: source detections table name + optional `loadFrom` timestamp (lower bound for `created_at`).
 - `notifications`: telegram on/off + token/chat id.
-- `timing`: thresholds for alerts and test-drive reset.
+- `timing`: legacy thresholds used only while synthesizing default `workflow` from old camera config; not required when `workflow` is fully specified explicitly.
 - `reports.outputDirectory`: optional folder path for saving generated XLSX file copy on each report request.
-- `workflow`: expanded runtime workflow model with `defaultSequenceCloseTimeoutMinutes` and `stages[]`. Each stage supports `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate policies, transition references, and per-trigger notification metadata.
-- `cameras`: legacy camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range. They are still supported and are converted into a default `workflow` model when `workflow` is omitted from JSON.
+- `workflow`: expanded runtime workflow model with `defaultSequenceCloseTimeoutMinutes` and `stages[]`. Each stage supports `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate policies, transition references, and per-trigger notification metadata. This is now the preferred and sufficient way to describe the sequence logic.
+- `cameras`: legacy camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range. They are only needed for backward compatibility and are converted into a default `workflow` model when `workflow` is omitted from JSON.
 - `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`; `postName` is preserved into `StageWindow.reportLabel()` so reports can show concrete post numbers/names.
 - `DirectionRange.contains(direction)` supports wrap-around intervals that cross `0` degrees (`270 -> 90`) and uses an exclusive upper bound so neighboring ranges can share a border without ambiguous double matches.
 
@@ -118,6 +119,21 @@
 - HTTP POST `/config`
   - Accepts either raw JSON or form-urlencoded `json` payload.
   - Validates and persists the config through `RuntimeConfig.save(...)`, then updates the in-memory runtime config immediately.
+  - Can persist the full JSON structure, but DB credential changes still require restart because datasource beans are not rebuilt dynamically.
+
+## Practical startup requirements
+
+- For a useful startup, `config.json` must provide:
+  - `sourceDatabase.host|port|db|schema|user|password`
+  - `sequenceDatabase.host|port|db|schema|user|password`
+  - `rootDatabase.host|port|user|password` because current startup always runs sequence-DB bootstrap
+  - `sourceTable.table`
+  - either an explicit `workflow.stages[]`, or legacy `cameras` (optionally with `timing`) so `WorkflowDefaultsFactory` can derive `workflow`
+- Optional on startup:
+  - `sourceTable.loadFrom`
+  - `notifications`
+  - `reports.outputDirectory`
+  - `timing` when explicit `workflow` is already complete
 
 ### `ReportService`
 - Method: `buildReport()`
