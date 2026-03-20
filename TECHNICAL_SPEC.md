@@ -115,7 +115,10 @@
 ### `ConfigController`
 - HTTP GET `/config`
   - Returns effective runtime config as JSON when JSON is requested.
-  - Returns a primitive HTML page with a `<textarea>` editor and POST form when HTML is requested.
+  - Returns a richer HTML page with a `<textarea>` editor, runtime/restart notes, and a link to the dedicated `/config/help` manual when HTML is requested.
+- HTTP GET `/config/help`
+  - Returns a standalone Ukrainian HTML manual for operators.
+  - Documents required config blocks, live-vs-restart behavior, `workflow` semantics, trigger fields, common mistakes, and a minimal JSON example.
 - HTTP POST `/config`
   - Accepts either raw JSON or form-urlencoded `json` payload.
   - Validates and persists the config through `RuntimeConfig.save(...)`, then updates the in-memory runtime config immediately.

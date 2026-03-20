@@ -8,7 +8,8 @@ Spring Boot script that:
 4. Exposes XLSX report download endpoint in a stage-row layout (dynamic per sequence, not fixed stage columns).
 5. Runs DB-backed alert scheduling: pending alert jobs are stored in PostgreSQL and dispatched by background workers close to due time.
 6. Provides a simple live configuration UI/API at `/config` for viewing and saving `config.json` without restarting the service.
-7. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
+7. Provides a dedicated Ukrainian help page at `/config/help` with detailed explanations for every configuration section and safe editing guidelines.
+8. Provides manual trigger endpoint to force source-table pull with anti-parallel and cooldown protection.
 
 ## Run
 
@@ -27,6 +28,7 @@ Spring Boot script that:
    ```
 5. Edit runtime configuration in browser or via API:
    - HTML editor: `http://localhost:8080/config`
+   - Help page (Ukrainian): `http://localhost:8080/config/help`
    - JSON API: `GET /config`, `POST /config`
    - Successful saves rewrite `config.json` and update the in-memory configuration immediately without restart.
    - `workflow`, `sourceTable`, `notifications`, and `reports` changes affect subsequent sequence/report operations immediately.
@@ -44,6 +46,8 @@ Spring Boot script that:
 ## Configuration
 
 Use `config.json` (not committed) with:
+
+- The `/config` editor now links to `/config/help`, a detailed Ukrainian operator guide that explains the purpose of each config section, when restart is required, and how to structure `workflow` stages/triggers safely.
 
 - Source DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
 - Sequence DB credentials: `host`, `port`, `db`, `schema`, `user`, `password`.
