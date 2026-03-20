@@ -1,8 +1,8 @@
 package script.winnerCustomization.model;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.LocalDateTime;
 
 public class AppConfig {
     private DatabaseConfig sourceDatabase;
@@ -13,6 +13,7 @@ public class AppConfig {
     private TimingConfig timing;
     private CamerasConfig cameras;
     private ReportsConfig reports;
+    private WorkflowConfig workflow;
 
     public DatabaseConfig getSourceDatabase() {
         return sourceDatabase;
@@ -78,6 +79,14 @@ public class AppConfig {
         this.reports = reports;
     }
 
+    public WorkflowConfig getWorkflow() {
+        return workflow;
+    }
+
+    public void setWorkflow(WorkflowConfig workflow) {
+        this.workflow = workflow;
+    }
+
     public static class DatabaseConfig {
         private String host;
         private int port;
@@ -103,7 +112,6 @@ public class AppConfig {
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
     }
-
 
     public static class RootDatabaseConfig {
         private String host;
@@ -208,6 +216,132 @@ public class AppConfig {
         public void setOutputDirectory(String outputDirectory) {
             this.outputDirectory = outputDirectory;
         }
+    }
+
+    public static class WorkflowConfig {
+        private int defaultSequenceCloseTimeoutMinutes = 48 * 60;
+        private List<StageConfig> stages = new ArrayList<>();
+
+        public int getDefaultSequenceCloseTimeoutMinutes() {
+            return defaultSequenceCloseTimeoutMinutes;
+        }
+
+        public void setDefaultSequenceCloseTimeoutMinutes(int defaultSequenceCloseTimeoutMinutes) {
+            this.defaultSequenceCloseTimeoutMinutes = defaultSequenceCloseTimeoutMinutes;
+        }
+
+        public List<StageConfig> getStages() {
+            return stages;
+        }
+
+        public void setStages(List<StageConfig> stages) {
+            this.stages = stages;
+        }
+    }
+
+    public static class StageConfig {
+        private String name;
+        private String labelTemplate;
+        private List<TriggerConfig> startTriggers = new ArrayList<>();
+        private List<TriggerConfig> finishTriggers = new ArrayList<>();
+        private String startMode = "immediate";
+        private Integer candidateTimeoutMinutes;
+        private Integer candidateCloseTimeoutMinutes;
+        private List<String> candidateCancelOnEvents = new ArrayList<>();
+        private String finishMode = "immediate";
+        private Integer stickyCloseTimeoutMinutes;
+        private List<String> allowedNextStages = new ArrayList<>();
+        private String unexpectedNextStagePolicy = "close_current_and_start_next";
+        private String timeoutTransitionToStage;
+        private Integer sequenceCloseTimeoutMinutes;
+        private Boolean saveStageAfterSequenceClosed = true;
+        private boolean allowPartialFromFinish;
+        private String startDuplicatePolicy = "ignore";
+        private String finishDuplicatePolicy = "update_sticky";
+        private String intermediateStageOnTransition;
+        private boolean transitional;
+        private Integer sameStageReopenAfterMinutes;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getLabelTemplate() { return labelTemplate; }
+        public void setLabelTemplate(String labelTemplate) { this.labelTemplate = labelTemplate; }
+        public List<TriggerConfig> getStartTriggers() { return startTriggers; }
+        public void setStartTriggers(List<TriggerConfig> startTriggers) { this.startTriggers = startTriggers; }
+        public List<TriggerConfig> getFinishTriggers() { return finishTriggers; }
+        public void setFinishTriggers(List<TriggerConfig> finishTriggers) { this.finishTriggers = finishTriggers; }
+        public String getStartMode() { return startMode; }
+        public void setStartMode(String startMode) { this.startMode = startMode; }
+        public Integer getCandidateTimeoutMinutes() { return candidateTimeoutMinutes; }
+        public void setCandidateTimeoutMinutes(Integer candidateTimeoutMinutes) { this.candidateTimeoutMinutes = candidateTimeoutMinutes; }
+        public Integer getCandidateCloseTimeoutMinutes() { return candidateCloseTimeoutMinutes; }
+        public void setCandidateCloseTimeoutMinutes(Integer candidateCloseTimeoutMinutes) { this.candidateCloseTimeoutMinutes = candidateCloseTimeoutMinutes; }
+        public List<String> getCandidateCancelOnEvents() { return candidateCancelOnEvents; }
+        public void setCandidateCancelOnEvents(List<String> candidateCancelOnEvents) { this.candidateCancelOnEvents = candidateCancelOnEvents; }
+        public String getFinishMode() { return finishMode; }
+        public void setFinishMode(String finishMode) { this.finishMode = finishMode; }
+        public Integer getStickyCloseTimeoutMinutes() { return stickyCloseTimeoutMinutes; }
+        public void setStickyCloseTimeoutMinutes(Integer stickyCloseTimeoutMinutes) { this.stickyCloseTimeoutMinutes = stickyCloseTimeoutMinutes; }
+        public List<String> getAllowedNextStages() { return allowedNextStages; }
+        public void setAllowedNextStages(List<String> allowedNextStages) { this.allowedNextStages = allowedNextStages; }
+        public String getUnexpectedNextStagePolicy() { return unexpectedNextStagePolicy; }
+        public void setUnexpectedNextStagePolicy(String unexpectedNextStagePolicy) { this.unexpectedNextStagePolicy = unexpectedNextStagePolicy; }
+        public String getTimeoutTransitionToStage() { return timeoutTransitionToStage; }
+        public void setTimeoutTransitionToStage(String timeoutTransitionToStage) { this.timeoutTransitionToStage = timeoutTransitionToStage; }
+        public Integer getSequenceCloseTimeoutMinutes() { return sequenceCloseTimeoutMinutes; }
+        public void setSequenceCloseTimeoutMinutes(Integer sequenceCloseTimeoutMinutes) { this.sequenceCloseTimeoutMinutes = sequenceCloseTimeoutMinutes; }
+        public Boolean getSaveStageAfterSequenceClosed() { return saveStageAfterSequenceClosed; }
+        public void setSaveStageAfterSequenceClosed(Boolean saveStageAfterSequenceClosed) { this.saveStageAfterSequenceClosed = saveStageAfterSequenceClosed; }
+        public boolean isAllowPartialFromFinish() { return allowPartialFromFinish; }
+        public void setAllowPartialFromFinish(boolean allowPartialFromFinish) { this.allowPartialFromFinish = allowPartialFromFinish; }
+        public String getStartDuplicatePolicy() { return startDuplicatePolicy; }
+        public void setStartDuplicatePolicy(String startDuplicatePolicy) { this.startDuplicatePolicy = startDuplicatePolicy; }
+        public String getFinishDuplicatePolicy() { return finishDuplicatePolicy; }
+        public void setFinishDuplicatePolicy(String finishDuplicatePolicy) { this.finishDuplicatePolicy = finishDuplicatePolicy; }
+        public String getIntermediateStageOnTransition() { return intermediateStageOnTransition; }
+        public void setIntermediateStageOnTransition(String intermediateStageOnTransition) { this.intermediateStageOnTransition = intermediateStageOnTransition; }
+        public boolean isTransitional() { return transitional; }
+        public void setTransitional(boolean transitional) { this.transitional = transitional; }
+        public Integer getSameStageReopenAfterMinutes() { return sameStageReopenAfterMinutes; }
+        public void setSameStageReopenAfterMinutes(Integer sameStageReopenAfterMinutes) { this.sameStageReopenAfterMinutes = sameStageReopenAfterMinutes; }
+    }
+
+    public static class TriggerConfig {
+        private Integer cameraId;
+        private DirectionRange directionRange;
+        private String eventType;
+        private String eventKey;
+        private NotificationRule notification;
+        private String derivedStageInstance;
+        private String name;
+
+        public Integer getCameraId() { return cameraId; }
+        public void setCameraId(Integer cameraId) { this.cameraId = cameraId; }
+        public DirectionRange getDirectionRange() { return directionRange; }
+        public void setDirectionRange(DirectionRange directionRange) { this.directionRange = directionRange; }
+        public String getEventType() { return eventType; }
+        public void setEventType(String eventType) { this.eventType = eventType; }
+        public String getEventKey() { return eventKey; }
+        public void setEventKey(String eventKey) { this.eventKey = eventKey; }
+        public NotificationRule getNotification() { return notification; }
+        public void setNotification(NotificationRule notification) { this.notification = notification; }
+        public String getDerivedStageInstance() { return derivedStageInstance; }
+        public void setDerivedStageInstance(String derivedStageInstance) { this.derivedStageInstance = derivedStageInstance; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    public static class NotificationRule {
+        private boolean enabled;
+        private String template;
+        private Integer delayMinutes;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public String getTemplate() { return template; }
+        public void setTemplate(String template) { this.template = template; }
+        public Integer getDelayMinutes() { return delayMinutes; }
+        public void setDelayMinutes(Integer delayMinutes) { this.delayMinutes = delayMinutes; }
     }
 
     public static class PostCameraConfig {

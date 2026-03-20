@@ -9,7 +9,8 @@
 
 ### `RuntimeConfig`
 - Loads runtime JSON configuration from `<working_dir>/config.json` at startup.
-- Provides typed `AppConfig` object for all services.
+- Stores the active config in an `AtomicReference<AppConfig>` so controllers/services always read the latest committed version.
+- Enriches legacy configs with a generated `workflow` section through `WorkflowDefaultsFactory`, validates workflow references/timeouts, and can persist updated config back into `config.json` without restart.
 
 ### `JdbcConfig`
 - Creates two PostgreSQL data sources and JDBC templates:
@@ -34,9 +35,16 @@
 - `notifications`: telegram on/off + token/chat id.
 - `timing`: thresholds for alerts and test-drive reset.
 - `reports.outputDirectory`: optional folder path for saving generated XLSX file copy on each report request.
-- `cameras`: camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range.
+- `workflow`: expanded runtime workflow model with `defaultSequenceCloseTimeoutMinutes` and `stages[]`. Each stage supports `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate policies, transition references, and per-trigger notification metadata.
+- `cameras`: legacy camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range. They are still supported and are converted into a default `workflow` model when `workflow` is omitted from JSON.
 - `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`; `postName` is preserved into `StageWindow.reportLabel()` so reports can show concrete post numbers/names.
 - `DirectionRange.contains(direction)` supports wrap-around intervals that cross `0` degrees (`270 -> 90`) and uses an exclusive upper bound so neighboring ranges can share a border without ambiguous double matches.
+
+### `WorkflowDefaultsFactory`
+- Method: `enrich(AppConfig)`
+  - Returns config unchanged when `workflow.stages` already exists.
+  - Otherwise synthesizes a workflow model from legacy `cameras` and `timing` sections so the UI/API can expose a declarative stage configuration without breaking older `config.json` files.
+- Generates stage definitions for `drive_in`, `service`, each configured post, `parking`, `backyard`, and `test_drive`, including labels, trigger metadata, and alert timing defaults.
 
 ### `DetectionService`
 - Method: `loadAllDetections()`
@@ -105,6 +113,14 @@
   - Builds Telegram Bot API request payload and sends POST.
   - Fails silently (exceptions are swallowed).
 
+### `ConfigController`
+- HTTP GET `/config`
+  - Returns effective runtime config as JSON when JSON is requested.
+  - Returns a primitive HTML page with a `<textarea>` editor and POST form when HTML is requested.
+- HTTP POST `/config`
+  - Accepts either raw JSON or form-urlencoded `json` payload.
+  - Validates and persists the config through `RuntimeConfig.save(...)`, then updates the in-memory runtime config immediately.
+
 ### `ReportService`
 - Method: `buildReport()`
   - Orchestrates:
@@ -123,7 +139,7 @@
   - Creates two worksheets:
     - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
     - `Events` with flat stage columns: `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
-  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, configured post name such as `Post 1`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. Records with zero stage windows are skipped entirely.
+  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, configured post name such as `Post 1`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. After the final stage row of every non-empty closed sequence, appends `Sequence Closed` with `finishedAt` in the `Time out` column. Records with zero stage windows are skipped entirely.
   - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row; post stages use the preserved `postName` label. Records with zero stage windows are skipped entirely.
   - Formats timestamps as `yyyy-MM-dd HH:mm:ss` and computes duration as `HH:mm:ss`; duration is empty when one of timestamps is missing, except for open `Post` stages where duration uses `SequenceRecord.finishedAt` while `Out time` remains empty.
   - Writes `none` in alerts for the first stage row when the sequence has no alerts.

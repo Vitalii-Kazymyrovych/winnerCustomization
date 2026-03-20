@@ -78,3 +78,10 @@
 - Normalized XLSX timestamp rendering to `yyyy-MM-dd HH:mm:ss` so reports no longer expose Java `LocalDateTime` `T`/nanosecond formatting.
 - Expanded regression coverage with explicit assertions for repeated `Service Out` recoveries inside `Backyard`, `Parking Out` recovery inside `Backyard`, and results-dataset plates that previously lost those rows.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document active-`Backyard` recovery handling and the new XLSX timestamp format.
+
+## 2026-03-20
+- Added live runtime configuration management: `RuntimeConfig` now validates/saves/reloads `config.json`, keeps the active config in memory atomically, and backfills a generated `workflow` section from legacy camera/timing config via `WorkflowDefaultsFactory`.
+- Added `/config` JSON + HTML endpoints (`ConfigController`) so operators can inspect and edit configuration without restarting the service.
+- Updated report generation to append a `Sequence Closed` row (with `finishedAt` in `Time out`) after each non-empty closed sequence on the `Sequences` sheet.
+- Extended `config.json.example` with the new declarative `workflow` section and updated `README.md` / `TECHNICAL_SPEC.md` to describe live config editing, workflow config, and the new report row.
+- Added `ConfigControllerTest` coverage and updated `ReportServiceTest` assertions for the `Sequence Closed` row.

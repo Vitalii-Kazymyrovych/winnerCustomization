@@ -135,5 +135,151 @@
   },
   "reports": {
     "outputDirectory": "./reports"
+  },
+  "workflow": {
+    "defaultSequenceCloseTimeoutMinutes": 2880,
+    "stages": [
+      {
+        "name": "drive_in",
+        "labelTemplate": "Drive In",
+        "allowPartialFromFinish": true,
+        "startTriggers": [
+          {
+            "cameraId": 1001,
+            "eventType": "in",
+            "eventKey": "DRIVE_IN_IN",
+            "notification": {
+              "enabled": true,
+              "template": "No Drive in (out) within {{threshold}} minutes",
+              "delayMinutes": 15
+            }
+          }
+        ],
+        "finishTriggers": [
+          {
+            "cameraId": 1002,
+            "directionRange": {
+              "from": 0,
+              "to": 180
+            },
+            "eventType": "out",
+            "eventKey": "DRIVE_IN_OUT"
+          }
+        ]
+      },
+      {
+        "name": "service",
+        "labelTemplate": "Service",
+        "allowPartialFromFinish": true,
+        "intermediateStageOnTransition": "backyard",
+        "startTriggers": [
+          {
+            "cameraId": 1003,
+            "eventType": "in",
+            "eventKey": "SERVICE_IN",
+            "notification": {
+              "enabled": true,
+              "template": "No Post in within {{threshold}} minutes",
+              "delayMinutes": 15
+            }
+          }
+        ],
+        "finishTriggers": [
+          {
+            "cameraId": 1005,
+            "eventType": "out",
+            "eventKey": "SERVICE_OUT"
+          }
+        ]
+      },
+      {
+        "name": "post_1",
+        "labelTemplate": "Post 1",
+        "finishMode": "sticky",
+        "allowPartialFromFinish": true,
+        "timeoutTransitionToStage": "service",
+        "startTriggers": [
+          {
+            "cameraId": 1101,
+            "directionRange": {
+              "from": 0,
+              "to": 180
+            },
+            "eventType": "in",
+            "eventKey": "POST_1_IN",
+            "derivedStageInstance": "1"
+          }
+        ],
+        "finishTriggers": [
+          {
+            "cameraId": 1101,
+            "directionRange": {
+              "from": 181,
+              "to": 360
+            },
+            "eventType": "out",
+            "eventKey": "POST_1_OUT",
+            "derivedStageInstance": "1"
+          }
+        ]
+      },
+      {
+        "name": "parking",
+        "labelTemplate": "Parking",
+        "allowPartialFromFinish": true,
+        "intermediateStageOnTransition": "backyard",
+        "startTriggers": [
+          {
+            "cameraId": 1006,
+            "eventType": "in",
+            "eventKey": "PARKING_IN"
+          }
+        ],
+        "finishTriggers": [
+          {
+            "cameraId": 1007,
+            "eventType": "out",
+            "eventKey": "PARKING_OUT"
+          }
+        ]
+      },
+      {
+        "name": "backyard",
+        "labelTemplate": "Backyard",
+        "transitional": true,
+        "saveStageAfterSequenceClosed": false,
+        "startTriggers": [
+          {
+            "cameraId": 1008,
+            "eventType": "in",
+            "eventKey": "DRIVE_IN_TO_SERVICE"
+          }
+        ]
+      },
+      {
+        "name": "test_drive",
+        "labelTemplate": "Test-Drive",
+        "startMode": "candidate",
+        "candidateTimeoutMinutes": 30,
+        "candidateCloseTimeoutMinutes": 60,
+        "saveStageAfterSequenceClosed": false,
+        "startTriggers": [
+          {
+            "cameraId": 1002,
+            "directionRange": {
+              "from": 0,
+              "to": 180
+            },
+            "eventType": "candidate",
+            "eventKey": "DRIVE_IN_OUT"
+          },
+          {
+            "cameraId": 1009,
+            "eventType": "candidate",
+            "eventKey": "SERVICE_TO_DRIVE_IN"
+          }
+        ]
+      }
+    ]
   }
 }
