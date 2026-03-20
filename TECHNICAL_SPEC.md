@@ -59,21 +59,19 @@
 
 ### `SequenceEngine`
 - Method: `build(List<Detection>, AppConfig)`
-  - Stateless sequence builder.
-  - Maps every detection to logical camera type by:
-    1. `analyticsId` equality,
-    2. direction-range pass.
+  - Stateless workflow-driven sequence builder.
+  - Compiles `workflow.stages[]` into in-memory stage/trigger definitions (`WorkflowDefinition`, `StageDefinition`, `TriggerDefinition`) and resolves detections by `cameraId + directionRange` instead of a fixed `CameraType` switch.
   - Tracks one active sequence per plate and normalizes same-timestamp detections for the same plate by shifting later events by `+1 second`.
-  - Maintains a mutable active-stage timeline where only one stage can be open at a time.
-  - Supports repeated stage occurrences (`Drive In`, `Service`, `Post`, `Parking`, `Backyard`, `Test-Drive`) without collapsing them into fixed columns.
-  - Applies recovery rules: any next stage closes the previous one at `eventTime - 1 second`; exit-only events create partial stages with empty `In`; `Post In` without active `Service` injects a recovery `Service`; `Post Out` without an active `Post` stays as a pending partial post until a later non-post event proves a synthetic `Service` is needed; `Service Out` / `Parking Out` detected during an already-open `Backyard` are preserved as additional partial recovery windows instead of being dropped.
-  - Applies sticky-post rules per configured post label: while `Post N` is active, repeated `Post N In` is ignored, repeated `Post N Out` only updates an in-memory `outTimeCandidate`, and the `Post` window closes only on another stage or sequence finalization.
-  - When sticky `Post` closes without an explicit `Service In`, may emit a synthetic `Service` window between the resolved `Post` end and the next non-service event; open sticky `Post` stages keep `Out = null`.
-  - Handles `Backyard` as an explicit stage opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`, with duplicate backyard triggers ignored while `Backyard` is active, yet still allowing exit-only recovery windows to be appended during that active backyard span.
-  - Handles `Test-Drive` as a candidate triggered by `Drive-In Out` or `Service -> Drive-In`; `Service -> Drive-In` first closes any active stage at `eventTime - 1 second`, then materializes `Test-Drive` only after the configured silence window and drops it when the absence reaches the configured timeout.
-  - Closes/open-rolls sequences after 48 hours without detections for the same plate.
+  - Uses a state/strategy-style flow internally:
+    - trigger resolution chooses a start/finish strategy from config,
+    - pending candidate/sticky timeout processing runs before each event,
+    - start/finish handlers apply configurable transition policies.
+  - Supports arbitrary config-defined stage names and labels (`service_primary`, `post_3`, `parking_secondary`, etc.), so the report/storage model is no longer tied to a hardcoded stage enum.
+  - Honors `startMode`, `candidateTimeoutMinutes`, `candidateCloseTimeoutMinutes`, `candidateCancelOnEvents`, `finishMode`, `stickyCloseTimeoutMinutes`, `allowedNextStages`, `unexpectedNextStagePolicy`, `timeoutTransitionToStage`, `intermediateStageOnTransition`, `allowPartialFromFinish`, `startDuplicatePolicy`, `finishDuplicatePolicy`, `sameStageReopenAfterMinutes`, and per-stage `sequenceCloseTimeoutMinutes`.
+  - Materializes timeout-driven transitional stages via `timeoutTransitionToStage` and explicit transition insertions via `intermediateStageOnTransition`.
+  - Writes `StageWindow` entries with dynamic `stageName`, rendered `reportLabel`, `sticky`/`transitional` flags, `saveAfterSequenceClosed`, and chronological ordering metadata.
+  - Evaluates alerts from trigger-level notification configuration instead of hardcoding them to a fixed stage enum.
   - Drops transition-only sequences that finished without any concrete stage windows, preventing synthetic `No stages` records from reaching storage/reporting layers.
-  - Produces `SequenceRecord` with chronological `StageWindow` entries, per-stage alerts, optional report-label overrides (used for post names/numbers), path steps, and storage/report helpers.
 
 ### `SequenceStorageService`
 - Method: `initialize()`
@@ -199,13 +197,10 @@ Integration test (live PostgreSQL):
 
 
 ### Updated stage processing rules
-- Stage timeline: each sequence is a chronological list of stage windows. The same stage may appear many times, but only one stage may be active at a time.
-- Time normalization: if two detections for the same plate share the same timestamp, the later one is shifted by `+1 second`.
-- Recovery closure: when an event starts the next stage, the previous active stage closes at `eventTime - 1 second`; exit-only recovery stages keep `Out = eventTime` and `In = null`; a recovery-only `Post Out` keeps a pending post-recovery marker so same-post `Post In` / repeated `Post Out` detections do not materialize a synthetic `Service` too early; if `Service Out` or `Parking Out` arrives while `Backyard` is already active, the recovery stage is appended without closing that active backyard window.
-- `Drive In`: `Drive-In In` opens the stage, `Drive-In Out` closes it, and any later stage can also recover-close it.
-- `Service` / `Post`: `Service In` opens `Service`; `Post In` closes `Service` and opens sticky `Post`; duplicate `Post In` on the same configured post is ignored; `Post Out` on the same post only updates `outTimeCandidate`; another stage (including another post) closes sticky `Post` using `outTimeCandidate` or `nextEvent - 1 second`; `Post In` without active `Service` injects a partial `Service` ending at `Post In - 1 second`.
-- Synthetic service after sticky `Post`: when sticky `Post` closes and an explicit `Service In` is missing, `SequenceEngine` may create a synthetic `Service` from `resolvedPostOut + 1 second` until `Service Out` or `nextEvent - 1 second`; if sticky `Post` never closes before sequence finalization, it remains open with `Out = null`.
-- `Parking`: `Parking In` opens `Parking`; `Parking Out` closes it and starts `Backyard` instead of closing the sequence; if `Parking Out` arrives while `Backyard` is already active, it is retained as a partial `Parking` recovery row.
-- `Backyard`: opened by `Drive-In -> Service`, `Service Out`, or `Parking Out`; ends on the next stage event; repeated backyard triggers while active are ignored, but exit-only recovery rows may still coexist chronologically inside the same backyard span.
-- `Test-Drive`: candidate on `Drive-In Out` / `Service -> Drive-In`; `Service -> Drive-In` first closes the active stage so no overlap remains; candidate is cancelled by an early next event; materialized only after the configured quiet window; removed when the vehicle absence reaches the timeout.
-- Alerts: computed per stage and only for non-partial `Drive In` and `Service` stages. A stage keeps its due alert if it stayed open past the threshold even if it eventually closed later.
+- Stage timeline: each sequence is a chronological list of `StageWindow` entries. Any config-defined stage may appear multiple times, but only one stage can be active at a time.
+- Trigger resolution: detections are matched against workflow triggers in config order. Matching uses `cameraId` plus optional `DirectionRange` with wrap-around support and exclusive upper bound.
+- Candidate flow: `startMode=candidate` creates `PendingCandidate`; it materializes only after `candidateTimeoutMinutes`, may be refreshed by duplicate policy, and is cancelled by configured `candidateCancelOnEvents` or by sequence timeout.
+- Sticky flow: `finishMode=sticky` stores `pendingStickyOutAt`; later real stages or sticky timeout close the stage and may insert `timeoutTransitionToStage` windows.
+- Unexpected transitions: `allowedNextStages` + `unexpectedNextStagePolicy` decide whether the engine ignores an event, starts a partial stage, inserts an intermediate transitional stage, or closes current and opens next.
+- Partial stages: any stage with `allowPartialFromFinish=true` can generate a partial row when only its finish trigger is observed.
+- Validation/runtime safety: `RuntimeConfig` validates workflow references plus supported values for start/finish modes and duplicate/unexpected-transition policies before saving live config updates.

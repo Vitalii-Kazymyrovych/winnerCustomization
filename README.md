@@ -57,7 +57,7 @@ Use `config.json` (not committed) with:
 
 - `workflow`: declarative stage/trigger model used by the new configuration screen. Each stage can define `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate handling, transition stage references, and per-trigger notification settings. If `workflow` is omitted, the application derives an equivalent default workflow from the legacy `cameras` + `timing` blocks so existing configs continue to work.
 - `GET /config` returns the effective runtime config, so operators can inspect the generated workflow before editing it.
-- `POST /config` validates required fields, positive timeouts, unique stage names, and references such as `allowedNextStages`, `timeoutTransitionToStage`, and `intermediateStageOnTransition` before saving.
+- `POST /config` validates required fields, positive timeouts, unique stage names, supported mode/policy values, and references such as `allowedNextStages`, `timeoutTransitionToStage`, and `intermediateStageOnTransition` before saving.
 
 ## Timed notifications (DB-backed)
 
@@ -95,21 +95,21 @@ This keeps DB load bounded: each cycle does one read/build pass and a small inde
 
 ## Sequence processing rules
 
-The current engine interprets detections as a chronological sequence of stage occurrences, not as a fixed set of one-off timestamps. Key rules:
+The engine is now workflow-driven: stage names, labels, triggers, candidate/sticky behavior, duplicate policies, and transition references come from `workflow.stages[]`, not from a hardcoded enum or `switch` by camera type.
 
-- Only one stage can be active at a time; the next stage closes the previous one at `eventTime - 1 second`.
-- The same stage may appear multiple times in the same sequence (`Service`, `Post`, `Backyard`, etc.). Report rows are never merged.
-- Repeated start events for an already-open stage are ignored as duplicates.
-- `Post` now uses sticky logic per post name/camera mapping: while `Post N` is active, repeated `Post N In` is ignored, repeated `Post N Out` only refreshes an internal `outTimeCandidate`, and the stage is closed only when another stage is detected or when the sequence is finalized.
-- When sticky `Post` closes and an explicit `Service In` is missing, the engine may synthesize an intermediate `Service` stage from `Post Out + 1 second` up to the next closing event. `Post Out` no longer auto-opens `Service` by itself.
-- Exit-only and recovery scenarios create valid partial stages with empty `In` and filled `Out` (`Drive In`, `Service`, `Post`, `Parking`). Partial stages never produce alerts, and `Service Out` / `Parking Out` are still recorded as partial recovery rows even if the vehicle is already inside `Backyard`.
-- `Post Out` recovery no longer opens `Service` immediately. The engine now keeps that exit-only post sticky until a later non-post event proves a real return to service; repeated `Post Out` and a later same-post `Post In` stay `Post -> Post` instead of producing noisy `Post -> Service -> Post`.
-- `Backyard` is a first-class stage. It starts on `Drive-In -> Service`, `Service Out`, or `Parking Out`, and ends on the next stage event. Repeated backyard triggers while `Backyard` is already active are ignored, but exit-only detections inside an already-open `Backyard` still append partial recovery rows without closing `Backyard`.
-- `Test-Drive` starts as a candidate from `Drive-In Out` or `Service -> Drive-In`. `Service -> Drive-In` first closes the active stage, so `Service` and `Test-Drive` never overlap. `Test-Drive` becomes a reportable stage only when the silence window from `timing.testDriveStartMinutes` elapses and the vehicle returns before the `timing.testDriveResetMinutes` timeout. If the absence reaches the timeout, the current sequence is closed and `Test-Drive` is omitted from the report.
-- Sequences roll over after 48 hours without events for the same plate.
+Key rules:
+
+- One plate keeps one active sequence, but the sequence may contain any number of stage windows with arbitrary config-defined names such as `service_primary`, `post_3`, or `parking_secondary`.
+- Every detection is resolved through configured triggers (`cameraId + directionRange`) into a stage start/finish event. If `workflow` is omitted, the application derives an equivalent default workflow from legacy camera blocks.
+- `startMode=immediate` opens a stage right away. `startMode=candidate` creates a pending candidate that materializes only after `candidateTimeoutMinutes` of silence; configured `candidateCancelOnEvents` cancel it immediately.
+- `finishMode=sticky` keeps the stage open after `finishTrigger`: repeated finish events refresh the sticky close timestamp, and `timeoutTransitionToStage` may materialize a transitional stage after `stickyCloseTimeoutMinutes`.
+- `allowedNextStages` and `unexpectedNextStagePolicy` are honored for every stage. Unsupported next events can now be ignored, converted into partial stages, or wrapped with an intermediate stage instead of always forcing the same hardcoded transition.
+- `intermediateStageOnTransition` and `transitional=true` allow explicit transitional stages such as `Backyard` to be inserted by configuration, including on unexpected transitions.
+- `allowPartialFromFinish=true` lets any stage create a partial row (`In` empty, `Out` filled) when only a finish event is observed.
+- Duplicate handling is configurable through `startDuplicatePolicy`, `finishDuplicatePolicy`, and `sameStageReopenAfterMinutes`.
+- Sequence close timeout can be defined globally (`workflow.defaultSequenceCloseTimeoutMinutes`) and overridden per stage with `sequenceCloseTimeoutMinutes`.
 - If two detections for the same plate have the same timestamp, the later one is normalized to `+1 second` to keep ordering deterministic.
-- Alerts are created only for full `Drive In` and `Service` stages and are attached to the specific stage row in the XLSX output.
-- Transition-only chains that never materialize any real stage are dropped from the final output instead of appearing as synthetic `No stages` rows.
+- Alerts are evaluated from trigger-level notification settings, so delay/template settings are now defined in the workflow config itself.
 
 ## Notes
 

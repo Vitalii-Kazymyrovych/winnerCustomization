@@ -85,3 +85,6 @@
 - Updated report generation to append a `Sequence Closed` row (with `finishedAt` in `Time out`) after each non-empty closed sequence on the `Sequences` sheet.
 - Extended `config.json.example` with the new declarative `workflow` section and updated `README.md` / `TECHNICAL_SPEC.md` to describe live config editing, workflow config, and the new report row.
 - Added `ConfigControllerTest` coverage and updated `ReportServiceTest` assertions for the `Sequence Closed` row.
+- Reworked `SequenceEngine` into a workflow-driven builder that reads dynamic stages/triggers from `workflow.stages[]`, supports generic candidate/sticky/partial/intermediate transition policies, and stores dynamic stage names/labels in `SequenceRecord` instead of a fixed enum.
+- Updated `WorkflowDefaultsFactory` to generate richer default workflow metadata (`allowedNextStages`, sticky timeouts, candidate cancel events, dynamic post labels) from legacy camera/timing config.
+- Switched report/alert/test models to dynamic `StageWindow` metadata, added workflow-mode validation in `RuntimeConfig`, and refreshed tests/docs (`README.md`, `TECHNICAL_SPEC.md`) to cover dynamic workflow behavior, `/config` validation, and dataset regression handling.

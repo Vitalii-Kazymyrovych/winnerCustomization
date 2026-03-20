@@ -195,7 +195,7 @@ public class ReportService {
         if (stage.timeOut() != null) {
             return stage.timeOut();
         }
-        if (stage.stageType() == SequenceRecord.StageType.POST) {
+        if (stage.sticky()) {
             return record.getFinishedAt();
         }
         return null;

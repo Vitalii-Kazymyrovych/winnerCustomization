@@ -10,12 +10,15 @@ import script.winnerCustomization.model.AlertJobType;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
-import script.winnerCustomization.model.SequenceRecord.StageType;
 import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class AlertSchedulerService {
@@ -51,8 +54,7 @@ public class AlertSchedulerService {
             List<Detection> detections = detectionService.loadAllDetections();
             List<SequenceRecord> records = sequenceEngine.build(detections, config);
             for (SequenceRecord record : records) {
-                syncDriveInAlerts(record, config);
-                syncServiceAlerts(record, config);
+                syncConfiguredAlerts(record, config);
             }
             log.debug("Alert sync completed for {} sequence records", records.size());
         } catch (Exception exception) {
@@ -80,42 +82,67 @@ public class AlertSchedulerService {
         }
     }
 
-    private void syncDriveInAlerts(SequenceRecord record, AppConfig config) {
-        syncStageAlerts(
-                record,
-                StageType.DRIVE_IN,
-                AlertJobType.DRIVE_IN_OUT_MISSING,
-                config.getTiming().getDriveInToDriveOutAlertMinutes(),
-                "No Drive in (out) within " + config.getTiming().getDriveInToDriveOutAlertMinutes() + " minutes"
-        );
-    }
+    private void syncConfiguredAlerts(SequenceRecord record, AppConfig config) {
+        if (config.getWorkflow() == null || config.getWorkflow().getStages() == null) {
+            return;
+        }
+        Map<String, AppConfig.StageConfig> stagesByName = config.getWorkflow().getStages().stream()
+                .collect(Collectors.toMap(AppConfig.StageConfig::getName, Function.identity(), (left, right) -> left));
 
-    private void syncServiceAlerts(SequenceRecord record, AppConfig config) {
-        syncStageAlerts(
-                record,
-                StageType.SERVICE,
-                AlertJobType.SERVICE_POST_IN_MISSING,
-                config.getTiming().getServiceToPostAlertMinutes(),
-                "No Post in within " + config.getTiming().getServiceToPostAlertMinutes() + " minutes"
-        );
-    }
-
-    private void syncStageAlerts(SequenceRecord record,
-                                 StageType stageType,
-                                 AlertJobType jobType,
-                                 int thresholdMinutes,
-                                 String message) {
-        for (StageWindow stage : record.getStagesByType(stageType)) {
+        for (StageWindow stage : record.stagesChronologically()) {
             if (stage.partial() || stage.timeIn() == null) {
                 continue;
             }
-            LocalDateTime triggerAt = stage.timeIn();
-            LocalDateTime dueAt = triggerAt.plusMinutes(thresholdMinutes);
-            if (stage.timeOut() != null && !stage.timeOut().isAfter(dueAt)) {
-                alertJobStorageService.cancel(record.getPlateNumber(), jobType, triggerAt);
+            AppConfig.StageConfig stageConfig = stagesByName.get(stage.stageName());
+            if (stageConfig == null || stageConfig.getStartTriggers() == null) {
                 continue;
             }
-            alertJobStorageService.upsertPending(record.getPlateNumber(), jobType, triggerAt, dueAt, message);
+            AlertJobType jobType = alertJobType(stage.stageName());
+            if (jobType == null) {
+                continue;
+            }
+            AppConfig.TriggerConfig notifiedTrigger = stageConfig.getStartTriggers().stream()
+                    .filter(trigger -> trigger.getNotification() != null && trigger.getNotification().isEnabled())
+                    .findFirst()
+                    .orElse(null);
+            if (notifiedTrigger == null || notifiedTrigger.getNotification().getDelayMinutes() == null) {
+                continue;
+            }
+            syncStageAlert(record, stage, notifiedTrigger, jobType);
         }
+    }
+
+    private void syncStageAlert(SequenceRecord record,
+                                StageWindow stage,
+                                AppConfig.TriggerConfig trigger,
+                                AlertJobType jobType) {
+        int thresholdMinutes = trigger.getNotification().getDelayMinutes();
+        LocalDateTime dueAt = stage.timeIn().plusMinutes(thresholdMinutes);
+        String message = renderMessage(trigger, thresholdMinutes, stage.reportLabel());
+        if (stage.timeOut() != null && !stage.timeOut().isAfter(dueAt)) {
+            alertJobStorageService.cancel(record.getPlateNumber(), jobType, stage.timeIn());
+            return;
+        }
+        alertJobStorageService.upsertPending(record.getPlateNumber(), jobType, stage.timeIn(), dueAt, message);
+    }
+
+    private AlertJobType alertJobType(String stageName) {
+        if (Objects.equals(stageName, "drive_in")) {
+            return AlertJobType.DRIVE_IN_OUT_MISSING;
+        }
+        if (Objects.equals(stageName, "service")) {
+            return AlertJobType.SERVICE_POST_IN_MISSING;
+        }
+        return null;
+    }
+
+    private String renderMessage(AppConfig.TriggerConfig trigger, int thresholdMinutes, String stageLabel) {
+        String template = trigger.getNotification().getTemplate();
+        if (template == null) {
+            return "";
+        }
+        return template
+                .replace("{{threshold}}", String.valueOf(thresholdMinutes))
+                .replace("{{stage}}", stageLabel == null ? "" : stageLabel);
     }
 }

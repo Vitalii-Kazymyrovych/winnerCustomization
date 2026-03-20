@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Test;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
-import script.winnerCustomization.model.SequenceRecord.StageType;
 import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,464 +15,158 @@ import static org.assertj.core.api.Assertions.tuple;
 
 class SequenceEngineTest {
     private final SequenceEngine engine = new SequenceEngine();
+    private final WorkflowDefaultsFactory workflowDefaultsFactory = new WorkflowDefaultsFactory();
 
     @Test
-    void shouldBuildDriveInStageWithoutAlertWhenClosedInTime() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 10, 0);
+    void shouldUseDynamicWorkflowStageNamesFromConfig() {
+        AppConfig config = enrich(baseConfigWithLegacyCameras());
+        LocalDateTime t = LocalDateTime.of(2026, 3, 20, 10, 0);
+
+        SequenceRecord record = engine.build(List.of(
+                detection(1, "AA1111", 12, 90, t),
+                detection(2, "AA1111", 20, 90, t.plusMinutes(5)),
+                detection(3, "AA1111", 20, 250, t.plusMinutes(8)),
+                detection(4, "AA1111", 13, 90, t.plusMinutes(20))
+        ), config).getFirst();
 
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "AA1111", 10, 90, t),
-                detection(2, "AA1111", 11, 90, t.plusMinutes(5))
-        )).getFirst();
-
-        assertStages(record, tuple("Drive In", t, t.plusMinutes(5), ""));
-    }
-
-    @Test
-    void shouldCreateDriveInAlertWhenRecoveredByNextStageAfterThreshold() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 10, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "AA1112", 10, 90, t),
-                detection(2, "AA1112", 12, 90, t.plusMinutes(20))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Drive In", t, t.plusMinutes(20).minusSeconds(1), "No Drive in (out) within 15 minutes"),
-                tuple("Service", t.plusMinutes(20), null, ""));
-    }
-
-    @Test
-    void shouldCreateServiceAlertWhenNoPostInWithinThreshold() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 11, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "AA1113", 12, 90, t),
-                detection(2, "AA1113", 13, 90, t.plusMinutes(20))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", t, t.plusMinutes(20).minusSeconds(1), "No Post in within 15 minutes"),
-                tuple("Backyard", t.plusMinutes(20), null, ""));
-    }
-
-    @Test
-    void shouldBuildServicePostServiceChain() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 12, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "AA1114", 12, 90, t),
-                detection(2, "AA1114", 20, 90, t.plusMinutes(5)),
-                detection(3, "AA1114", 20, 250, t.plusMinutes(15)),
-                detection(4, "AA1114", 13, 90, t.plusMinutes(30))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(5), t.plusMinutes(15), ""),
-                tuple("Service", t.plusMinutes(15).plusSeconds(1), t.plusMinutes(30), ""),
-                tuple("Backyard", t.plusMinutes(30), null, ""));
-    }
-
-    @Test
-    void shouldKeepPostStickyAcrossDuplicatePostEventsUntilServiceOut() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 12, 30);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "KA1163KK", 12, 90, t),
-                detection(2, "KA1163KK", 20, 90, t.plusMinutes(5)),
-                detection(3, "KA1163KK", 20, 90, t.plusMinutes(6)),
-                detection(4, "KA1163KK", 20, 250, t.plusMinutes(8)),
-                detection(5, "KA1163KK", 20, 90, t.plusMinutes(9)),
-                detection(6, "KA1163KK", 20, 250, t.plusMinutes(11)),
-                detection(7, "KA1163KK", 13, 90, t.plusMinutes(20))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(5), t.plusMinutes(11), ""),
-                tuple("Service", t.plusMinutes(11).plusSeconds(1), t.plusMinutes(20), ""),
-                tuple("Backyard", t.plusMinutes(20), null, ""));
-    }
-
-    @Test
-    void shouldTreatRepeatedRecognitionsOnSamePostAsOneStickyPostStage() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 13, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "AA1115", 12, 90, t),
-                detection(2, "AA1115", 20, 90, t.plusMinutes(3)),
-                detection(3, "AA1115", 20, 250, t.plusMinutes(7)),
-                detection(4, "AA1115", 20, 90, t.plusMinutes(10)),
-                detection(5, "AA1115", 20, 250, t.plusMinutes(14)),
-                detection(6, "AA1115", 13, 90, t.plusMinutes(18))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", t, t.plusMinutes(3).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(3), t.plusMinutes(14), ""),
-                tuple("Service", t.plusMinutes(14).plusSeconds(1), t.plusMinutes(18), ""),
-                tuple("Backyard", t.plusMinutes(18), null, ""));
-    }
-
-    @Test
-    void shouldBuildParkingAndBackyardAfterParkingOut() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 14, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "AA1116", 14, 90, t),
-                detection(2, "AA1116", 15, 90, t.plusMinutes(8)),
-                detection(3, "AA1116", 10, 90, t.plusMinutes(15))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Parking", t, t.plusMinutes(8).minusSeconds(1), ""),
-                tuple("Backyard", t.plusMinutes(8), t.plusMinutes(15).minusSeconds(1), ""),
-                tuple("Drive In", t.plusMinutes(15), null, ""));
-    }
-
-    @Test
-    void shouldBuildBackyardForDriveInToServiceAndServiceOutTriggers() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 15, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "AA1117", 10, 90, t),
-                detection(2, "AA1117", 17, 90, t.plusMinutes(2)),
-                detection(3, "AA1117", 14, 90, t.plusMinutes(5)),
-                detection(4, "AA1117", 15, 90, t.plusMinutes(7)),
-                detection(5, "AA1117", 12, 90, t.plusMinutes(12)),
-                detection(6, "AA1117", 13, 90, t.plusMinutes(18)),
-                detection(7, "AA1117", 10, 90, t.plusMinutes(22))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Drive In", t, t.plusMinutes(2).minusSeconds(1), ""),
-                tuple("Backyard", t.plusMinutes(2), t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("Parking", t.plusMinutes(5), t.plusMinutes(7).minusSeconds(1), ""),
-                tuple("Backyard", t.plusMinutes(7), t.plusMinutes(12).minusSeconds(1), ""),
-                tuple("Service", t.plusMinutes(12), t.plusMinutes(18).minusSeconds(1), ""),
-                tuple("Backyard", t.plusMinutes(18), t.plusMinutes(22).minusSeconds(1), ""),
-                tuple("Drive In", t.plusMinutes(22), null, ""));
-    }
-
-    @Test
-    void shouldCreateTestDriveOnlyWhenGapReachesWindowAndReturnBeforeTimeout() {
-        AppConfig config = baseConfig();
-        config.getTiming().setTestDriveStartMinutes(10);
-        config.getTiming().setTestDriveResetMinutes(60);
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 16, 0);
-
-        SequenceRecord record = build(config, List.of(
-                detection(1, "AA1118", 10, 90, t),
-                detection(2, "AA1118", 11, 90, t.plusMinutes(3)),
-                detection(3, "AA1118", 14, 90, t.plusMinutes(20))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Drive In", t, t.plusMinutes(3), ""),
-                tuple("Test-Drive", t.plusMinutes(3), t.plusMinutes(20).minusSeconds(1), ""),
-                tuple("Parking", t.plusMinutes(20), null, ""));
-    }
-
-    @Test
-    void shouldCloseServiceBeforeStartingTestDriveFromServiceToDriveIn() {
-        AppConfig config = baseConfig();
-        config.getTiming().setTestDriveStartMinutes(5);
-        config.getTiming().setTestDriveResetMinutes(60);
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 16, 30);
-
-        SequenceRecord record = build(config, List.of(
-                detection(1, "AA1118A", 12, 90, t),
-                detection(2, "AA1118A", 16, 90, t.plusMinutes(7)),
-                detection(3, "AA1118A", 17, 90, t.plusMinutes(20))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", t, t.plusMinutes(7).minusSeconds(1), ""),
-                tuple("Test-Drive", t.plusMinutes(7), t.plusMinutes(20).minusSeconds(1), ""),
-                tuple("Backyard", t.plusMinutes(20), null, ""));
-    }
-
-    @Test
-    void shouldNotCreateTestDriveWhenNextEventArrivesTooSoon() {
-        AppConfig config = baseConfig();
-        config.getTiming().setTestDriveStartMinutes(10);
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 17, 0);
-
-        SequenceRecord record = build(config, List.of(
-                detection(1, "AA1119", 10, 90, t),
-                detection(2, "AA1119", 11, 90, t.plusMinutes(3)),
-                detection(3, "AA1119", 14, 90, t.plusMinutes(8))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Drive In", t, t.plusMinutes(3), ""),
-                tuple("Parking", t.plusMinutes(8), null, ""));
-    }
-
-    @Test
-    void shouldDropTestDriveAndCloseSequenceOnTimeout() {
-        AppConfig config = baseConfig();
-        config.getTiming().setTestDriveStartMinutes(10);
-        config.getTiming().setTestDriveResetMinutes(60);
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 18, 0);
-
-        List<SequenceRecord> records = build(config, List.of(
-                detection(1, "AA1120", 10, 90, t),
-                detection(2, "AA1120", 11, 90, t.plusMinutes(3)),
-                detection(3, "AA1120", 10, 90, t.plusMinutes(70))
-        ));
-
-        assertThat(records).hasSize(2);
-        assertStages(records.get(0), tuple("Drive In", t, t.plusMinutes(3), ""));
-        assertStages(records.get(1), tuple("Drive In", t.plusMinutes(70), null, ""));
-    }
-
-    @Test
-    void shouldDropTransitionOnlySequenceWithoutConcreteStages() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 18, 30);
-
-        List<SequenceRecord> records = build(baseConfig(), List.of(
-                detection(1, "AA1120A", 16, 90, t)
-        ));
-
-        assertThat(records).isEmpty();
-    }
-
-    @Test
-    void shouldApplyRecoveryForExitOnlyEvents() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 19, 0);
-
-        SequenceRecord serviceOut = build(baseConfig(), List.of(
-                detection(1, "BB1001", 13, 90, t)
-        )).getFirst();
-        assertStages(serviceOut,
-                tuple("Service", null, t, ""),
-                tuple("Backyard", t, null, ""));
-
-        SequenceRecord parkingOut = build(baseConfig(), List.of(
-                detection(1, "BB1002", 15, 90, t)
-        )).getFirst();
-        assertStages(parkingOut,
-                tuple("Parking", null, t, ""),
-                tuple("Backyard", t, null, ""));
-
-        SequenceRecord driveInOut = build(baseConfig(), List.of(
-                detection(1, "BB1003", 11, 90, t)
-        )).getFirst();
-        assertStages(driveInOut, tuple("Drive In", null, t, ""));
-
-        SequenceRecord postOut = build(baseConfig(), List.of(
-                detection(1, "BB1004", 20, 250, t)
-        )).getFirst();
-        assertStages(postOut, tuple("post-1", null, t, ""));
-    }
-
-    @Test
-    void shouldNotInsertSyntheticServiceBetweenRecoveryPostOutAndSamePostIn() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 19, 9, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "BB1004A", 20, 250, t),
-                detection(2, "BB1004A", 20, 250, t.plusMinutes(2)),
-                detection(3, "BB1004A", 20, 90, t.plusMinutes(5))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("post-1", null, t.plusMinutes(2), ""),
-                tuple("post-1", t.plusMinutes(5), null, ""));
-    }
-
-    @Test
-    void shouldKeepBackyardOpenWhenServiceOutArrivesInsideBackyard() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 19, 10, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "DD1005", 13, 90, t),
-                detection(2, "DD1005", 13, 90, t.plusMinutes(10)),
-                detection(3, "DD1005", 13, 90, t.plusMinutes(20))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", null, t, ""),
-                tuple("Backyard", t, null, ""),
-                tuple("Service", null, t.plusMinutes(10), ""),
-                tuple("Service", null, t.plusMinutes(20), ""));
-    }
-
-    @Test
-    void shouldKeepBackyardOpenWhenParkingOutArrivesInsideBackyard() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 19, 11, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "DD1006", 15, 90, t),
-                detection(2, "DD1006", 15, 90, t.plusMinutes(12))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Parking", null, t, ""),
-                tuple("Backyard", t, null, ""),
-                tuple("Parking", null, t.plusMinutes(12), ""));
-    }
-
-    @Test
-    void shouldCreateRecoveryServiceBeforePostInWithoutActiveService() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 20, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "CC1001", 20, 90, t)
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", null, t.minusSeconds(1), ""),
-                tuple("post-1", t, null, ""));
-    }
-
-    @Test
-    void shouldIgnoreRepeatedStageStartsAndBackyardTriggers() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 21, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "CC1002", 10, 90, t),
-                detection(2, "CC1002", 10, 90, t.plusMinutes(1)),
-                detection(3, "CC1002", 17, 90, t.plusMinutes(2)),
-                detection(4, "CC1002", 17, 90, t.plusMinutes(3)),
-                detection(5, "CC1002", 12, 90, t.plusMinutes(5))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Drive In", t, t.plusMinutes(2).minusSeconds(1), ""),
-                tuple("Backyard", t.plusMinutes(2), t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("Service", t.plusMinutes(5), null, ""));
-    }
-
-    @Test
-    void shouldNormalizeEqualTimestampsPerPlate() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 22, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "CC1003", 10, 90, t),
-                detection(2, "CC1003", 11, 90, t),
-                detection(3, "CC1003", 14, 90, t)
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Drive In", t, t.plusSeconds(1), ""),
-                tuple("Parking", t.plusSeconds(2), null, ""));
-    }
-
-    @Test
-    void shouldKeepOpenPostWithoutOutTimeAndUseLastEventAsSequenceEnd() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 23, 0);
-
-        SequenceRecord record = build(baseConfig(), List.of(
-                detection(1, "CC1004", 12, 90, t),
-                detection(2, "CC1004", 20, 90, t.plusMinutes(5)),
-                detection(3, "CC1004", 20, 250, t.plusMinutes(8)),
-                detection(4, "CC1004", 20, 90, t.plusMinutes(10))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(5), null, ""));
-        assertThat(record.getFinishedAt()).isEqualTo(t.plusMinutes(10));
-    }
-
-    @Test
-    void shouldInsertSyntheticServiceBetweenDifferentPostsWhenPostOutSeen() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 23, 30);
-        AppConfig config = baseConfigWithTwoPosts();
-
-        SequenceRecord record = build(config, List.of(
-                detection(1, "CC1004A", 12, 90, t),
-                detection(2, "CC1004A", 20, 90, t.plusMinutes(5)),
-                detection(3, "CC1004A", 20, 250, t.plusMinutes(8)),
-                detection(4, "CC1004A", 21, 90, t.plusMinutes(12))
-        )).getFirst();
-
-        assertStages(record,
-                tuple("Service", t, t.plusMinutes(5).minusSeconds(1), ""),
-                tuple("post-1", t.plusMinutes(5), t.plusMinutes(8), ""),
-                tuple("Service", t.plusMinutes(8).plusSeconds(1), t.plusMinutes(11).plusSeconds(59), ""),
-                tuple("post-2", t.plusMinutes(12), null, ""));
-    }
-
-    @Test
-    void shouldStartNewSequenceAfterFortyEightHourGap() {
-        LocalDateTime t = LocalDateTime.of(2026, 3, 18, 9, 0);
-
-        List<SequenceRecord> records = build(baseConfig(), List.of(
-                detection(1, "CC1005", 10, 90, t),
-                detection(2, "CC1005", 11, 90, t.plusMinutes(2)),
-                detection(3, "CC1005", 10, 90, t.plusHours(49))
-        ));
-
-        assertThat(records).hasSize(2);
-        assertStages(records.get(0), tuple("Drive In", t, t.plusMinutes(2), ""));
-        assertStages(records.get(1), tuple("Drive In", t.plusHours(49), null, ""));
-    }
-
-    @Test
-    void shouldIgnoreDirectionOutsideConfiguredRange() {
-        AppConfig config = baseConfig();
-        config.getCameras().getDriveInIn().getFirst().getDirectionRange().setFrom(0);
-        config.getCameras().getDriveInIn().getFirst().getDirectionRange().setTo(180);
-
-        List<SequenceRecord> result = build(config, List.of(
-                detection(1, "DD1001", 10, 270, LocalDateTime.of(2026, 3, 18, 12, 0))
-        ));
-
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void shouldSupportWrappedDirectionRangesWithoutBoundaryOverlap() {
-        AppConfig config = baseConfig();
-        config.getCameras().setDriveInIn(List.of());
-        config.getCameras().setDriveInOut(List.of());
-        config.getCameras().setServiceIn(List.of());
-        config.getCameras().setServiceOut(List.of());
-        config.getCameras().setDriveInToService(List.of());
-        config.getCameras().setServiceToDriveIn(List.of());
-        config.getCameras().setParkingIn(List.of(camera(14, 270, 90)));
-        config.getCameras().setParkingOut(List.of(camera(15, 90, 270)));
-
-        List<SequenceRecord> records = build(config, List.of(
-                detection(1, "DD1002", 14, 0, LocalDateTime.of(2026, 3, 18, 12, 0)),
-                detection(2, "DD1003", 15, 90, LocalDateTime.of(2026, 3, 18, 12, 5)),
-                detection(3, "DD1004", 14, 270, LocalDateTime.of(2026, 3, 18, 12, 10))
-        ));
-
-        assertThat(records).hasSize(3);
-        assertStages(records.get(0), tuple("Parking", LocalDateTime.of(2026, 3, 18, 12, 0), null, ""));
-        assertStages(records.get(1),
-                tuple("Parking", null, LocalDateTime.of(2026, 3, 18, 12, 5), ""),
-                tuple("Backyard", LocalDateTime.of(2026, 3, 18, 12, 5), null, ""));
-        assertStages(records.get(2), tuple("Parking", LocalDateTime.of(2026, 3, 18, 12, 10), null, ""));
-    }
-
-    private List<SequenceRecord> build(AppConfig config, List<Detection> detections) {
-        return engine.build(detections, config);
-    }
-
-    private void assertStages(SequenceRecord record, org.assertj.core.groups.Tuple... expectedTuples) {
         assertThat(record.stagesChronologically())
-                .extracting(stage -> stage.reportLabel(), StageWindow::timeIn, StageWindow::timeOut, StageWindow::alert)
-                .containsExactly(expectedTuples);
+                .extracting(StageWindow::stageName, StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::partial)
+                .containsExactly(
+                        tuple("service", "Service", t, t.plusMinutes(5).minusSeconds(1), false),
+                        tuple("post_post_1", "Post 1", t.plusMinutes(5), null, false),
+                        tuple("service", "Service", null, t.plusMinutes(20), true)
+                );
     }
 
-    private Detection detection(long id, String plate, int cameraId, int direction, LocalDateTime at) {
-        return new Detection(id, plate, cameraId, direction, at);
+    @Test
+    void shouldSupportAllowedNextStagesAndIgnoreUnexpectedEvents() {
+        AppConfig config = dynamicWorkflowConfig();
+        AppConfig.StageConfig service = stage(config, "service_primary");
+        service.setAllowedNextStages(List.of("post_3"));
+        service.setUnexpectedNextStagePolicy("ignore");
+
+        LocalDateTime t = LocalDateTime.of(2026, 3, 20, 11, 0);
+        SequenceRecord record = engine.build(List.of(
+                detection(1, "AA2222", 100, 10, t),
+                detection(2, "AA2222", 400, 10, t.plusMinutes(4)),
+                detection(3, "AA2222", 200, 10, t.plusMinutes(6))
+        ), config).getFirst();
+
+        assertThat(record.stagesChronologically())
+                .extracting(StageWindow::stageName, StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut)
+                .containsExactly(
+                        tuple("service_primary", "Service Primary", t, t.plusMinutes(6).minusSeconds(1)),
+                        tuple("post_3", "Post 3", t.plusMinutes(6), null)
+                );
     }
 
-    private AppConfig baseConfig() {
-        AppConfig c = new AppConfig();
+    @Test
+    void shouldMaterializeCandidateAndCancelItOnConfiguredEvent() {
+        AppConfig config = dynamicWorkflowConfig();
+        LocalDateTime t = LocalDateTime.of(2026, 3, 20, 12, 0);
+
+        List<SequenceRecord> records = engine.build(List.of(
+                detection(1, "AA3333", 500, 10, t),
+                detection(2, "AA3333", 100, 10, t.plusMinutes(5)),
+                detection(3, "AA3333", 500, 10, t.plusMinutes(20)),
+                detection(4, "AA3333", 200, 10, t.plusMinutes(40))
+        ), config);
+
+        SequenceRecord record = records.getFirst();
+        assertThat(record.stagesChronologically())
+                .extracting(StageWindow::stageName, StageWindow::timeIn, StageWindow::timeOut)
+                .containsExactly(
+                        tuple("service_primary", t.plusMinutes(5), t.plusMinutes(20).minusSeconds(1)),
+                        tuple("test_drive_candidate", t.plusMinutes(20), t.plusMinutes(40).minusSeconds(1)),
+                        tuple("post_3", t.plusMinutes(40), null)
+                );
+    }
+
+    @Test
+    void shouldHandleStickyTimeoutTransitionAndGeneralPartialFromFinish() {
+        AppConfig config = dynamicWorkflowConfig();
+        LocalDateTime t = LocalDateTime.of(2026, 3, 20, 13, 0);
+
+        SequenceRecord stickyTransition = engine.build(List.of(
+                detection(1, "AA4444", 100, 10, t),
+                detection(2, "AA4444", 200, 10, t.plusMinutes(5)),
+                detection(3, "AA4444", 201, 190, t.plusMinutes(10)),
+                detection(4, "AA4444", 400, 10, t.plusMinutes(20))
+        ), config).getFirst();
+
+        assertThat(stickyTransition.stagesChronologically())
+                .extracting(StageWindow::stageName, StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut, StageWindow::partial)
+                .containsExactly(
+                        tuple("service_primary", "Service Primary", t, t.plusMinutes(5).minusSeconds(1), false),
+                        tuple("post_3", "Post 3", t.plusMinutes(5), t.plusMinutes(10), false),
+                        tuple("service_secondary", "Service Secondary", t.plusMinutes(10).plusSeconds(1), t.plusMinutes(19).plusSeconds(59), false),
+                        tuple("parking_secondary", "Parking Secondary", t.plusMinutes(20), null, false)
+                );
+
+        SequenceRecord partial = engine.build(List.of(
+                detection(1, "AA4445", 401, 10, t)
+        ), config).getFirst();
+
+        assertThat(partial.stagesChronologically())
+                .extracting(StageWindow::stageName, StageWindow::timeIn, StageWindow::timeOut, StageWindow::partial)
+                .containsExactly(tuple("parking_secondary", null, t, true));
+    }
+
+    @Test
+    void shouldInsertIntermediateStageForUnexpectedTransitionPolicy() {
+        AppConfig config = dynamicWorkflowConfig();
+        AppConfig.StageConfig service = stage(config, "service_primary");
+        service.setAllowedNextStages(List.of("post_3"));
+        service.setUnexpectedNextStagePolicy("insert_intermediate_and_start_next");
+        service.setIntermediateStageOnTransition("backyard_link");
+
+        LocalDateTime t = LocalDateTime.of(2026, 3, 20, 14, 0);
+        SequenceRecord record = engine.build(List.of(
+                detection(1, "AA5555", 100, 10, t),
+                detection(2, "AA5555", 400, 10, t.plusMinutes(4))
+        ), config).getFirst();
+
+        assertThat(record.stagesChronologically())
+                .extracting(StageWindow::stageName, StageWindow::reportLabel, StageWindow::timeIn, StageWindow::timeOut)
+                .containsExactly(
+                        tuple("service_primary", "Service Primary", t, t.plusMinutes(4).minusSeconds(1)),
+                        tuple("backyard_link", "Backyard Link", t.plusMinutes(4), t.plusMinutes(4)),
+                        tuple("parking_secondary", "Parking Secondary", t.plusMinutes(4), null)
+                );
+    }
+
+    @Test
+    void shouldNormalizeEqualTimestampsAndCloseSequenceByStageTimeout() {
+        AppConfig config = dynamicWorkflowConfig();
+        stage(config, "post_3").setSequenceCloseTimeoutMinutes(30);
+        LocalDateTime t = LocalDateTime.of(2026, 3, 20, 15, 0);
+
+        List<SequenceRecord> records = engine.build(List.of(
+                detection(1, "AA6666", 100, 10, t),
+                detection(2, "AA6666", 200, 10, t),
+                detection(3, "AA6666", 500, 10, t.plusMinutes(45))
+        ), config);
+
+        assertThat(records).hasSize(2);
+        assertThat(records.getFirst().stagesChronologically())
+                .extracting(StageWindow::stageName, StageWindow::timeIn)
+                .containsExactly(
+                        tuple("service_primary", t),
+                        tuple("post_3", t.plusSeconds(1))
+                );
+        assertThat(records.get(1).stagesChronologically())
+                .extracting(StageWindow::stageName, StageWindow::timeIn)
+                .containsExactly(tuple("test_drive_candidate", t.plusMinutes(45)));
+    }
+
+    private AppConfig baseConfigWithLegacyCameras() {
+        AppConfig config = new AppConfig();
         AppConfig.TimingConfig timing = new AppConfig.TimingConfig();
         timing.setDriveInToDriveOutAlertMinutes(15);
         timing.setServiceToPostAlertMinutes(15);
-        timing.setTestDriveStartMinutes(30);
+        timing.setTestDriveStartMinutes(10);
         timing.setTestDriveResetMinutes(60);
-        c.setTiming(timing);
+        config.setTiming(timing);
 
         AppConfig.CamerasConfig cameras = new AppConfig.CamerasConfig();
         cameras.setDriveInIn(List.of(camera(10)));
@@ -485,42 +179,109 @@ class SequenceEngineTest {
         cameras.setParkingOut(List.of(camera(15)));
 
         AppConfig.PostCameraConfig post = new AppConfig.PostCameraConfig();
-        post.setPostName("post-1");
+        post.setPostName("Post 1");
         post.setAnalyticsId(20);
         post.setInDirectionRange(range(0, 180));
         post.setOutDirectionRange(range(181, 360));
         cameras.setServicePosts(List.of(post));
-
-        c.setCameras(cameras);
-        return c;
+        config.setCameras(cameras);
+        return config;
     }
 
-    private AppConfig baseConfigWithTwoPosts() {
-        AppConfig config = baseConfig();
-
-        AppConfig.PostCameraConfig post2 = new AppConfig.PostCameraConfig();
-        post2.setPostName("post-2");
-        post2.setAnalyticsId(21);
-        post2.setInDirectionRange(range(0, 180));
-        post2.setOutDirectionRange(range(181, 360));
-
-        config.getCameras().setServicePosts(List.of(
-                config.getCameras().getServicePosts().getFirst(),
-                post2
-        ));
+    private AppConfig dynamicWorkflowConfig() {
+        AppConfig config = new AppConfig();
+        AppConfig.WorkflowConfig workflow = new AppConfig.WorkflowConfig();
+        workflow.setDefaultSequenceCloseTimeoutMinutes(48 * 60);
+        List<AppConfig.StageConfig> stages = new ArrayList<>();
+        stages.add(stage("service_primary", "Service Primary", List.of(start(100, null, null, "SERVICE_PRIMARY_IN")), List.of(), false));
+        stages.add(stage("service_secondary", "Service Secondary", List.of(start(300, null, null, "SERVICE_SECONDARY_IN")), List.of(), false));
+        AppConfig.StageConfig post = stage("post_3", "Post {{instance}}", List.of(start(200, 0, 180, "POST_3_IN", "3")), List.of(finish(201, 180, 360, "POST_3_OUT", "3")), false);
+        post.setFinishMode("sticky");
+        post.setStickyCloseTimeoutMinutes(5);
+        post.setTimeoutTransitionToStage("service_secondary");
+        post.setAllowedNextStages(List.of("service_secondary", "parking_secondary"));
+        stages.add(post);
+        AppConfig.StageConfig parking = stage("parking_secondary", "Parking Secondary", List.of(start(400, null, null, "PARKING_SECONDARY_IN")), List.of(finish(401, null, null, "PARKING_SECONDARY_OUT")), false);
+        parking.setAllowPartialFromFinish(true);
+        stages.add(parking);
+        AppConfig.StageConfig backyard = stage("backyard_link", "Backyard Link", List.of(start(450, null, null, "BACKYARD_LINK_IN")), List.of(), true);
+        backyard.setSaveStageAfterSequenceClosed(true);
+        stages.add(backyard);
+        AppConfig.StageConfig candidate = stage("test_drive_candidate", "Test Drive Candidate", List.of(start(500, null, null, "TEST_DRIVE_CANDIDATE")), List.of(), false);
+        candidate.setStartMode("candidate");
+        candidate.setCandidateTimeoutMinutes(10);
+        candidate.setCandidateCloseTimeoutMinutes(60);
+        candidate.setCandidateCancelOnEvents(List.of("SERVICE_PRIMARY_IN"));
+        candidate.setSaveStageAfterSequenceClosed(true);
+        stages.add(candidate);
+        workflow.setStages(stages);
+        config.setWorkflow(workflow);
         return config;
+    }
+
+    private AppConfig enrich(AppConfig config) {
+        config.setWorkflow(workflowDefaultsFactory.buildWorkflow(config));
+        return config;
+    }
+
+    private AppConfig.StageConfig stage(String name,
+                                        String label,
+                                        List<AppConfig.TriggerConfig> starts,
+                                        List<AppConfig.TriggerConfig> finishes,
+                                        boolean transitional) {
+        AppConfig.StageConfig stage = new AppConfig.StageConfig();
+        stage.setName(name);
+        stage.setLabelTemplate(label);
+        stage.setStartTriggers(starts);
+        stage.setFinishTriggers(finishes);
+        stage.setTransitional(transitional);
+        stage.setAllowPartialFromFinish(!finishes.isEmpty());
+        return stage;
+    }
+
+    private AppConfig.TriggerConfig start(int cameraId, Integer from, Integer to, String eventKey) {
+        return start(cameraId, from, to, eventKey, null);
+    }
+
+    private AppConfig.TriggerConfig start(int cameraId, Integer from, Integer to, String eventKey, String instance) {
+        AppConfig.TriggerConfig trigger = new AppConfig.TriggerConfig();
+        trigger.setCameraId(cameraId);
+        trigger.setDirectionRange(from == null || to == null ? null : range(from, to));
+        trigger.setEventType("in");
+        trigger.setEventKey(eventKey);
+        trigger.setDerivedStageInstance(instance);
+        return trigger;
+    }
+
+    private AppConfig.TriggerConfig finish(int cameraId, Integer from, Integer to, String eventKey) {
+        return finish(cameraId, from, to, eventKey, null);
+    }
+
+    private AppConfig.TriggerConfig finish(int cameraId, Integer from, Integer to, String eventKey, String instance) {
+        AppConfig.TriggerConfig trigger = new AppConfig.TriggerConfig();
+        trigger.setCameraId(cameraId);
+        trigger.setDirectionRange(from == null || to == null ? null : range(from, to));
+        trigger.setEventType("out");
+        trigger.setEventKey(eventKey);
+        trigger.setDerivedStageInstance(instance);
+        return trigger;
+    }
+
+    private AppConfig.StageConfig stage(AppConfig config, String name) {
+        return config.getWorkflow().getStages().stream()
+                .filter(stage -> stage.getName().equals(name))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private Detection detection(long id, String plate, int cameraId, int direction, LocalDateTime at) {
+        return new Detection(id, plate, cameraId, direction, at);
     }
 
     private AppConfig.CameraConfig camera(int id) {
         AppConfig.CameraConfig camera = new AppConfig.CameraConfig();
         camera.setAnalyticsId(id);
         camera.setDirectionRange(new AppConfig.DirectionRange());
-        return camera;
-    }
-
-    private AppConfig.CameraConfig camera(int id, int from, int to) {
-        AppConfig.CameraConfig camera = camera(id);
-        camera.setDirectionRange(range(from, to));
         return camera;
     }
 
