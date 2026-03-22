@@ -60,4 +60,5 @@ Run unit tests with:
 ```bash
 ./mvnw -B test
 ```
-The automated regression suite now also replays the full committed `results/` dataset and checks every plate / sequence for compact single-camera stage rendering and non-overlapping stage order.
+This now also generates a JaCoCo HTML coverage report in `target/site/jacoco/index.html` so you can inspect which branches were exercised.
+The automated regression suite replays the full committed `results/` dataset, checks every plate / sequence for compact single-camera stage rendering and non-overlapping stage order, and additionally verifies controllers, JDBC adapters, runtime-config persistence, notification scheduling, bootstrap helpers, and startup wiring with isolated unit tests.

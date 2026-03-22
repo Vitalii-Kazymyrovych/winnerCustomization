@@ -16,10 +16,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class NotificationServiceTest {
+    private final Clock clock = Clock.fixed(Instant.parse("2026-03-01T12:00:00Z"), ZoneOffset.UTC);
+
     @Test
     void triggersNotificationWhenPlateStaysOnConfiguredCamera() {
-        NotificationService service = new NotificationService(new InMemoryNotificationRepository(), new TelegramNotifier(new com.fasterxml.jackson.databind.ObjectMapper()),
-                Clock.fixed(Instant.parse("2026-03-01T12:00:00Z"), ZoneOffset.UTC));
+        NotificationService service = service(new InMemoryNotificationRepository());
         List<SequenceRecord.NotificationEvent> events = service.evaluate(List.of(
                 new Detection(1, "AA1111", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 0)),
                 new Detection(2, "AA1111", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 5))
@@ -32,8 +33,7 @@ class NotificationServiceTest {
 
     @Test
     void cancelsPendingNotificationWhenOtherCameraAppears() {
-        NotificationService service = new NotificationService(new InMemoryNotificationRepository(), new TelegramNotifier(new com.fasterxml.jackson.databind.ObjectMapper()),
-                Clock.fixed(Instant.parse("2026-03-01T12:00:00Z"), ZoneOffset.UTC));
+        NotificationService service = service(new InMemoryNotificationRepository());
         List<SequenceRecord.NotificationEvent> events = service.evaluate(List.of(
                 new Detection(1, "AA1111", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 0)),
                 new Detection(2, "AA1111", 1003, null, LocalDateTime.of(2026, 3, 1, 10, 10))
@@ -44,8 +44,7 @@ class NotificationServiceTest {
 
     @Test
     void deduplicatesEqualMessagesTriggeredAtSameTimeFromDifferentCameras() {
-        NotificationService service = new NotificationService(new InMemoryNotificationRepository(), new TelegramNotifier(new com.fasterxml.jackson.databind.ObjectMapper()),
-                Clock.fixed(Instant.parse("2026-03-01T12:00:00Z"), ZoneOffset.UTC));
+        NotificationService service = service(new InMemoryNotificationRepository());
         AppConfig config = TestConfigFactory.config();
         AppConfig.NotificationRule duplicateRule = new AppConfig.NotificationRule();
         duplicateRule.setCameraId(1002);
@@ -62,13 +61,79 @@ class NotificationServiceTest {
         assertThat(events.getFirst().message()).isEqualTo("Автомобіль довго стоїть на Drive-In: AA1111");
     }
 
+    @Test
+    void evaluateHonorsDirectionRangesAndNullConfigProducesNoEvents() {
+        NotificationService service = service(new InMemoryNotificationRepository());
+        AppConfig config = TestConfigFactory.config();
+        AppConfig.DirectionRange range = new AppConfig.DirectionRange();
+        range.setFrom(270);
+        range.setTo(90);
+        config.getNotifications().getFirst().setDirectionRange(range);
+
+        List<SequenceRecord.NotificationEvent> matched = service.evaluate(List.of(
+                new Detection(1, "AA1111", 1001, 350, LocalDateTime.of(2026, 3, 1, 10, 0)),
+                new Detection(2, "AA1111", 1001, 350, LocalDateTime.of(2026, 3, 1, 10, 30))
+        ), config);
+
+        List<SequenceRecord.NotificationEvent> unmatched = service.evaluate(List.of(
+                new Detection(1, "AA1111", 1001, 100, LocalDateTime.of(2026, 3, 1, 10, 0))
+        ), config);
+
+        assertThat(matched).hasSize(2);
+        assertThat(unmatched).isEmpty();
+        assertThat(service.evaluate(List.of(), null)).isEmpty();
+    }
+
+    @Test
+    void syncPendingNotificationsPersistsAndCancelsPendingItems() {
+        InMemoryNotificationRepository repository = new InMemoryNotificationRepository();
+        NotificationService service = service(repository);
+
+        service.syncPendingNotifications(List.of(
+                new Detection(1, "AA1111", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 0)),
+                new Detection(2, "AA1111", 1003, null, LocalDateTime.of(2026, 3, 1, 10, 10)),
+                new Detection(3, "BB2222", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 0))
+        ), TestConfigFactory.config());
+
+        assertThat(repository.initialized).isTrue();
+        assertThat(repository.cancelledKeys).contains("AA1111@1001");
+        assertThat(repository.items).extracting(NotificationService.PendingNotification::plateNumber)
+                .contains("AA1111", "BB2222");
+    }
+
+    @Test
+    void dispatchDueNotificationsMarksItemsSent() {
+        InMemoryNotificationRepository repository = new InMemoryNotificationRepository();
+        repository.dueItems = List.of(new NotificationService.PendingNotification(
+                11L, "AA1111", 1001,
+                LocalDateTime.of(2026, 3, 1, 10, 0),
+                LocalDateTime.of(2026, 3, 1, 10, 15),
+                "hello"
+        ));
+        NotificationService service = service(repository);
+
+        service.dispatchDueNotifications(TestConfigFactory.config(), 5);
+
+        assertThat(repository.initialized).isTrue();
+        assertThat(repository.markedSentIds).containsExactly(11L);
+    }
+
+    private NotificationService service(InMemoryNotificationRepository repository) {
+        return new NotificationService(repository, new TelegramNotifier(new com.fasterxml.jackson.databind.ObjectMapper()), clock);
+    }
+
     private static final class InMemoryNotificationRepository implements NotificationRepository {
         private final List<NotificationService.PendingNotification> items = new ArrayList<>();
-        @Override public void initialize() {}
+        private final List<String> cancelledKeys = new ArrayList<>();
+        private final List<Long> markedSentIds = new ArrayList<>();
+        private List<NotificationService.PendingNotification> dueItems = List.of();
+        private boolean initialized;
+
+        @Override public void initialize() { initialized = true; }
         @Override public void upsertPending(NotificationService.PendingNotification pendingNotification) { items.add(pendingNotification); }
-        @Override public void cancel(String plateNumber, int cameraId, LocalDateTime triggerAt) {}
-        @Override public List<NotificationService.PendingNotification> findDuePending(LocalDateTime now, int limit) { return List.of(); }
+        @Override public void cancel(String plateNumber, int cameraId, LocalDateTime triggerAt) { cancelledKeys.add(plateNumber + "@" + cameraId); }
+        @Override public List<NotificationService.PendingNotification> findDuePending(LocalDateTime now, int limit) { return dueItems; }
         @Override public List<NotificationService.PendingNotification> findAll() { return items; }
-        @Override public void markSent(long id, LocalDateTime sentAt) {}
+        @Override public void markSent(long id, LocalDateTime sentAt) { markedSentIds.add(id); }
     }
 }
