@@ -103,3 +103,8 @@
 - Rebuilt notification processing around camera-level rules and rewrote report generation to show stage type and attached alerts.
 - Replaced the old test suite with focused unit tests for the new engine/config/reporting/notification behavior and updated `README.md`, `TECHNICAL_SPEC.md`, and `config.json.example`.
 - Fixed report alert enrichment so notification messages stay on the matching plate only instead of leaking into other vehicles' XLSX rows; added regression coverage in `ReportServiceTest` and documented the plate-scoped alert behavior in `README.md` / `TECHNICAL_SPEC.md`.
+- Fixed report layout so the `Sequences` sheet moves the plate marker row into the `Out time` column, removes the `Type` column from both sheets, and emits a centered `Sequence closed` marker only for closed sequences.
+- Changed report duration rendering to use the actual report generation timestamp for open stages, keeping `Out time` blank until a stage really closes.
+- Reworked single-camera stage handling to aggregate repeated detections into one open interval (`In` = first detection, close on timeout at last seen) and to avoid duplicate transitional `Backyard` candidates/stages on repeated trigger-camera detections.
+- Deduplicated repeated notification messages with the same plate/time/text before report enrichment and added/updated unit tests for the new report, notification, and sequence behaviors.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the new open-stage duration, closed-sequence marker, alert deduplication, and single-camera aggregation rules.

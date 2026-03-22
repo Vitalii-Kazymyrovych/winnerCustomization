@@ -1,6 +1,7 @@
 package script.winnerCustomization.service;
 
 import org.junit.jupiter.api.Test;
+import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
 import script.winnerCustomization.repository.NotificationRepository;
@@ -39,6 +40,26 @@ class NotificationServiceTest {
         ), TestConfigFactory.config());
 
         assertThat(events).isEmpty();
+    }
+
+    @Test
+    void deduplicatesEqualMessagesTriggeredAtSameTimeFromDifferentCameras() {
+        NotificationService service = new NotificationService(new InMemoryNotificationRepository(), new TelegramNotifier(new com.fasterxml.jackson.databind.ObjectMapper()),
+                Clock.fixed(Instant.parse("2026-03-01T12:00:00Z"), ZoneOffset.UTC));
+        AppConfig config = TestConfigFactory.config();
+        AppConfig.NotificationRule duplicateRule = new AppConfig.NotificationRule();
+        duplicateRule.setCameraId(1002);
+        duplicateRule.setDelaySeconds(900);
+        duplicateRule.setMessage("Автомобіль довго стоїть на Drive-In");
+        config.setNotifications(List.of(config.getNotifications().getFirst(), duplicateRule));
+
+        List<SequenceRecord.NotificationEvent> events = service.evaluate(List.of(
+                new Detection(1, "AA1111", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 0)),
+                new Detection(2, "AA1111", 1002, null, LocalDateTime.of(2026, 3, 1, 10, 0))
+        ), config);
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().message()).isEqualTo("Автомобіль довго стоїть на Drive-In: AA1111");
     }
 
     private static final class InMemoryNotificationRepository implements NotificationRepository {
