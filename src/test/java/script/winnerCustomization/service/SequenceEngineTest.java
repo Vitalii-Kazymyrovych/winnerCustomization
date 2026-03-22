@@ -41,13 +41,19 @@ class SequenceEngineTest {
                 new Detection(4, "AA1111", 1003, 90, LocalDateTime.of(2026, 3, 1, 10, 9))
         );
 
-        SequenceRecord record = sequenceEngine.build(detections, TestConfigFactory.config(), LocalDateTime.of(2026, 3, 1, 12, 0)).getFirst();
+        List<SequenceRecord> records = sequenceEngine.build(detections, TestConfigFactory.config(), LocalDateTime.of(2026, 3, 1, 12, 0));
+        SequenceRecord backyardRecord = records.getFirst();
+        SequenceRecord serviceRecord = records.get(1);
 
-        assertThat(record.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
-                .containsExactly("drive_in", "backyard", "service");
-        assertThat(record.stagesChronologically().get(1).stageType()).isEqualTo(SequenceRecord.StageType.TRANSITIONAL);
-        assertThat(record.stagesChronologically().get(1).timeIn()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 5));
-        assertThat(record.stagesChronologically().get(1).timeOut()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 9));
+        assertThat(records).hasSize(2);
+        assertThat(backyardRecord.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
+                .containsExactly("drive_in", "backyard");
+        assertThat(backyardRecord.stagesChronologically().get(1).stageType()).isEqualTo(SequenceRecord.StageType.TRANSITIONAL);
+        assertThat(backyardRecord.stagesChronologically().get(1).timeIn()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 5));
+        assertThat(backyardRecord.stagesChronologically().get(1).timeOut()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 6));
+        assertThat(backyardRecord.isClosed()).isTrue();
+        assertThat(serviceRecord.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
+                .containsExactly("service");
     }
 
     @Test

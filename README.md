@@ -7,8 +7,9 @@
 - Groups detections by plate into chronological sequences.
 - Builds stage windows using deterministic rules:
   - `real` stages open on `inTriggers` and keep a sticky `Out` timestamp from `outTriggers`.
-  - `transitional` stages start as candidates and materialize only after `candidateTimeoutSeconds`.
-  - `single_camera` stages keep the first detection as `In`, stay sticky across repeated detections even when there are large gaps between them, refresh internal `lastSeenAt` on every repeated detection, close at the next stage boundary when one arrives, and close at `lastSeenAt` before sequence/report finalization when the timeout expires.
+- `transitional` stages start as candidates and materialize only after `candidateTimeoutSeconds`.
+- Transitional trigger cameras are now honored only when the currently active/last concrete stage matches `allowedAfter`, so standalone Backyard/Test-Drive detections do not create impossible stage rows.
+- `single_camera` stages keep the first detection as `In`, stay sticky across repeated detections even when there are large gaps between them, refresh internal `lastSeenAt` on every repeated detection, close at the next stage boundary when one arrives, and close at `lastSeenAt` before sequence/report finalization when the timeout expires.
 - Generates `Sequences` and `Events` sheets in XLSX.
 - Persists built sequences and pending notifications through repositories.
 - Can schedule Telegram notifications when a plate stays on a configured camera for too long.
@@ -48,6 +49,10 @@ Create `config.json` next to the jar by copying `config.json.example`.
 
 ## Notifications
 Notification rules are configured per camera. A timer starts when a matching detection arrives. If there are no later detections for the same plate on a different camera before `delaySeconds`, a notification is produced and can be dispatched through Telegram. Report alerts are attached only to sequences and stage rows of that same plate, and identical `(plate, trigger time, message)` notifications are deduplicated before enrichment so the same alert text is not repeated in one row.
+
+## Transitional-stage closure notes
+- `transitionalStages[].sequenceCloseTimeoutOverrideSeconds = 0` means “close the sequence immediately after the transitional stage has been confirmed/materialized”.
+- This is especially important for `Backyard`: the row still appears in the report, but it now closes at the transitional confirmation timestamp instead of remaining open for many hours until report generation.
 
 ## Running locally
 ```bash

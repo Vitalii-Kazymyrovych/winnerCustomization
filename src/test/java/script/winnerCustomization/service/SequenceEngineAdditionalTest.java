@@ -43,7 +43,40 @@ class SequenceEngineAdditionalTest {
 
         assertThat(records).hasSize(1);
         assertThat(records.getFirst().stagesChronologically()).extracting(script.winnerCustomization.model.SequenceRecord.StageWindow::stageName)
-                .contains("drive_in", "post_1", "backyard");
-        assertThat(records.getFirst().isClosed()).isFalse();
+                .containsExactly("drive_in", "post_1");
+        assertThat(records.getFirst().isClosed()).isTrue();
+    }
+
+    @Test
+    void transitionalCameraTriggersRequireAllowedPreviousStage() {
+        AppConfig config = TestFixtures.configWithReportDirectory("");
+        List<Detection> detections = List.of(
+                new Detection(1, "AA1111", 1008, null, LocalDateTime.of(2026, 3, 22, 10, 0)),
+                new Detection(2, "AA1111", 1003, 10, LocalDateTime.of(2026, 3, 22, 10, 5))
+        );
+
+        var records = engine.build(detections, config, LocalDateTime.of(2026, 3, 22, 11, 0));
+
+        assertThat(records).hasSize(1);
+        assertThat(records.getFirst().stagesChronologically())
+                .extracting(script.winnerCustomization.model.SequenceRecord.StageWindow::stageName)
+                .containsExactly("service");
+    }
+
+    @Test
+    void transitionalStagesWithZeroSequenceTimeoutCloseImmediatelyAfterMaterialization() {
+        AppConfig config = TestFixtures.configWithReportDirectory("");
+        List<Detection> detections = List.of(
+                new Detection(1, "AA1111", 1003, 10, LocalDateTime.of(2026, 3, 22, 10, 0)),
+                new Detection(2, "AA1111", 1008, null, LocalDateTime.of(2026, 3, 22, 10, 5))
+        );
+
+        var records = engine.build(detections, config, LocalDateTime.of(2026, 3, 22, 11, 0));
+
+        assertThat(records).hasSize(1);
+        assertThat(records.getFirst().isClosed()).isTrue();
+        assertThat(records.getFirst().getFinishedAt()).isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 5, 2));
+        assertThat(records.getFirst().stagesChronologically().getLast().stageName()).isEqualTo("backyard");
+        assertThat(records.getFirst().stagesChronologically().getLast().timeOut()).isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 5, 2));
     }
 }
