@@ -48,8 +48,9 @@ The engine is built around the three stage types only.
 #### Single-camera stages
 - First detection opens the stage with `In = detection time` and empty `Out`.
 - Repeated detections on the same camera refresh `lastSeenAt` only.
-- If the gap exceeds `timeoutSeconds`, the current stage closes at `lastSeenAt` and the next detection starts a new stage.
-- When the report is generated before timeout expiry, the stage stays open in the XLSX output.
+- Repeated detections for the same single-camera stage keep one sticky stage window even if the gaps between detections exceed `timeoutSeconds`.
+- A matching real-stage `Out` event closes the active single-camera stage at that real boundary instead of emitting a synthetic partial real row.
+- If no later boundary arrives, sequence-timeout finalization and report finalization both close the stage at `lastSeenAt` once `timeoutSeconds` has elapsed; otherwise the stage stays open in XLSX output.
 
 #### Shared rules
 - Duplicate detections with the same camera/direction inside `duplicateSuppressionSeconds` are ignored.
@@ -94,4 +95,6 @@ Unit tests cover:
 - duplicate transitional suppression,
 - report layout and open-stage duration rendering,
 - notification cancellation/triggering/deduplication,
-- runtime config validation.
+- runtime config validation,
+- committed `results/` dataset regression coverage for compact sticky-post reporting on production-like data,
+- full-dataset invariants that iterate through every plate / sequence and verify single-camera stage compaction plus non-overlapping stage order.
