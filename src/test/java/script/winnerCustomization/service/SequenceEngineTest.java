@@ -21,15 +21,22 @@ class SequenceEngineTest {
                 new Detection(4, "AA1111", 1003, 90, LocalDateTime.of(2026, 3, 1, 10, 20))
         );
 
-        SequenceRecord record = sequenceEngine.build(detections, TestConfigFactory.config(), LocalDateTime.of(2026, 3, 1, 12, 0)).getFirst();
+        List<SequenceRecord> records = sequenceEngine.build(detections, TestConfigFactory.config(), LocalDateTime.of(2026, 3, 1, 12, 0));
 
-        assertThat(record.stagesChronologically()).hasSize(3);
-        assertThat(record.stagesChronologically().get(0).stageName()).isEqualTo("drive_in");
-        assertThat(record.stagesChronologically().get(0).timeOut()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 10));
-        assertThat(record.stagesChronologically().get(1).partial()).isTrue();
-        assertThat(record.stagesChronologically().get(1).timeIn()).isNull();
-        assertThat(record.stagesChronologically().get(2).stageName()).isEqualTo("service");
-        assertThat(record.isClosed()).isFalse();
+        assertThat(records).hasSize(2);
+        SequenceRecord firstRecord = records.getFirst();
+        assertThat(firstRecord.stagesChronologically()).hasSize(3);
+        assertThat(firstRecord.stagesChronologically().get(0).stageName()).isEqualTo("drive_in");
+        assertThat(firstRecord.stagesChronologically().get(0).timeOut()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 10));
+        assertThat(firstRecord.stagesChronologically().get(1).stageName()).isEqualTo("backyard");
+        assertThat(firstRecord.stagesChronologically().get(2).partial()).isTrue();
+        assertThat(firstRecord.stagesChronologically().get(2).timeIn()).isNull();
+        assertThat(firstRecord.stagesChronologically().get(2).stageName()).isEqualTo("service");
+        assertThat(firstRecord.isClosed()).isTrue();
+
+        assertThat(records.get(1).stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
+                .containsExactly("service");
+        assertThat(records.get(1).isClosed()).isFalse();
     }
 
     @Test

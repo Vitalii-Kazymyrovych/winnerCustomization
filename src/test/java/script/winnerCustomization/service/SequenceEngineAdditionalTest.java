@@ -79,4 +79,48 @@ class SequenceEngineAdditionalTest {
         assertThat(records.getFirst().stagesChronologically().getLast().stageName()).isEqualTo("backyard");
         assertThat(records.getFirst().stagesChronologically().getLast().timeOut()).isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 5, 2));
     }
+
+    @Test
+    void createsTransitionalCandidateImmediatelyAfterAllowedRealStageEndsWithoutTriggerCameraEvent() {
+        AppConfig config = TestFixtures.configWithReportDirectory("");
+
+        AppConfig.RealStageConfig parking = new AppConfig.RealStageConfig();
+        parking.setName("parking");
+        parking.setLabel("Parking");
+        parking.setInTriggers(List.of(trigger(1201)));
+        parking.setOutTriggers(List.of(trigger(1202)));
+        config.setRealStages(List.of(parking));
+
+        AppConfig.TransitionalStageConfig backyard = new AppConfig.TransitionalStageConfig();
+        backyard.setName("backyard");
+        backyard.setLabel("Backyard");
+        backyard.setTriggerCameras(List.of(1999));
+        backyard.setCandidateTimeoutSeconds(2);
+        backyard.setAllowedAfter(List.of("parking"));
+        backyard.setSequenceCloseTimeoutOverrideSeconds(0);
+        backyard.setShowInReportIfIncomplete(false);
+        config.setTransitionalStages(List.of(backyard));
+        config.setSingleCameraStages(List.of());
+
+        List<Detection> detections = List.of(
+                new Detection(1, "AA1111", 1201, null, LocalDateTime.of(2026, 3, 22, 10, 0)),
+                new Detection(2, "AA1111", 1202, null, LocalDateTime.of(2026, 3, 22, 10, 5))
+        );
+
+        var records = engine.build(detections, config, LocalDateTime.of(2026, 3, 22, 11, 0));
+
+        assertThat(records).hasSize(1);
+        assertThat(records.getFirst().stagesChronologically())
+                .extracting(script.winnerCustomization.model.SequenceRecord.StageWindow::stageName)
+                .containsExactly("parking", "backyard");
+        assertThat(records.getFirst().stagesChronologically().get(1).timeIn()).isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 5, 1));
+        assertThat(records.getFirst().stagesChronologically().get(1).timeOut()).isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 5, 3));
+        assertThat(records.getFirst().isClosed()).isTrue();
+    }
+
+    private AppConfig.CameraTrigger trigger(int cameraId) {
+        AppConfig.CameraTrigger trigger = new AppConfig.CameraTrigger();
+        trigger.setCameraId(cameraId);
+        return trigger;
+    }
 }

@@ -44,7 +44,9 @@ class ReportServiceTest {
             assertThat(sheet.getRow(0).getCell(1).getStringCellValue()).isEqualTo("In time");
             assertThat(sheet.getRow(0).getCell(2).getStringCellValue()).isEqualTo("Out time");
             assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("AA1111");
-            assertThat(sheet.getRow(3).getCell(2).getStringCellValue()).isEqualTo("Sequence closed");
+            assertThat(sheet.getRow(2).getCell(0).getStringCellValue()).isEqualTo("Drive In");
+            assertThat(sheet.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Backyard");
+            assertThat(sheet.getRow(4).getCell(2).getStringCellValue()).isEqualTo("Sequence closed");
             assertThat(sheet.getRow(0).getCell(4).getStringCellValue()).isEqualTo("Alerts");
         }
 
@@ -52,6 +54,7 @@ class ReportServiceTest {
             var events = workbook.getSheet("Events");
             assertThat(events.getRow(0).getLastCellNum()).isEqualTo((short) 6);
             assertThat(events.getRow(1).getCell(1).getStringCellValue()).isEqualTo("Drive In");
+            assertThat(events.getRow(2).getCell(1).getStringCellValue()).isEqualTo("Backyard");
         }
     }
 

@@ -122,3 +122,5 @@
 - Fixed transitional-stage timeout handling so `sequenceCloseTimeoutOverrideSeconds = 0` closes confirmed Backyard-like stages immediately at their confirmation timestamp instead of leaving sequences open until report generation.
 - Added regression coverage for the reported production plates (`AA2292XT`, `KA6137MT`, `KA0082XM`) plus focused unit tests for camera-trigger eligibility and zero-timeout transitional closure.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document trigger-camera `allowedAfter` enforcement and immediate transitional-sequence closure semantics.
+- Fixed `SequenceEngine` so finishing a `real` stage now also creates transitional candidates from `allowedAfter` even without a dedicated transitional-camera event; this restores expected `Parking/Service -> Backyard` behavior for dataset plates like `KA8611PK` and `KA2654TA`.
+- Added focused unit coverage for `allowedAfter` candidate creation on real-stage end and refreshed dataset/report regressions to reflect the restored Backyard rows.
