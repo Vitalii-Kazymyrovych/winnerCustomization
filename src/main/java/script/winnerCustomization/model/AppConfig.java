@@ -9,83 +9,42 @@ public class AppConfig {
     private DatabaseConfig sequenceDatabase;
     private RootDatabaseConfig rootDatabase;
     private SourceTableConfig sourceTable;
-    private NotificationsConfig notifications;
-    private TimingConfig timing;
-    private CamerasConfig cameras;
-    private ReportsConfig reports;
-    private WorkflowConfig workflow;
+    private ReportConfig reports;
+    private MessagingConfig messaging;
+    private Integer sequenceCloseTimeoutMinutes = 2880;
+    private Boolean allowTransitionalAfterSingleCamera = false;
+    private Integer duplicateSuppressionSeconds = 2;
+    private List<NotificationRule> notifications = new ArrayList<>();
+    private List<RealStageConfig> realStages = new ArrayList<>();
+    private List<TransitionalStageConfig> transitionalStages = new ArrayList<>();
+    private List<SingleCameraStageConfig> singleCameraStages = new ArrayList<>();
 
-    public DatabaseConfig getSourceDatabase() {
-        return sourceDatabase;
-    }
-
-    public void setSourceDatabase(DatabaseConfig sourceDatabase) {
-        this.sourceDatabase = sourceDatabase;
-    }
-
-    public DatabaseConfig getSequenceDatabase() {
-        return sequenceDatabase;
-    }
-
-    public void setSequenceDatabase(DatabaseConfig sequenceDatabase) {
-        this.sequenceDatabase = sequenceDatabase;
-    }
-
-    public RootDatabaseConfig getRootDatabase() {
-        return rootDatabase;
-    }
-
-    public void setRootDatabase(RootDatabaseConfig rootDatabase) {
-        this.rootDatabase = rootDatabase;
-    }
-
-    public SourceTableConfig getSourceTable() {
-        return sourceTable;
-    }
-
-    public void setSourceTable(SourceTableConfig sourceTable) {
-        this.sourceTable = sourceTable;
-    }
-
-    public NotificationsConfig getNotifications() {
-        return notifications;
-    }
-
-    public void setNotifications(NotificationsConfig notifications) {
-        this.notifications = notifications;
-    }
-
-    public TimingConfig getTiming() {
-        return timing;
-    }
-
-    public void setTiming(TimingConfig timing) {
-        this.timing = timing;
-    }
-
-    public CamerasConfig getCameras() {
-        return cameras;
-    }
-
-    public void setCameras(CamerasConfig cameras) {
-        this.cameras = cameras;
-    }
-
-    public ReportsConfig getReports() {
-        return reports;
-    }
-
-    public void setReports(ReportsConfig reports) {
-        this.reports = reports;
-    }
-
-    public WorkflowConfig getWorkflow() {
-        return workflow;
-    }
-
-    public void setWorkflow(WorkflowConfig workflow) {
-        this.workflow = workflow;
-    }
+    public DatabaseConfig getSourceDatabase() { return sourceDatabase; }
+    public void setSourceDatabase(DatabaseConfig sourceDatabase) { this.sourceDatabase = sourceDatabase; }
+    public DatabaseConfig getSequenceDatabase() { return sequenceDatabase; }
+    public void setSequenceDatabase(DatabaseConfig sequenceDatabase) { this.sequenceDatabase = sequenceDatabase; }
+    public RootDatabaseConfig getRootDatabase() { return rootDatabase; }
+    public void setRootDatabase(RootDatabaseConfig rootDatabase) { this.rootDatabase = rootDatabase; }
+    public SourceTableConfig getSourceTable() { return sourceTable; }
+    public void setSourceTable(SourceTableConfig sourceTable) { this.sourceTable = sourceTable; }
+    public ReportConfig getReports() { return reports; }
+    public void setReports(ReportConfig reports) { this.reports = reports; }
+    public MessagingConfig getMessaging() { return messaging; }
+    public void setMessaging(MessagingConfig messaging) { this.messaging = messaging; }
+    public Integer getSequenceCloseTimeoutMinutes() { return sequenceCloseTimeoutMinutes; }
+    public void setSequenceCloseTimeoutMinutes(Integer sequenceCloseTimeoutMinutes) { this.sequenceCloseTimeoutMinutes = sequenceCloseTimeoutMinutes; }
+    public Boolean getAllowTransitionalAfterSingleCamera() { return allowTransitionalAfterSingleCamera; }
+    public void setAllowTransitionalAfterSingleCamera(Boolean allowTransitionalAfterSingleCamera) { this.allowTransitionalAfterSingleCamera = allowTransitionalAfterSingleCamera; }
+    public Integer getDuplicateSuppressionSeconds() { return duplicateSuppressionSeconds; }
+    public void setDuplicateSuppressionSeconds(Integer duplicateSuppressionSeconds) { this.duplicateSuppressionSeconds = duplicateSuppressionSeconds; }
+    public List<NotificationRule> getNotifications() { return notifications; }
+    public void setNotifications(List<NotificationRule> notifications) { this.notifications = notifications; }
+    public List<RealStageConfig> getRealStages() { return realStages; }
+    public void setRealStages(List<RealStageConfig> realStages) { this.realStages = realStages; }
+    public List<TransitionalStageConfig> getTransitionalStages() { return transitionalStages; }
+    public void setTransitionalStages(List<TransitionalStageConfig> transitionalStages) { this.transitionalStages = transitionalStages; }
+    public List<SingleCameraStageConfig> getSingleCameraStages() { return singleCameraStages; }
+    public void setSingleCameraStages(List<SingleCameraStageConfig> singleCameraStages) { this.singleCameraStages = singleCameraStages; }
 
     public static class DatabaseConfig {
         private String host;
@@ -95,10 +54,7 @@ public class AppConfig {
         private String user;
         private String password;
 
-        public String jdbcUrl() {
-            return "jdbc:postgresql://" + host + ":" + port + "/" + db;
-        }
-
+        public String jdbcUrl() { return "jdbc:postgresql://" + host + ":" + port + "/" + db; }
         public String getHost() { return host; }
         public void setHost(String host) { this.host = host; }
         public int getPort() { return port; }
@@ -120,10 +76,7 @@ public class AppConfig {
         private String password;
         private String maintenanceDb = "postgres";
 
-        public String jdbcUrl() {
-            return "jdbc:postgresql://" + host + ":" + port + "/" + maintenanceDb;
-        }
-
+        public String jdbcUrl() { return "jdbc:postgresql://" + host + ":" + port + "/" + maintenanceDb; }
         public String getHost() { return host; }
         public void setHost(String host) { this.host = host; }
         public int getPort() { return port; }
@@ -146,7 +99,13 @@ public class AppConfig {
         public void setLoadFrom(LocalDateTime loadFrom) { this.loadFrom = loadFrom; }
     }
 
-    public static class NotificationsConfig {
+    public static class ReportConfig {
+        private String outputDirectory;
+        public String getOutputDirectory() { return outputDirectory; }
+        public void setOutputDirectory(String outputDirectory) { this.outputDirectory = outputDirectory; }
+    }
+
+    public static class MessagingConfig {
         private boolean enabled;
         private String telegramBotToken;
         private String telegramChatId;
@@ -159,254 +118,94 @@ public class AppConfig {
         public void setTelegramChatId(String telegramChatId) { this.telegramChatId = telegramChatId; }
     }
 
-    public static class TimingConfig {
-        private int driveInToDriveOutAlertMinutes = 15;
-        private int serviceToPostAlertMinutes = 15;
-        private int testDriveStartMinutes = 30;
-        private int testDriveResetMinutes = 60;
-
-        public int getDriveInToDriveOutAlertMinutes() { return driveInToDriveOutAlertMinutes; }
-        public void setDriveInToDriveOutAlertMinutes(int driveInToDriveOutAlertMinutes) { this.driveInToDriveOutAlertMinutes = driveInToDriveOutAlertMinutes; }
-        public int getServiceToPostAlertMinutes() { return serviceToPostAlertMinutes; }
-        public void setServiceToPostAlertMinutes(int serviceToPostAlertMinutes) { this.serviceToPostAlertMinutes = serviceToPostAlertMinutes; }
-        public int getTestDriveStartMinutes() { return testDriveStartMinutes; }
-        public void setTestDriveStartMinutes(int testDriveStartMinutes) { this.testDriveStartMinutes = testDriveStartMinutes; }
-        public int getTestDriveResetMinutes() { return testDriveResetMinutes; }
-        public void setTestDriveResetMinutes(int testDriveResetMinutes) { this.testDriveResetMinutes = testDriveResetMinutes; }
+    public static class DirectionRange {
+        private Integer from;
+        private Integer to;
+        public Integer getFrom() { return from; }
+        public void setFrom(Integer from) { this.from = from; }
+        public Integer getTo() { return to; }
+        public void setTo(Integer to) { this.to = to; }
     }
 
-    public static class CamerasConfig {
-        private List<CameraConfig> driveInIn = new ArrayList<>();
-        private List<CameraConfig> driveInOut = new ArrayList<>();
-        private List<CameraConfig> serviceIn = new ArrayList<>();
-        private List<CameraConfig> driveInToService = new ArrayList<>();
-        private List<PostCameraConfig> servicePosts = new ArrayList<>();
-        private List<CameraConfig> serviceOut = new ArrayList<>();
-        private List<CameraConfig> serviceToDriveIn = new ArrayList<>();
-        private List<CameraConfig> parkingIn = new ArrayList<>();
-        private List<CameraConfig> parkingOut = new ArrayList<>();
-
-        public List<CameraConfig> getDriveInIn() { return driveInIn; }
-        public void setDriveInIn(List<CameraConfig> driveInIn) { this.driveInIn = driveInIn; }
-        public List<CameraConfig> getDriveInOut() { return driveInOut; }
-        public void setDriveInOut(List<CameraConfig> driveInOut) { this.driveInOut = driveInOut; }
-        public List<CameraConfig> getServiceIn() { return serviceIn; }
-        public void setServiceIn(List<CameraConfig> serviceIn) { this.serviceIn = serviceIn; }
-        public List<CameraConfig> getDriveInToService() { return driveInToService; }
-        public void setDriveInToService(List<CameraConfig> driveInToService) { this.driveInToService = driveInToService; }
-        public List<PostCameraConfig> getServicePosts() { return servicePosts; }
-        public void setServicePosts(List<PostCameraConfig> servicePosts) { this.servicePosts = servicePosts; }
-        public List<CameraConfig> getServiceOut() { return serviceOut; }
-        public void setServiceOut(List<CameraConfig> serviceOut) { this.serviceOut = serviceOut; }
-        public List<CameraConfig> getServiceToDriveIn() { return serviceToDriveIn; }
-        public void setServiceToDriveIn(List<CameraConfig> serviceToDriveIn) { this.serviceToDriveIn = serviceToDriveIn; }
-        public List<CameraConfig> getParkingIn() { return parkingIn; }
-        public void setParkingIn(List<CameraConfig> parkingIn) { this.parkingIn = parkingIn; }
-        public List<CameraConfig> getParkingOut() { return parkingOut; }
-        public void setParkingOut(List<CameraConfig> parkingOut) { this.parkingOut = parkingOut; }
-    }
-
-    public static class ReportsConfig {
-        private String outputDirectory;
-
-        public String getOutputDirectory() {
-            return outputDirectory;
-        }
-
-        public void setOutputDirectory(String outputDirectory) {
-            this.outputDirectory = outputDirectory;
-        }
-    }
-
-    public static class WorkflowConfig {
-        private int defaultSequenceCloseTimeoutMinutes = 48 * 60;
-        private List<StageConfig> stages = new ArrayList<>();
-
-        public int getDefaultSequenceCloseTimeoutMinutes() {
-            return defaultSequenceCloseTimeoutMinutes;
-        }
-
-        public void setDefaultSequenceCloseTimeoutMinutes(int defaultSequenceCloseTimeoutMinutes) {
-            this.defaultSequenceCloseTimeoutMinutes = defaultSequenceCloseTimeoutMinutes;
-        }
-
-        public List<StageConfig> getStages() {
-            return stages;
-        }
-
-        public void setStages(List<StageConfig> stages) {
-            this.stages = stages;
-        }
-    }
-
-    public static class StageConfig {
-        private String name;
-        private String labelTemplate;
-        private List<TriggerConfig> startTriggers = new ArrayList<>();
-        private List<TriggerConfig> finishTriggers = new ArrayList<>();
-        private String startMode = "immediate";
-        private Integer candidateTimeoutMinutes;
-        private Integer candidateCloseTimeoutMinutes;
-        private List<String> candidateCancelOnEvents = new ArrayList<>();
-        private String finishMode = "immediate";
-        private Integer stickyCloseTimeoutMinutes;
-        private List<String> allowedNextStages = new ArrayList<>();
-        private String unexpectedNextStagePolicy = "close_current_and_start_next";
-        private String timeoutTransitionToStage;
-        private Integer sequenceCloseTimeoutMinutes;
-        private Boolean saveStageAfterSequenceClosed = true;
-        private boolean allowPartialFromFinish;
-        private String startDuplicatePolicy = "ignore";
-        private String finishDuplicatePolicy = "update_sticky";
-        private String intermediateStageOnTransition;
-        private boolean transitional;
-        private Integer sameStageReopenAfterMinutes;
-
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getLabelTemplate() { return labelTemplate; }
-        public void setLabelTemplate(String labelTemplate) { this.labelTemplate = labelTemplate; }
-        public List<TriggerConfig> getStartTriggers() { return startTriggers; }
-        public void setStartTriggers(List<TriggerConfig> startTriggers) { this.startTriggers = startTriggers; }
-        public List<TriggerConfig> getFinishTriggers() { return finishTriggers; }
-        public void setFinishTriggers(List<TriggerConfig> finishTriggers) { this.finishTriggers = finishTriggers; }
-        public String getStartMode() { return startMode; }
-        public void setStartMode(String startMode) { this.startMode = startMode; }
-        public Integer getCandidateTimeoutMinutes() { return candidateTimeoutMinutes; }
-        public void setCandidateTimeoutMinutes(Integer candidateTimeoutMinutes) { this.candidateTimeoutMinutes = candidateTimeoutMinutes; }
-        public Integer getCandidateCloseTimeoutMinutes() { return candidateCloseTimeoutMinutes; }
-        public void setCandidateCloseTimeoutMinutes(Integer candidateCloseTimeoutMinutes) { this.candidateCloseTimeoutMinutes = candidateCloseTimeoutMinutes; }
-        public List<String> getCandidateCancelOnEvents() { return candidateCancelOnEvents; }
-        public void setCandidateCancelOnEvents(List<String> candidateCancelOnEvents) { this.candidateCancelOnEvents = candidateCancelOnEvents; }
-        public String getFinishMode() { return finishMode; }
-        public void setFinishMode(String finishMode) { this.finishMode = finishMode; }
-        public Integer getStickyCloseTimeoutMinutes() { return stickyCloseTimeoutMinutes; }
-        public void setStickyCloseTimeoutMinutes(Integer stickyCloseTimeoutMinutes) { this.stickyCloseTimeoutMinutes = stickyCloseTimeoutMinutes; }
-        public List<String> getAllowedNextStages() { return allowedNextStages; }
-        public void setAllowedNextStages(List<String> allowedNextStages) { this.allowedNextStages = allowedNextStages; }
-        public String getUnexpectedNextStagePolicy() { return unexpectedNextStagePolicy; }
-        public void setUnexpectedNextStagePolicy(String unexpectedNextStagePolicy) { this.unexpectedNextStagePolicy = unexpectedNextStagePolicy; }
-        public String getTimeoutTransitionToStage() { return timeoutTransitionToStage; }
-        public void setTimeoutTransitionToStage(String timeoutTransitionToStage) { this.timeoutTransitionToStage = timeoutTransitionToStage; }
-        public Integer getSequenceCloseTimeoutMinutes() { return sequenceCloseTimeoutMinutes; }
-        public void setSequenceCloseTimeoutMinutes(Integer sequenceCloseTimeoutMinutes) { this.sequenceCloseTimeoutMinutes = sequenceCloseTimeoutMinutes; }
-        public Boolean getSaveStageAfterSequenceClosed() { return saveStageAfterSequenceClosed; }
-        public void setSaveStageAfterSequenceClosed(Boolean saveStageAfterSequenceClosed) { this.saveStageAfterSequenceClosed = saveStageAfterSequenceClosed; }
-        public boolean isAllowPartialFromFinish() { return allowPartialFromFinish; }
-        public void setAllowPartialFromFinish(boolean allowPartialFromFinish) { this.allowPartialFromFinish = allowPartialFromFinish; }
-        public String getStartDuplicatePolicy() { return startDuplicatePolicy; }
-        public void setStartDuplicatePolicy(String startDuplicatePolicy) { this.startDuplicatePolicy = startDuplicatePolicy; }
-        public String getFinishDuplicatePolicy() { return finishDuplicatePolicy; }
-        public void setFinishDuplicatePolicy(String finishDuplicatePolicy) { this.finishDuplicatePolicy = finishDuplicatePolicy; }
-        public String getIntermediateStageOnTransition() { return intermediateStageOnTransition; }
-        public void setIntermediateStageOnTransition(String intermediateStageOnTransition) { this.intermediateStageOnTransition = intermediateStageOnTransition; }
-        public boolean isTransitional() { return transitional; }
-        public void setTransitional(boolean transitional) { this.transitional = transitional; }
-        public Integer getSameStageReopenAfterMinutes() { return sameStageReopenAfterMinutes; }
-        public void setSameStageReopenAfterMinutes(Integer sameStageReopenAfterMinutes) { this.sameStageReopenAfterMinutes = sameStageReopenAfterMinutes; }
-    }
-
-    public static class TriggerConfig {
+    public static class CameraTrigger {
         private Integer cameraId;
         private DirectionRange directionRange;
-        private String eventType;
-        private String eventKey;
-        private NotificationRule notification;
-        private String derivedStageInstance;
-        private String name;
+        public Integer getCameraId() { return cameraId; }
+        public void setCameraId(Integer cameraId) { this.cameraId = cameraId; }
+        public DirectionRange getDirectionRange() { return directionRange; }
+        public void setDirectionRange(DirectionRange directionRange) { this.directionRange = directionRange; }
+    }
+
+    public static class NotificationRule {
+        private Integer cameraId;
+        private DirectionRange directionRange;
+        private Integer delaySeconds;
+        private String message;
 
         public Integer getCameraId() { return cameraId; }
         public void setCameraId(Integer cameraId) { this.cameraId = cameraId; }
         public DirectionRange getDirectionRange() { return directionRange; }
         public void setDirectionRange(DirectionRange directionRange) { this.directionRange = directionRange; }
-        public String getEventType() { return eventType; }
-        public void setEventType(String eventType) { this.eventType = eventType; }
-        public String getEventKey() { return eventKey; }
-        public void setEventKey(String eventKey) { this.eventKey = eventKey; }
-        public NotificationRule getNotification() { return notification; }
-        public void setNotification(NotificationRule notification) { this.notification = notification; }
-        public String getDerivedStageInstance() { return derivedStageInstance; }
-        public void setDerivedStageInstance(String derivedStageInstance) { this.derivedStageInstance = derivedStageInstance; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
+        public Integer getDelaySeconds() { return delaySeconds; }
+        public void setDelaySeconds(Integer delaySeconds) { this.delaySeconds = delaySeconds; }
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
     }
 
-    public static class NotificationRule {
-        private boolean enabled;
-        private String template;
-        private Integer delayMinutes;
-
-        public boolean isEnabled() { return enabled; }
-        public void setEnabled(boolean enabled) { this.enabled = enabled; }
-        public String getTemplate() { return template; }
-        public void setTemplate(String template) { this.template = template; }
-        public Integer getDelayMinutes() { return delayMinutes; }
-        public void setDelayMinutes(Integer delayMinutes) { this.delayMinutes = delayMinutes; }
-    }
-
-    public static class PostCameraConfig {
-        private String postName;
-        private int analyticsId;
-        private DirectionRange inDirectionRange;
-        private DirectionRange outDirectionRange;
-
-        public String getPostName() { return postName; }
-        public void setPostName(String postName) { this.postName = postName; }
-        public int getAnalyticsId() { return analyticsId; }
-        public void setAnalyticsId(int analyticsId) { this.analyticsId = analyticsId; }
-        public DirectionRange getInDirectionRange() { return inDirectionRange; }
-        public void setInDirectionRange(DirectionRange inDirectionRange) { this.inDirectionRange = inDirectionRange; }
-        public DirectionRange getOutDirectionRange() { return outDirectionRange; }
-        public void setOutDirectionRange(DirectionRange outDirectionRange) { this.outDirectionRange = outDirectionRange; }
-
-        public boolean matchesIn(Detection detection) {
-            return analyticsId == detection.analyticsId()
-                    && (inDirectionRange == null || inDirectionRange.contains(detection.direction()));
-        }
-
-        public boolean matchesOut(Detection detection) {
-            return analyticsId == detection.analyticsId()
-                    && (outDirectionRange == null || outDirectionRange.contains(detection.direction()));
-        }
-    }
-
-    public static class CameraConfig {
+    public static class RealStageConfig {
         private String name;
-        private int analyticsId;
-        private DirectionRange directionRange;
-
-        public boolean matchesDirection(Integer direction) {
-            return directionRange == null || directionRange.contains(direction);
-        }
+        private String label;
+        private List<CameraTrigger> inTriggers = new ArrayList<>();
+        private List<CameraTrigger> outTriggers = new ArrayList<>();
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
-        public int getAnalyticsId() { return analyticsId; }
-        public void setAnalyticsId(int analyticsId) { this.analyticsId = analyticsId; }
-        public DirectionRange getDirectionRange() { return directionRange; }
-        public void setDirectionRange(DirectionRange directionRange) { this.directionRange = directionRange; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        public List<CameraTrigger> getInTriggers() { return inTriggers; }
+        public void setInTriggers(List<CameraTrigger> inTriggers) { this.inTriggers = inTriggers; }
+        public List<CameraTrigger> getOutTriggers() { return outTriggers; }
+        public void setOutTriggers(List<CameraTrigger> outTriggers) { this.outTriggers = outTriggers; }
     }
 
-    public static class DirectionRange {
-        private Integer from;
-        private Integer to;
+    public static class TransitionalStageConfig {
+        private String name;
+        private String label;
+        private List<Integer> triggerCameras = new ArrayList<>();
+        private Integer candidateTimeoutSeconds;
+        private List<String> allowedAfter = new ArrayList<>();
+        private Integer sequenceCloseTimeoutOverrideSeconds;
+        private Boolean showInReportIfIncomplete = false;
 
-        public boolean contains(Integer direction) {
-            if (from == null || to == null || direction == null) {
-                return true;
-            }
-            if (from.equals(to)) {
-                return direction.equals(from);
-            }
-            if (from < to) {
-                return direction >= from && direction < to;
-            }
-            return direction >= from || direction < to;
-        }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        public List<Integer> getTriggerCameras() { return triggerCameras; }
+        public void setTriggerCameras(List<Integer> triggerCameras) { this.triggerCameras = triggerCameras; }
+        public Integer getCandidateTimeoutSeconds() { return candidateTimeoutSeconds; }
+        public void setCandidateTimeoutSeconds(Integer candidateTimeoutSeconds) { this.candidateTimeoutSeconds = candidateTimeoutSeconds; }
+        public List<String> getAllowedAfter() { return allowedAfter; }
+        public void setAllowedAfter(List<String> allowedAfter) { this.allowedAfter = allowedAfter; }
+        public Integer getSequenceCloseTimeoutOverrideSeconds() { return sequenceCloseTimeoutOverrideSeconds; }
+        public void setSequenceCloseTimeoutOverrideSeconds(Integer sequenceCloseTimeoutOverrideSeconds) { this.sequenceCloseTimeoutOverrideSeconds = sequenceCloseTimeoutOverrideSeconds; }
+        public Boolean getShowInReportIfIncomplete() { return showInReportIfIncomplete; }
+        public void setShowInReportIfIncomplete(Boolean showInReportIfIncomplete) { this.showInReportIfIncomplete = showInReportIfIncomplete; }
+    }
 
-        public Integer getFrom() { return from; }
-        public void setFrom(Integer from) { this.from = from; }
-        public Integer getTo() { return to; }
-        public void setTo(Integer to) { this.to = to; }
+    public static class SingleCameraStageConfig {
+        private String name;
+        private String label;
+        private Integer cameraId;
+        private Integer timeoutSeconds;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        public Integer getCameraId() { return cameraId; }
+        public void setCameraId(Integer cameraId) { this.cameraId = cameraId; }
+        public Integer getTimeoutSeconds() { return timeoutSeconds; }
+        public void setTimeoutSeconds(Integer timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     }
 }

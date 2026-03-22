@@ -95,3 +95,10 @@
 
 - Added a dedicated Ukrainian `/config/help` page plus richer `/config` HTML navigation so operators can read detailed setup instructions directly in the app.
 - Extended `ConfigControllerTest` coverage for the help page and updated `README.md` / `TECHNICAL_SPEC.md` to document the new config-help route.
+
+## 2026-03-22
+- Replaced the legacy workflow-driven sequence engine with a new implementation based only on `real`, `transitional`, and `single_camera` stage types.
+- Reworked runtime configuration to the new root sections (`sequenceCloseTimeoutMinutes`, `notifications`, `realStages`, `transitionalStages`, `singleCameraStages`) and updated validation rules.
+- Introduced repository interfaces plus JDBC implementations for detections, sequences, and pending notifications.
+- Rebuilt notification processing around camera-level rules and rewrote report generation to show stage type and attached alerts.
+- Replaced the old test suite with focused unit tests for the new engine/config/reporting/notification behavior and updated `README.md`, `TECHNICAL_SPEC.md`, and `config.json.example`.

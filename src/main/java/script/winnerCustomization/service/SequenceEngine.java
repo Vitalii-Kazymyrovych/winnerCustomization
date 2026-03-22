@@ -1,11 +1,10 @@
 package script.winnerCustomization.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import script.winnerCustomization.model.AppConfig;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.SequenceRecord;
+import script.winnerCustomization.model.SequenceRecord.StageType;
 import script.winnerCustomization.model.SequenceRecord.StageWindow;
 
 import java.time.Duration;
@@ -13,693 +12,384 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 @Component
 public class SequenceEngine {
-    private static final Logger log = LoggerFactory.getLogger(SequenceEngine.class);
-    private static final Duration DEFAULT_SEQUENCE_GAP_TIMEOUT = Duration.ofHours(48);
 
     public List<SequenceRecord> build(List<Detection> detections, AppConfig config) {
-        log.info("Sequence build started for {} detections", detections.size());
-        WorkflowDefinition workflow = WorkflowDefinition.from(config);
+        if (config == null) {
+            return List.of();
+        }
         Map<String, ActiveSequence> activeByPlate = new HashMap<>();
-        Map<String, LocalDateTime> lastNormalizedAtByPlate = new HashMap<>();
-        List<SequenceRecord> done = new ArrayList<>();
+        Map<String, Detection> lastDetectionByPlate = new HashMap<>();
+        List<SequenceRecord> finished = new ArrayList<>();
 
-        List<Detection> sorted = detections.stream()
+        List<Detection> ordered = detections.stream()
                 .sorted(Comparator.comparing(Detection::createdAt).thenComparingLong(Detection::id))
                 .toList();
 
-        for (Detection detection : sorted) {
-            TriggerMatch match = workflow.resolve(detection);
-            if (match == null) {
+        for (Detection rawDetection : ordered) {
+            Detection detection = normalize(rawDetection, lastDetectionByPlate);
+            if (isDuplicate(lastDetectionByPlate.get(detection.plateNumber()), detection, config)) {
                 continue;
             }
-
-            LocalDateTime eventTime = normalizeTimestamp(detection.plateNumber(), detection.createdAt(), lastNormalizedAtByPlate);
-            ActiveSequence current = activeByPlate.get(detection.plateNumber());
-
-            if (current != null && workflow.shouldCloseBySequenceGap(current, eventTime)) {
-                addIfNotEmpty(done, workflow.finalizeSequence(current));
-                activeByPlate.remove(detection.plateNumber());
-                current = null;
+            lastDetectionByPlate.put(detection.plateNumber(), detection);
+            ActiveSequence sequence = activeByPlate.computeIfAbsent(detection.plateNumber(), plate -> new ActiveSequence(new SequenceRecord(plate, detection.createdAt())));
+            closeBySingleTimeout(sequence, detection.createdAt(), config);
+            if (closeBySequenceTimeout(sequence, detection.createdAt(), config)) {
+                finalizeSequence(sequence, sequence.lastActivityAt(config));
+                finished.add(sequence.record);
+                sequence = new ActiveSequence(new SequenceRecord(detection.plateNumber(), detection.createdAt()));
+                activeByPlate.put(detection.plateNumber(), sequence);
             }
-
-            if (current != null) {
-                SequenceLifecycle lifecycle = workflow.handlePendingTimeouts(current, eventTime);
-                if (lifecycle == SequenceLifecycle.CLOSE_SEQUENCE) {
-                    addIfNotEmpty(done, workflow.finalizeSequence(current));
-                    activeByPlate.remove(detection.plateNumber());
-                    current = null;
-                }
-            }
-
-            if (current == null) {
-                current = new ActiveSequence(detection.plateNumber(), eventTime);
-                activeByPlate.put(detection.plateNumber(), current);
-            }
-
-            workflow.cancelPendingCandidateIfNeeded(current, match, eventTime);
-            workflow.applyEvent(current, match, eventTime);
-            current.lastEventAt = eventTime;
+            materializeCandidateIfDue(sequence, detection.createdAt());
+            applyDetection(sequence, detection, config);
+            sequence.lastDetectionAt = detection.createdAt();
         }
 
-        for (ActiveSequence active : activeByPlate.values()) {
-            addIfNotEmpty(done, workflow.finalizeSequence(active));
+        for (ActiveSequence sequence : activeByPlate.values()) {
+            closeBySingleTimeout(sequence, sequence.lastDetectionAt == null ? null : sequence.lastDetectionAt.plusYears(10), config);
+            materializeCandidateIfDue(sequence, LocalDateTime.MAX.minusYears(1));
+            finalizeSequence(sequence, sequence.lastActivityAt(config));
+            if (!sequence.record.getStages().isEmpty()) {
+                finished.add(sequence.record);
+            }
         }
 
-        done.sort(Comparator.comparing(SequenceRecord::getStartedAt)
-                .thenComparing(SequenceRecord::getPlateNumber));
-        return done;
+        finished.sort(Comparator.comparing(SequenceRecord::getStartedAt).thenComparing(SequenceRecord::getPlateNumber));
+        return finished;
     }
 
-    private LocalDateTime normalizeTimestamp(String plateNumber,
-                                             LocalDateTime createdAt,
-                                             Map<String, LocalDateTime> lastNormalizedAtByPlate) {
-        LocalDateTime last = lastNormalizedAtByPlate.get(plateNumber);
-        LocalDateTime normalized = createdAt;
-        if (last != null && !normalized.isAfter(last)) {
-            normalized = last.plusSeconds(1);
+    private Detection normalize(Detection detection, Map<String, Detection> lastDetectionByPlate) {
+        Detection previous = lastDetectionByPlate.get(detection.plateNumber());
+        if (previous == null || detection.createdAt().isAfter(previous.createdAt())) {
+            return detection;
         }
-        lastNormalizedAtByPlate.put(plateNumber, normalized);
-        return normalized;
+        return new Detection(detection.id(), detection.plateNumber(), detection.analyticsId(), detection.direction(), previous.createdAt().plusSeconds(1));
     }
 
-    private void addIfNotEmpty(List<SequenceRecord> done, SequenceRecord record) {
-        if (!record.getStages().isEmpty()) {
-            done.add(record);
+    private boolean isDuplicate(Detection previous, Detection current, AppConfig config) {
+        if (previous == null) {
+            return false;
         }
+        if (!Objects.equals(previous.analyticsId(), current.analyticsId()) || !Objects.equals(previous.direction(), current.direction())) {
+            return false;
+        }
+        return Duration.between(previous.createdAt(), current.createdAt()).toSeconds() <= safeDuplicateSuppression(config);
     }
 
-    private enum SequenceLifecycle {
-        CONTINUE,
-        CLOSE_SEQUENCE
+    private long safeDuplicateSuppression(AppConfig config) {
+        return config.getDuplicateSuppressionSeconds() == null ? 2 : Math.max(0, config.getDuplicateSuppressionSeconds());
     }
 
-    private enum TriggerKind {
-        START,
-        FINISH
+    private void applyDetection(ActiveSequence sequence, Detection detection, AppConfig config) {
+        RealMatch realIn = matchRealIn(detection, config);
+        RealMatch realOut = matchRealOut(detection, config);
+        AppConfig.SingleCameraStageConfig single = matchSingle(detection, config);
+
+        if (single != null) {
+            openOrRefreshSingle(sequence, single, detection, config);
+            maybeCreateTransitionalCandidate(sequence, detection.createdAt(), config, single.getName(), true);
+            return;
+        }
+
+        if (realIn != null) {
+            startRealStage(sequence, realIn, detection.createdAt(), config);
+            return;
+        }
+
+        if (realOut != null) {
+            handleRealOut(sequence, realOut, detection.createdAt(), config);
+            return;
+        }
+
+        maybeCreateTransitionalCandidateByCamera(sequence, detection, config);
     }
 
-    private record TriggerMatch(StageDefinition stage,
-                                TriggerDefinition trigger,
-                                String reportLabel) {
-        String eventKey() {
-            return trigger.eventKey();
+    private void startRealStage(ActiveSequence sequence, RealMatch realMatch, LocalDateTime eventTime, AppConfig config) {
+        cancelCandidateIfPending(sequence);
+        if (sequence.activeStage != null && !Objects.equals(sequence.activeStage.stageName(), realMatch.config().getName())) {
+            closeActiveStage(sequence, eventTime);
         }
-
-        TriggerKind kind() {
-            return trigger.kind();
-        }
-    }
-
-    private static final class WorkflowDefinition {
-        private final AppConfig config;
-        private final int defaultSequenceCloseTimeoutMinutes;
-        private final Map<String, StageDefinition> stagesByName;
-        private final List<TriggerDefinition> orderedTriggers;
-
-        private WorkflowDefinition(AppConfig config,
-                                   int defaultSequenceCloseTimeoutMinutes,
-                                   Map<String, StageDefinition> stagesByName,
-                                   List<TriggerDefinition> orderedTriggers) {
-            this.config = config;
-            this.defaultSequenceCloseTimeoutMinutes = defaultSequenceCloseTimeoutMinutes;
-            this.stagesByName = stagesByName;
-            this.orderedTriggers = orderedTriggers;
-        }
-
-        static WorkflowDefinition from(AppConfig config) {
-            AppConfig.WorkflowConfig workflow = config == null ? null : config.getWorkflow();
-            int defaultTimeout = workflow == null
-                    ? (int) DEFAULT_SEQUENCE_GAP_TIMEOUT.toMinutes()
-                    : workflow.getDefaultSequenceCloseTimeoutMinutes();
-            Map<String, StageDefinition> stages = new LinkedHashMap<>();
-            List<TriggerDefinition> triggers = new ArrayList<>();
-            if (workflow != null && workflow.getStages() != null) {
-                for (AppConfig.StageConfig stageConfig : workflow.getStages()) {
-                    StageDefinition definition = StageDefinition.from(stageConfig);
-                    stages.put(definition.name(), definition);
-                    triggers.addAll(definition.startTriggers());
-                    triggers.addAll(definition.finishTriggers());
-                }
-            }
-            return new WorkflowDefinition(config, defaultTimeout, stages, triggers);
-        }
-
-        TriggerMatch resolve(Detection detection) {
-            for (TriggerDefinition trigger : orderedTriggers) {
-                if (trigger.matches(detection)) {
-                    StageDefinition stage = stagesByName.get(trigger.stageName());
-                    return new TriggerMatch(stage, trigger, stage.renderLabel(trigger.derivedInstance()));
-                }
-            }
-            return null;
-        }
-
-        boolean shouldCloseBySequenceGap(ActiveSequence current, LocalDateTime eventTime) {
-            if (current.lastEventAt == null) {
-                return false;
-            }
-            Duration gap = Duration.between(current.lastEventAt, eventTime);
-            return gap.compareTo(Duration.ofMinutes(resolveSequenceCloseTimeoutMinutes(current))) > 0;
-        }
-
-        SequenceLifecycle handlePendingTimeouts(ActiveSequence current, LocalDateTime eventTime) {
-            if (current.pendingCandidate != null) {
-                PendingCandidate candidate = current.pendingCandidate;
-                Duration candidateAge = Duration.between(candidate.triggerAt(), eventTime);
-                if (candidate.closeTimeoutMinutes() != null
-                        && candidateAge.toMinutes() >= candidate.closeTimeoutMinutes()) {
-                    current.pendingCandidate = null;
-                    current.record.setFinishedAt(current.lastEventAt);
-                    return SequenceLifecycle.CLOSE_SEQUENCE;
-                }
-                if (candidateAge.toMinutes() >= candidate.timeoutMinutes()) {
-                    if (current.activeStageIndex != null) {
-                        LocalDateTime candidateStart = candidate.triggerAt().minusSeconds(1);
-                        if (candidateStart.isBefore(current.activeStage().timeIn() == null ? candidate.triggerAt() : current.activeStage().timeIn())) {
-                            candidateStart = candidate.triggerAt();
-                        }
-                        closeActiveAt(current, candidateStart);
-                    }
-                    createClosedStage(current,
-                            candidate.stage(),
-                            candidate.reportLabel(),
-                            candidate.triggerAt(),
-                            eventTime.minusSeconds(1),
-                            false,
-                            candidate.stage().transitional());
-                    current.pendingCandidate = null;
-                }
-            }
-
-            if (current.activeStageIndex != null && current.activeStage().sticky() && current.pendingStickyOutAt != null) {
-                StageDefinition activeStage = current.activeStageDefinition(this);
-                if (activeStage.stickyCloseTimeoutMinutes() != null) {
-                    Duration stickyAge = Duration.between(current.pendingStickyOutAt, eventTime);
-                    if (stickyAge.toMinutes() >= activeStage.stickyCloseTimeoutMinutes()) {
-                        LocalDateTime stickyCloseAt = current.pendingStickyOutAt;
-                        closeActiveAt(current, stickyCloseAt);
-                        current.pendingStickyOutAt = null;
-                        materializeTimeoutTransitionIfNeeded(current, activeStage, stickyCloseAt.plusSeconds(1), eventTime.minusSeconds(1));
-                    }
-                }
-            }
-            return SequenceLifecycle.CONTINUE;
-        }
-
-        void cancelPendingCandidateIfNeeded(ActiveSequence current, TriggerMatch match, LocalDateTime eventTime) {
-            if (current.pendingCandidate == null) {
-                return;
-            }
-            PendingCandidate candidate = current.pendingCandidate;
-            if (Duration.between(candidate.triggerAt(), eventTime).toMinutes() >= candidate.timeoutMinutes()) {
-                return;
-            }
-            if (Objects.equals(candidate.stage().name(), match.stage().name()) && match.kind() == TriggerKind.START) {
-                if ("refresh_candidate".equals(candidate.stage().startDuplicatePolicy())) {
-                    current.pendingCandidate = candidate.withTriggerAt(eventTime);
-                }
-                return;
-            }
-            if (candidate.cancelOnEvents().isEmpty() || candidate.cancelOnEvents().contains(match.eventKey())) {
-                current.pendingCandidate = null;
-            }
-        }
-
-        void applyEvent(ActiveSequence current, TriggerMatch match, LocalDateTime eventTime) {
-            current.record.addPathStep(match.eventKey());
-            if (match.kind() == TriggerKind.START) {
-                if ("candidate".equals(match.stage().startMode())) {
-                    applyCandidateStart(current, match, eventTime);
-                } else {
-                    applyImmediateStart(current, match, eventTime);
-                }
-                return;
-            }
-            applyFinish(current, match, eventTime);
-        }
-
-        private void applyCandidateStart(ActiveSequence current, TriggerMatch match, LocalDateTime eventTime) {
-            if (current.pendingCandidate != null && Objects.equals(current.pendingCandidate.stage().name(), match.stage().name())) {
-                if ("refresh_candidate".equals(match.stage().startDuplicatePolicy())) {
-                    current.pendingCandidate = current.pendingCandidate.withTriggerAt(eventTime);
-                }
-                return;
-            }
-            current.pendingCandidate = new PendingCandidate(
-                    match.stage(),
-                    match.reportLabel(),
-                    eventTime,
-                    positiveOrNull(match.stage().candidateTimeoutMinutes(), 0),
-                    match.stage().candidateCloseTimeoutMinutes(),
-                    new HashSet<>(match.stage().candidateCancelOnEvents())
-            );
-        }
-
-        private void applyImmediateStart(ActiveSequence current, TriggerMatch match, LocalDateTime eventTime) {
-            StageDefinition nextStage = match.stage();
-            if (current.activeStageIndex != null) {
-                StageDefinition activeStage = current.activeStageDefinition(this);
-                StageWindow active = current.activeStage();
-
-                if (Objects.equals(active.stageName(), nextStage.name())) {
-                    if (canReopenSameStage(active, nextStage, eventTime) || "restart".equals(nextStage.startDuplicatePolicy())) {
-                        closeActiveAt(current, eventTime.minusSeconds(1));
-                    } else {
-                        return;
-                    }
-                } else if (!isAllowedNext(activeStage, nextStage.name())) {
-                    String policy = normalizePolicy(activeStage.unexpectedNextStagePolicy());
-                    if ("ignore".equals(policy)) {
-                        return;
-                    }
-                    if ("start_partial_next".equals(policy)) {
-                        addPartialStage(current, nextStage, match.reportLabel(), eventTime);
-                        return;
-                    }
-                    closeCurrentForTransition(current, activeStage, nextStage, eventTime);
-                    if ("insert_intermediate_and_start_next".equals(policy)) {
-                        insertIntermediateStage(current, activeStage.intermediateStageOnTransition(), eventTime);
-                    }
-                } else {
-                    closeCurrentForTransition(current, activeStage, nextStage, eventTime);
-                }
-            }
-            openStage(current, nextStage, match.reportLabel(), eventTime, false);
-        }
-
-        private void applyFinish(ActiveSequence current, TriggerMatch match, LocalDateTime eventTime) {
-            StageDefinition stage = match.stage();
-            if (current.activeStageIndex != null && Objects.equals(current.activeStage().stageName(), stage.name())) {
-                if (current.activeStage().sticky()) {
-                    if (current.pendingStickyOutAt == null || "update_sticky".equals(stage.finishDuplicatePolicy())) {
-                        current.pendingStickyOutAt = eventTime;
-                    }
-                    return;
-                }
-                closeActiveAt(current, eventTime);
-                openIntermediateOnFinish(current, stage, eventTime);
-                return;
-            }
-
-            if (stage.allowPartialFromFinish()) {
-                addPartialStage(current, stage, match.reportLabel(), eventTime);
-                if (current.activeStageIndex == null || !current.activeStage().transitional()) {
-                    openIntermediateOnFinish(current, stage, eventTime);
-                }
-            }
-        }
-
-        private void openIntermediateOnFinish(ActiveSequence current, StageDefinition stage, LocalDateTime eventTime) {
-            if (stage.intermediateStageOnTransition() == null) {
-                return;
-            }
-            StageDefinition intermediate = stagesByName.get(stage.intermediateStageOnTransition());
-            if (intermediate == null) {
-                return;
-            }
-            if (current.activeStageIndex != null && Objects.equals(current.activeStage().stageName(), intermediate.name())) {
-                return;
-            }
-            openStage(current, intermediate, intermediate.renderLabel(null), eventTime, false);
-        }
-
-        private void closeCurrentForTransition(ActiveSequence current,
-                                               StageDefinition activeStage,
-                                               StageDefinition nextStage,
-                                               LocalDateTime eventTime) {
-            if (current.activeStage().sticky()) {
-                LocalDateTime stickyCloseAt = current.pendingStickyOutAt != null
-                        ? current.pendingStickyOutAt
-                        : eventTime.minusSeconds(1);
-                closeActiveAt(current, stickyCloseAt);
-                current.pendingStickyOutAt = null;
-                if (activeStage.timeoutTransitionToStage() != null
-                        && !Objects.equals(activeStage.timeoutTransitionToStage(), nextStage.name())) {
-                    materializeTimeoutTransitionIfNeeded(current, activeStage, stickyCloseAt.plusSeconds(1), eventTime.minusSeconds(1));
-                }
-                return;
-            }
-            closeActiveAt(current, eventTime.minusSeconds(1));
-        }
-
-        private void materializeTimeoutTransitionIfNeeded(ActiveSequence current,
-                                                          StageDefinition activeStage,
-                                                          LocalDateTime timeIn,
-                                                          LocalDateTime timeOut) {
-            if (activeStage.timeoutTransitionToStage() == null || timeIn == null || timeOut == null || timeIn.isAfter(timeOut)) {
-                return;
-            }
-            StageDefinition timeoutStage = stagesByName.get(activeStage.timeoutTransitionToStage());
-            if (timeoutStage == null) {
-                return;
-            }
-            createClosedStage(current, timeoutStage, timeoutStage.renderLabel(null), timeIn, timeOut, false, true);
-        }
-
-        private void insertIntermediateStage(ActiveSequence current, String stageName, LocalDateTime eventTime) {
-            if (stageName == null) {
-                return;
-            }
-            StageDefinition stage = stagesByName.get(stageName);
-            if (stage == null) {
-                return;
-            }
-            createClosedStage(current,
-                    stage,
-                    stage.renderLabel(null),
-                    eventTime,
-                    eventTime,
-                    false,
-                    true);
-        }
-
-        private void addPartialStage(ActiveSequence current, StageDefinition stage, String reportLabel, LocalDateTime eventTime) {
-            current.record.addStage(new StageWindow(
-                    stage.name(),
-                    reportLabel,
-                    null,
-                    eventTime,
-                    "",
-                    true,
-                    "sticky".equals(stage.finishMode()),
-                    stage.transitional(),
-                    stage.saveAfterSequenceClosed(),
-                    current.nextEventOrder()
-            ));
-        }
-
-        private void openStage(ActiveSequence current,
-                               StageDefinition stage,
-                               String reportLabel,
-                               LocalDateTime timeIn,
-                               boolean partial) {
-            current.record.addStage(new StageWindow(
-                    stage.name(),
-                    reportLabel,
-                    timeIn,
-                    null,
-                    "",
-                    partial,
-                    "sticky".equals(stage.finishMode()),
-                    stage.transitional(),
-                    stage.saveAfterSequenceClosed(),
-                    current.nextEventOrder()
-            ));
-            current.activeStageIndex = current.record.getStages().size() - 1;
-            current.pendingStickyOutAt = null;
-        }
-
-        private void createClosedStage(ActiveSequence current,
-                                       StageDefinition stage,
-                                       String reportLabel,
-                                       LocalDateTime timeIn,
-                                       LocalDateTime timeOut,
-                                       boolean partial,
-                                       boolean transitionalOverride) {
-            if (timeIn != null && timeOut != null && timeIn.isAfter(timeOut)) {
-                return;
-            }
-            current.record.addStage(new StageWindow(
-                    stage.name(),
-                    reportLabel,
-                    timeIn,
-                    timeOut,
-                    "",
-                    partial,
-                    "sticky".equals(stage.finishMode()),
-                    transitionalOverride || stage.transitional(),
-                    stage.saveAfterSequenceClosed(),
-                    current.nextEventOrder()
-            ));
-        }
-
-        private void closeActiveAt(ActiveSequence current, LocalDateTime timeOut) {
-            if (current.activeStageIndex == null) {
-                return;
-            }
-            StageWindow active = current.activeStage();
-            if (active.timeOut() == null) {
-                current.record.getStages().set(current.activeStageIndex, active.withTimeOut(timeOut));
-            }
-            current.activeStageIndex = null;
-        }
-
-        SequenceRecord finalizeSequence(ActiveSequence current) {
-            if (current.activeStageIndex != null) {
-                StageWindow active = current.activeStage();
-                StageDefinition stage = current.activeStageDefinition(this);
-                if (active.sticky() && current.pendingStickyOutAt != null) {
-                    closeActiveAt(current, current.pendingStickyOutAt);
-                    current.pendingStickyOutAt = null;
-                } else if (!active.saveAfterSequenceClosed()) {
-                    current.record.getStages().remove((int) current.activeStageIndex);
-                    current.activeStageIndex = null;
-                }
-            }
-            if (current.pendingCandidate != null && current.pendingCandidate.stage().saveAfterSequenceClosed()) {
-                createClosedStage(current,
-                        current.pendingCandidate.stage(),
-                        current.pendingCandidate.reportLabel(),
-                        current.pendingCandidate.triggerAt(),
-                        current.lastEventAt,
-                        false,
-                        current.pendingCandidate.stage().transitional());
-                current.pendingCandidate = null;
-            }
-            current.record.setFinishedAt(current.lastEventAt);
-            annotateAlerts(current.record);
-            return current.record;
-        }
-
-        private void annotateAlerts(SequenceRecord record) {
-            List<StageWindow> updated = new ArrayList<>();
-            for (StageWindow stage : record.getStages()) {
-                String alert = resolveAlert(record, stage);
-                updated.add(stage.withAlert(alert));
-            }
-            record.getStages().clear();
-            record.getStages().addAll(updated);
-        }
-
-        private String resolveAlert(SequenceRecord record, StageWindow stage) {
-            if (stage.partial() || stage.timeIn() == null) {
-                return "";
-            }
-            StageDefinition definition = stagesByName.get(stage.stageName());
-            if (definition == null) {
-                return "";
-            }
-            TriggerDefinition trigger = definition.startTriggers().stream()
-                    .filter(candidate -> candidate.notificationEnabled())
-                    .findFirst()
-                    .orElse(null);
-            if (trigger == null || trigger.notificationDelayMinutes() == null) {
-                return "";
-            }
-            LocalDateTime border = stage.timeOut() != null ? stage.timeOut() : record.getFinishedAt();
-            if (border == null) {
-                return "";
-            }
-            if (Duration.between(stage.timeIn(), border).toMinutes() < trigger.notificationDelayMinutes()) {
-                return "";
-            }
-            return trigger.renderNotification(trigger.notificationDelayMinutes(), stage.reportLabel());
-        }
-
-        private int resolveSequenceCloseTimeoutMinutes(ActiveSequence current) {
-            if (current.activeStageIndex != null) {
-                StageDefinition active = current.activeStageDefinition(this);
-                if (active != null && active.sequenceCloseTimeoutMinutes() != null) {
-                    return active.sequenceCloseTimeoutMinutes();
-                }
-            }
-            return defaultSequenceCloseTimeoutMinutes > 0
-                    ? defaultSequenceCloseTimeoutMinutes
-                    : (int) DEFAULT_SEQUENCE_GAP_TIMEOUT.toMinutes();
-        }
-
-        private boolean isAllowedNext(StageDefinition activeStage, String nextStageName) {
-            return activeStage.allowedNextStages().isEmpty() || activeStage.allowedNextStages().contains(nextStageName);
-        }
-
-        private boolean canReopenSameStage(StageWindow active, StageDefinition definition, LocalDateTime eventTime) {
-            if (definition.sameStageReopenAfterMinutes() == null || active.timeIn() == null) {
-                return false;
-            }
-            return Duration.between(active.timeIn(), eventTime).toMinutes() >= definition.sameStageReopenAfterMinutes();
-        }
-
-        private Integer positiveOrNull(Integer value, int fallback) {
-            if (value == null) {
-                return fallback > 0 ? fallback : null;
-            }
-            return value > 0 ? value : null;
-        }
-
-        private String normalizePolicy(String value) {
-            return value == null ? "close_current_and_start_next" : value.toLowerCase(Locale.ROOT);
+        if (sequence.activeStage == null || !Objects.equals(sequence.activeStage.stageName(), realMatch.config().getName())) {
+            StageWindow stage = new StageWindow(realMatch.config().getName(), realMatch.config().getLabel(), StageType.REAL, eventTime, null, false, false, true);
+            sequence.record.addStage(stage);
+            sequence.activeStage = stage;
+            sequence.activeSingleConfig = null;
+            sequence.lastSingleDetectionAt = null;
         }
     }
 
-    private record StageDefinition(String name,
-                                   String labelTemplate,
-                                   String startMode,
-                                   Integer candidateTimeoutMinutes,
-                                   Integer candidateCloseTimeoutMinutes,
-                                   List<String> candidateCancelOnEvents,
-                                   String finishMode,
-                                   Integer stickyCloseTimeoutMinutes,
-                                   List<String> allowedNextStages,
-                                   String unexpectedNextStagePolicy,
-                                   String timeoutTransitionToStage,
-                                   Integer sequenceCloseTimeoutMinutes,
-                                   boolean saveAfterSequenceClosed,
-                                   boolean allowPartialFromFinish,
-                                   String startDuplicatePolicy,
-                                   String finishDuplicatePolicy,
-                                   String intermediateStageOnTransition,
-                                   boolean transitional,
-                                   Integer sameStageReopenAfterMinutes,
-                                   List<TriggerDefinition> startTriggers,
-                                   List<TriggerDefinition> finishTriggers) {
-        static StageDefinition from(AppConfig.StageConfig config) {
-            List<TriggerDefinition> starts = toTriggerDefinitions(config, TriggerKind.START, config.getStartTriggers());
-            List<TriggerDefinition> finishes = toTriggerDefinitions(config, TriggerKind.FINISH, config.getFinishTriggers());
-            return new StageDefinition(
-                    config.getName(),
-                    config.getLabelTemplate(),
-                    valueOrDefault(config.getStartMode(), "immediate"),
-                    config.getCandidateTimeoutMinutes(),
-                    config.getCandidateCloseTimeoutMinutes(),
-                    config.getCandidateCancelOnEvents() == null ? List.of() : List.copyOf(config.getCandidateCancelOnEvents()),
-                    valueOrDefault(config.getFinishMode(), "immediate"),
-                    config.getStickyCloseTimeoutMinutes(),
-                    config.getAllowedNextStages() == null ? List.of() : List.copyOf(config.getAllowedNextStages()),
-                    valueOrDefault(config.getUnexpectedNextStagePolicy(), "close_current_and_start_next"),
-                    config.getTimeoutTransitionToStage(),
-                    config.getSequenceCloseTimeoutMinutes(),
-                    config.getSaveStageAfterSequenceClosed() == null || config.getSaveStageAfterSequenceClosed(),
-                    config.isAllowPartialFromFinish(),
-                    valueOrDefault(config.getStartDuplicatePolicy(), "ignore"),
-                    valueOrDefault(config.getFinishDuplicatePolicy(), "update_sticky"),
-                    config.getIntermediateStageOnTransition(),
-                    config.isTransitional(),
-                    config.getSameStageReopenAfterMinutes(),
-                    starts,
-                    finishes
-            );
+    private void handleRealOut(ActiveSequence sequence, RealMatch realMatch, LocalDateTime eventTime, AppConfig config) {
+        if (sequence.activeStage != null && Objects.equals(sequence.activeStage.stageName(), realMatch.config().getName()) && sequence.activeStage.stageType() == StageType.REAL) {
+            sequence.activeStage.setTimeOut(eventTime);
+            sequence.lastRealOutAt = eventTime;
+            return;
         }
-
-        String renderLabel(String derivedInstance) {
-            if (labelTemplate == null || labelTemplate.isBlank()) {
-                return name;
-            }
-            String resolved = labelTemplate;
-            if (derivedInstance != null && !derivedInstance.isBlank()) {
-                resolved = resolved.replace("{{instance}}", derivedInstance);
-            }
-            return resolved;
+        if (sequence.materializedCandidate != null) {
+            sequence.materializedCandidate.setTimeOut(eventTime.minusSeconds(1));
+            sequence.activeStage = null;
+            sequence.materializedCandidate = null;
         }
+        cancelCandidateIfPending(sequence);
+        sequence.record.addStage(new StageWindow(realMatch.config().getName(), realMatch.config().getLabel(), StageType.REAL, null, eventTime, true, false, true));
+    }
 
-        private static List<TriggerDefinition> toTriggerDefinitions(AppConfig.StageConfig stageConfig,
-                                                                    TriggerKind kind,
-                                                                    List<AppConfig.TriggerConfig> configs) {
-            if (configs == null) {
-                return List.of();
+    private void openOrRefreshSingle(ActiveSequence sequence,
+                                     AppConfig.SingleCameraStageConfig singleConfig,
+                                     Detection detection,
+                                     AppConfig config) {
+        if (sequence.activeStage != null && sequence.activeStage.stageType() == StageType.SINGLE_CAMERA
+                && Objects.equals(sequence.activeStage.stageName(), singleConfig.getName())) {
+            if (sequence.lastSingleDetectionAt != null
+                    && Duration.between(sequence.lastSingleDetectionAt, detection.createdAt()).toSeconds() > singleConfig.getTimeoutSeconds()) {
+                sequence.activeStage.setTimeOut(sequence.lastSingleDetectionAt);
+                sequence.activeStage = null;
             }
-            List<TriggerDefinition> definitions = new ArrayList<>();
-            for (AppConfig.TriggerConfig trigger : configs) {
-                definitions.add(new TriggerDefinition(
-                        stageConfig.getName(),
-                        kind,
-                        trigger.getCameraId(),
-                        trigger.getDirectionRange(),
-                        trigger.getEventKey(),
-                        trigger.getDerivedStageInstance(),
-                        trigger.getName(),
-                        trigger.getNotification() != null && trigger.getNotification().isEnabled(),
-                        trigger.getNotification() == null ? null : trigger.getNotification().getTemplate(),
-                        trigger.getNotification() == null ? null : trigger.getNotification().getDelayMinutes()
-                ));
-            }
-            return definitions;
         }
+        if (sequence.activeStage != null && (sequence.activeStage.stageType() != StageType.SINGLE_CAMERA
+                || !Objects.equals(sequence.activeStage.stageName(), singleConfig.getName()))) {
+            closeActiveStage(sequence, detection.createdAt());
+        }
+        if (sequence.activeStage == null) {
+            StageWindow stage = new StageWindow(singleConfig.getName(), singleConfig.getLabel(), StageType.SINGLE_CAMERA, detection.createdAt(), detection.createdAt(), false, false, true);
+            sequence.record.addStage(stage);
+            sequence.activeStage = stage;
+        } else {
+            sequence.activeStage.setTimeOut(detection.createdAt());
+        }
+        sequence.activeSingleConfig = singleConfig;
+        sequence.lastSingleDetectionAt = detection.createdAt();
+    }
 
-        private static String valueOrDefault(String value, String defaultValue) {
-            return value == null || value.isBlank() ? defaultValue : value;
+    private void maybeCreateTransitionalCandidateByCamera(ActiveSequence sequence, Detection detection, AppConfig config) {
+        for (AppConfig.TransitionalStageConfig stage : safeTransitionalStages(config)) {
+            if (stage.getTriggerCameras() != null && stage.getTriggerCameras().contains(detection.analyticsId())) {
+                createCandidate(sequence, stage, detection.createdAt());
+                return;
+            }
         }
     }
 
-    private record TriggerDefinition(String stageName,
-                                     TriggerKind kind,
-                                     Integer cameraId,
-                                     AppConfig.DirectionRange directionRange,
-                                     String eventKey,
-                                     String derivedInstance,
-                                     String name,
-                                     boolean notificationEnabled,
-                                     String notificationTemplate,
-                                     Integer notificationDelayMinutes) {
-        boolean matches(Detection detection) {
-            return Objects.equals(cameraId, detection.analyticsId())
-                    && (directionRange == null || directionRange.contains(detection.direction()));
+    private void maybeCreateTransitionalCandidate(ActiveSequence sequence, LocalDateTime closureTime, AppConfig config, String closedStageName, boolean closedWasSingle) {
+        if (closedStageName == null) {
+            return;
         }
-
-        String renderNotification(Integer threshold, String stageLabel) {
-            String template = notificationTemplate == null ? "" : notificationTemplate;
-            return template
-                    .replace("{{threshold}}", String.valueOf(threshold))
-                    .replace("{{stage}}", stageLabel == null ? "" : stageLabel);
+        if (closedWasSingle && !Boolean.TRUE.equals(config.getAllowTransitionalAfterSingleCamera())) {
+            return;
+        }
+        for (AppConfig.TransitionalStageConfig stage : safeTransitionalStages(config)) {
+            if (stage.getAllowedAfter() != null && stage.getAllowedAfter().contains(closedStageName)) {
+                createCandidate(sequence, stage, closureTime.plusSeconds(1));
+                return;
+            }
         }
     }
 
-    private record PendingCandidate(StageDefinition stage,
-                                    String reportLabel,
-                                    LocalDateTime triggerAt,
-                                    Integer timeoutMinutes,
-                                    Integer closeTimeoutMinutes,
-                                    Set<String> cancelOnEvents) {
-        PendingCandidate withTriggerAt(LocalDateTime newTriggerAt) {
-            return new PendingCandidate(stage, reportLabel, newTriggerAt, timeoutMinutes, closeTimeoutMinutes, cancelOnEvents);
+    private void createCandidate(ActiveSequence sequence, AppConfig.TransitionalStageConfig transitionalConfig, LocalDateTime candidateTimeIn) {
+        if (transitionalConfig.getCandidateTimeoutSeconds() == null) {
+            return;
+        }
+        sequence.pendingCandidate = new PendingCandidate(transitionalConfig, candidateTimeIn, candidateTimeIn.plusSeconds(transitionalConfig.getCandidateTimeoutSeconds()));
+    }
+
+    private void materializeCandidateIfDue(ActiveSequence sequence, LocalDateTime boundary) {
+        if (sequence.pendingCandidate == null || boundary == null) {
+            return;
+        }
+        if (boundary.isBefore(sequence.pendingCandidate.materializeAt())) {
+            return;
+        }
+        if (sequence.activeStage != null) {
+            LocalDateTime closeAt = sequence.pendingCandidate.timeIn().minusSeconds(1);
+            if (closeAt.isBefore(sequence.activeStage.timeIn() == null ? sequence.pendingCandidate.timeIn() : sequence.activeStage.timeIn())) {
+                closeAt = sequence.pendingCandidate.timeIn();
+            }
+            closeActiveStage(sequence, closeAt);
+        }
+        boolean show = !Boolean.FALSE.equals(sequence.pendingCandidate.config().getShowInReportIfIncomplete())
+                || positive(sequence.pendingCandidate.config().getSequenceCloseTimeoutOverrideSeconds()) == 0;
+        StageWindow stage = new StageWindow(sequence.pendingCandidate.config().getName(),
+                sequence.pendingCandidate.config().getLabel(),
+                StageType.TRANSITIONAL,
+                sequence.pendingCandidate.timeIn(),
+                null,
+                false,
+                false,
+                show);
+        sequence.record.addStage(stage);
+        sequence.activeStage = stage;
+        sequence.materializedCandidate = stage;
+        sequence.materializedCandidateConfig = sequence.pendingCandidate.config();
+        sequence.pendingCandidate = null;
+    }
+
+    private void closeBySingleTimeout(ActiveSequence sequence, LocalDateTime boundary, AppConfig config) {
+        if (sequence.activeStage == null || sequence.activeStage.stageType() != StageType.SINGLE_CAMERA || boundary == null || sequence.activeSingleConfig == null || sequence.lastSingleDetectionAt == null) {
+            return;
+        }
+        if (Duration.between(sequence.lastSingleDetectionAt, boundary).toSeconds() > sequence.activeSingleConfig.getTimeoutSeconds()) {
+            String stageName = sequence.activeStage.stageName();
+            sequence.activeStage.setTimeOut(sequence.lastSingleDetectionAt);
+            sequence.activeStage = null;
+            sequence.activeSingleConfig = null;
+            maybeCreateTransitionalCandidate(sequence, sequence.lastSingleDetectionAt, config, stageName, true);
         }
     }
+
+    private boolean closeBySequenceTimeout(ActiveSequence sequence, LocalDateTime eventTime, AppConfig config) {
+        if (sequence.lastDetectionAt == null || eventTime == null) {
+            return false;
+        }
+        long timeoutSeconds = resolveSequenceTimeoutSeconds(sequence, config);
+        return Duration.between(sequence.lastDetectionAt, eventTime).toSeconds() > timeoutSeconds;
+    }
+
+    private long resolveSequenceTimeoutSeconds(ActiveSequence sequence, AppConfig config) {
+        if (sequence.materializedCandidateConfig != null && positive(sequence.materializedCandidateConfig.getSequenceCloseTimeoutOverrideSeconds()) > 0) {
+            return sequence.materializedCandidateConfig.getSequenceCloseTimeoutOverrideSeconds();
+        }
+        return Math.max(1, positive(config.getSequenceCloseTimeoutMinutes()) * 60L);
+    }
+
+    private int positive(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
+    }
+
+    private void finalizeSequence(ActiveSequence sequence, LocalDateTime finishedAt) {
+        if (sequence.record.getStages().isEmpty()) {
+            return;
+        }
+        if (sequence.pendingCandidate != null) {
+            sequence.pendingCandidate = null;
+        }
+        if (sequence.activeStage != null && sequence.activeStage.stageType() == StageType.TRANSITIONAL && sequence.materializedCandidateConfig != null
+                && positive(sequence.materializedCandidateConfig.getSequenceCloseTimeoutOverrideSeconds()) > 0) {
+            sequence.record.getStages().remove(sequence.activeStage);
+            sequence.activeStage = null;
+        }
+        sequence.record.setFinishedAt(finishedAt);
+    }
+
+    private void closeActiveStage(ActiveSequence sequence, LocalDateTime eventTime) {
+        if (sequence.activeStage == null) {
+            return;
+        }
+        if (sequence.activeStage.stageType() == StageType.SINGLE_CAMERA && sequence.lastSingleDetectionAt != null && (eventTime == null || eventTime.isAfter(sequence.lastSingleDetectionAt))) {
+            sequence.activeStage.setTimeOut(sequence.lastSingleDetectionAt);
+        } else if (sequence.activeStage.stageType() == StageType.REAL && sequence.activeStage.timeOut() != null) {
+            // real stages keep sticky Out and are only logically closed by the next stage
+        } else if (eventTime != null) {
+            sequence.activeStage.setTimeOut(eventTime);
+        }
+        String closedStageName = sequence.activeStage.stageName();
+        sequence.activeStage = null;
+        sequence.activeSingleConfig = null;
+        sequence.materializedCandidate = null;
+        sequence.materializedCandidateConfig = null;
+    }
+
+    private void cancelCandidateIfPending(ActiveSequence sequence) {
+        sequence.pendingCandidate = null;
+    }
+
+    private RealMatch matchRealIn(Detection detection, AppConfig config) {
+        for (AppConfig.RealStageConfig stage : safeRealStages(config)) {
+            if (matchesAny(stage.getInTriggers(), detection)) {
+                return new RealMatch(stage);
+            }
+        }
+        return null;
+    }
+
+    private RealMatch matchRealOut(Detection detection, AppConfig config) {
+        for (AppConfig.RealStageConfig stage : safeRealStages(config)) {
+            if (matchesAny(stage.getOutTriggers(), detection)) {
+                return new RealMatch(stage);
+            }
+        }
+        return null;
+    }
+
+    private AppConfig.SingleCameraStageConfig matchSingle(Detection detection, AppConfig config) {
+        for (AppConfig.SingleCameraStageConfig stage : safeSingleStages(config)) {
+            if (Objects.equals(stage.getCameraId(), detection.analyticsId())) {
+                return stage;
+            }
+        }
+        return null;
+    }
+
+    private boolean matchesAny(List<AppConfig.CameraTrigger> triggers, Detection detection) {
+        if (triggers == null) {
+            return false;
+        }
+        for (AppConfig.CameraTrigger trigger : triggers) {
+            if (Objects.equals(trigger.getCameraId(), detection.analyticsId())
+                    && matchesDirection(trigger.getDirectionRange(), detection.direction())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesDirection(AppConfig.DirectionRange range, Integer direction) {
+        if (range == null || range.getFrom() == null || range.getTo() == null || direction == null) {
+            return true;
+        }
+        int from = Math.floorMod(range.getFrom(), 360);
+        int to = Math.floorMod(range.getTo(), 360);
+        int value = Math.floorMod(direction, 360);
+        if (from < to) {
+            return value >= from && value < to;
+        }
+        return value >= from || value < to;
+    }
+
+    private List<AppConfig.RealStageConfig> safeRealStages(AppConfig config) {
+        return config.getRealStages() == null ? List.of() : config.getRealStages();
+    }
+
+    private List<AppConfig.TransitionalStageConfig> safeTransitionalStages(AppConfig config) {
+        return config.getTransitionalStages() == null ? List.of() : config.getTransitionalStages();
+    }
+
+    private List<AppConfig.SingleCameraStageConfig> safeSingleStages(AppConfig config) {
+        return config.getSingleCameraStages() == null ? List.of() : config.getSingleCameraStages();
+    }
+
+    private record RealMatch(AppConfig.RealStageConfig config) {}
+
+    private record PendingCandidate(AppConfig.TransitionalStageConfig config,
+                                    LocalDateTime timeIn,
+                                    LocalDateTime materializeAt) {}
 
     private static final class ActiveSequence {
         private final SequenceRecord record;
-        private LocalDateTime lastEventAt;
-        private Integer activeStageIndex;
-        private int eventOrder;
+        private StageWindow activeStage;
+        private AppConfig.SingleCameraStageConfig activeSingleConfig;
+        private LocalDateTime lastSingleDetectionAt;
+        private LocalDateTime lastRealOutAt;
+        private LocalDateTime lastDetectionAt;
         private PendingCandidate pendingCandidate;
-        private LocalDateTime pendingStickyOutAt;
+        private StageWindow materializedCandidate;
+        private AppConfig.TransitionalStageConfig materializedCandidateConfig;
 
-        private ActiveSequence(String plateNumber, LocalDateTime startedAt) {
-            this.record = new SequenceRecord(plateNumber, startedAt);
-            this.lastEventAt = startedAt;
+        private ActiveSequence(SequenceRecord record) {
+            this.record = record;
         }
 
-        private int nextEventOrder() {
-            return ++eventOrder;
-        }
-
-        private StageWindow activeStage() {
-            return record.getStages().get(activeStageIndex);
-        }
-
-        private StageDefinition activeStageDefinition(WorkflowDefinition workflowDefinition) {
-            if (activeStageIndex == null) {
-                return null;
+        private LocalDateTime lastActivityAt(AppConfig config) {
+            if (activeStage != null && activeStage.stageType() == StageType.SINGLE_CAMERA && lastSingleDetectionAt != null) {
+                return lastSingleDetectionAt;
             }
-            return workflowDefinition.stagesByName.get(activeStage().stageName());
+            if (lastDetectionAt != null) {
+                return lastDetectionAt;
+            }
+            return record.getStartedAt();
         }
     }
 }

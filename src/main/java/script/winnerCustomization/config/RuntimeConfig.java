@@ -6,13 +6,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import script.winnerCustomization.model.AppConfig;
-import script.winnerCustomization.service.WorkflowDefaultsFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -20,23 +20,18 @@ public class RuntimeConfig {
     private static final Logger log = LoggerFactory.getLogger(RuntimeConfig.class);
 
     private final ObjectMapper objectMapper;
-    private final WorkflowDefaultsFactory workflowDefaultsFactory;
     private final AtomicReference<AppConfig> appConfig = new AtomicReference<>();
     private final Path configPath;
 
-    public RuntimeConfig(ObjectMapper objectMapper,
-                         WorkflowDefaultsFactory workflowDefaultsFactory) {
+    public RuntimeConfig(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        this.workflowDefaultsFactory = workflowDefaultsFactory;
         this.configPath = Path.of(System.getProperty("user.dir"), "config.json");
     }
 
     @PostConstruct
     public void load() throws IOException {
-        log.info("Loading runtime configuration from {}", configPath);
         if (!Files.exists(configPath)) {
-            log.error("config.json was not found at {}", configPath);
-            throw new IllegalStateException("config.json was not found near jar/application in " + configPath);
+            throw new IllegalStateException("config.json was not found near the application: " + configPath);
         }
         reload();
     }
@@ -44,22 +39,16 @@ public class RuntimeConfig {
     public synchronized AppConfig reload() throws IOException {
         AppConfig loaded = objectMapper.readValue(Files.readString(configPath), AppConfig.class);
         validate(loaded);
-        AppConfig enriched = workflowDefaultsFactory.enrich(loaded);
-        appConfig.set(enriched);
-        log.info("Runtime configuration loaded: source schema={}, source table={}, notificationsEnabled={}, workflowStages={}",
-                enriched.getSourceDatabase().getSchema(),
-                enriched.getSourceTable().getTable(),
-                enriched.getNotifications() != null && enriched.getNotifications().isEnabled(),
-                enriched.getWorkflow() == null || enriched.getWorkflow().getStages() == null ? 0 : enriched.getWorkflow().getStages().size());
-        return enriched;
+        appConfig.set(loaded);
+        log.info("Runtime configuration loaded from {}", configPath);
+        return loaded;
     }
 
     public synchronized AppConfig save(AppConfig config) throws IOException {
         validate(config);
-        AppConfig enriched = workflowDefaultsFactory.enrich(config);
-        Files.writeString(configPath, objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(enriched));
-        appConfig.set(enriched);
-        return enriched;
+        Files.writeString(configPath, objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(config));
+        appConfig.set(config);
+        return config;
     }
 
     public AppConfig get() {
@@ -80,89 +69,114 @@ public class RuntimeConfig {
         if (config.getSourceTable() == null || isBlank(config.getSourceTable().getTable())) {
             throw new IllegalArgumentException("sourceTable.table is required");
         }
-        if (config.getWorkflow() == null || config.getWorkflow().getStages() == null || config.getWorkflow().getStages().isEmpty()) {
-            return;
+        if (config.getSequenceCloseTimeoutMinutes() == null || config.getSequenceCloseTimeoutMinutes() <= 0) {
+            throw new IllegalArgumentException("sequenceCloseTimeoutMinutes must be positive");
         }
+        if (config.getDuplicateSuppressionSeconds() == null || config.getDuplicateSuppressionSeconds() < 0) {
+            throw new IllegalArgumentException("duplicateSuppressionSeconds must be zero or positive");
+        }
+
         Set<String> stageNames = new HashSet<>();
-        for (AppConfig.StageConfig stage : config.getWorkflow().getStages()) {
-            if (stage == null || isBlank(stage.getName())) {
-                throw new IllegalArgumentException("workflow.stages[].name is required");
+        validateRealStages(config, stageNames);
+        validateSingleStages(config, stageNames);
+        validateTransitionalStages(config, stageNames);
+        validateNotifications(config);
+    }
+
+    private void validateRealStages(AppConfig config, Set<String> stageNames) {
+        for (AppConfig.RealStageConfig stage : safe(config.getRealStages())) {
+            validateStageIdentity(stage.getName(), stage.getLabel(), stageNames, "realStages");
+            if (safe(stage.getInTriggers()).isEmpty()) {
+                throw new IllegalArgumentException("realStages." + stage.getName() + ".inTriggers must not be empty");
             }
-            if (!stageNames.add(stage.getName())) {
-                throw new IllegalArgumentException("workflow stage names must be unique: " + stage.getName());
+            if (safe(stage.getOutTriggers()).isEmpty()) {
+                throw new IllegalArgumentException("realStages." + stage.getName() + ".outTriggers must not be empty");
             }
-            if (isBlank(stage.getLabelTemplate())) {
-                throw new IllegalArgumentException("workflow stage labelTemplate is required for " + stage.getName());
-            }
-            validateTriggers(stage.getStartTriggers(), stage.getName(), "startTriggers");
-            validateEnum(stage.getStartMode(), Set.of("immediate", "candidate"), "startMode", stage.getName());
-            validateEnum(stage.getFinishMode(), Set.of("immediate", "sticky"), "finishMode", stage.getName());
-            validateEnum(stage.getUnexpectedNextStagePolicy(), Set.of("close_current_and_start_next", "insert_intermediate_and_start_next", "ignore", "start_partial_next"), "unexpectedNextStagePolicy", stage.getName());
-            validateEnum(stage.getStartDuplicatePolicy(), Set.of("ignore", "restart", "refresh_candidate"), "startDuplicatePolicy", stage.getName());
-            validateEnum(stage.getFinishDuplicatePolicy(), Set.of("ignore", "update_sticky"), "finishDuplicatePolicy", stage.getName());
-            validateTriggers(stage.getFinishTriggers(), stage.getName(), "finishTriggers");
-            if (stage.getCandidateTimeoutMinutes() != null && stage.getCandidateTimeoutMinutes() <= 0) {
-                throw new IllegalArgumentException("candidateTimeoutMinutes must be positive for " + stage.getName());
-            }
-            if (stage.getStickyCloseTimeoutMinutes() != null && stage.getStickyCloseTimeoutMinutes() <= 0) {
-                throw new IllegalArgumentException("stickyCloseTimeoutMinutes must be positive for " + stage.getName());
-            }
-            if (stage.getSequenceCloseTimeoutMinutes() != null && stage.getSequenceCloseTimeoutMinutes() <= 0) {
-                throw new IllegalArgumentException("sequenceCloseTimeoutMinutes must be positive for " + stage.getName());
-            }
-        }
-        for (AppConfig.StageConfig stage : config.getWorkflow().getStages()) {
-            validateReferences(stage.getAllowedNextStages(), stageNames, stage.getName(), "allowedNextStages");
-            validateReference(stage.getTimeoutTransitionToStage(), stageNames, stage.getName(), "timeoutTransitionToStage");
-            validateReference(stage.getIntermediateStageOnTransition(), stageNames, stage.getName(), "intermediateStageOnTransition");
+            stage.getInTriggers().forEach(trigger -> validateTrigger(trigger, "realStages." + stage.getName() + ".inTriggers"));
+            stage.getOutTriggers().forEach(trigger -> validateTrigger(trigger, "realStages." + stage.getName() + ".outTriggers"));
         }
     }
 
-    private void validateTriggers(java.util.List<AppConfig.TriggerConfig> triggers, String stageName, String fieldName) {
-        if (triggers == null) {
-            return;
-        }
-        for (AppConfig.TriggerConfig trigger : triggers) {
-            if (trigger.getCameraId() == null) {
-                throw new IllegalArgumentException("cameraId is required for " + stageName + "." + fieldName);
+    private void validateSingleStages(AppConfig config, Set<String> stageNames) {
+        for (AppConfig.SingleCameraStageConfig stage : safe(config.getSingleCameraStages())) {
+            validateStageIdentity(stage.getName(), stage.getLabel(), stageNames, "singleCameraStages");
+            if (stage.getCameraId() == null) {
+                throw new IllegalArgumentException("singleCameraStages." + stage.getName() + ".cameraId is required");
             }
-            if (trigger.getDirectionRange() != null
-                    && trigger.getDirectionRange().getFrom() != null
-                    && trigger.getDirectionRange().getTo() != null
-                    && trigger.getDirectionRange().getFrom().equals(trigger.getDirectionRange().getTo())) {
-                throw new IllegalArgumentException("direction range from/to must not be equal for " + stageName + "." + fieldName);
-            }
-            if (isBlank(trigger.getEventKey())) {
-                throw new IllegalArgumentException("eventKey is required for " + stageName + "." + fieldName);
+            if (stage.getTimeoutSeconds() == null || stage.getTimeoutSeconds() <= 0) {
+                throw new IllegalArgumentException("singleCameraStages." + stage.getName() + ".timeoutSeconds must be positive");
             }
         }
     }
 
-    private void validateReferences(java.util.List<String> references, Set<String> stageNames, String stageName, String fieldName) {
-        if (references == null) {
-            return;
-        }
-        for (String reference : references) {
-            validateReference(reference, stageNames, stageName, fieldName);
+    private void validateTransitionalStages(AppConfig config, Set<String> stageNames) {
+        for (AppConfig.TransitionalStageConfig stage : safe(config.getTransitionalStages())) {
+            validateStageIdentity(stage.getName(), stage.getLabel(), stageNames, "transitionalStages");
+            if (safe(stage.getTriggerCameras()).isEmpty()) {
+                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".triggerCameras must not be empty");
+            }
+            if (stage.getCandidateTimeoutSeconds() == null || stage.getCandidateTimeoutSeconds() <= 0) {
+                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".candidateTimeoutSeconds must be positive");
+            }
+            if (stage.getSequenceCloseTimeoutOverrideSeconds() != null && stage.getSequenceCloseTimeoutOverrideSeconds() < 0) {
+                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".sequenceCloseTimeoutOverrideSeconds must be zero or positive");
+            }
+            for (String allowed : safe(stage.getAllowedAfter())) {
+                if (!stageNames.contains(allowed)) {
+                    throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".allowedAfter references unknown stage '" + allowed + "'");
+                }
+            }
         }
     }
 
-    private void validateReference(String reference, Set<String> stageNames, String stageName, String fieldName) {
-        if (isBlank(reference)) {
-            return;
-        }
-        if (!stageNames.contains(reference)) {
-            throw new IllegalArgumentException(fieldName + " references missing stage '" + reference + "' from " + stageName);
+    private void validateNotifications(AppConfig config) {
+        for (AppConfig.NotificationRule rule : safe(config.getNotifications())) {
+            if (rule.getCameraId() == null) {
+                throw new IllegalArgumentException("notifications[].cameraId is required");
+            }
+            if (rule.getDelaySeconds() == null || rule.getDelaySeconds() <= 0) {
+                throw new IllegalArgumentException("notifications[].delaySeconds must be positive");
+            }
+            if (isBlank(rule.getMessage())) {
+                throw new IllegalArgumentException("notifications[].message is required");
+            }
+            validateDirectionRange(rule.getDirectionRange(), "notifications[].directionRange");
         }
     }
 
-    private void validateEnum(String value, Set<String> allowed, String fieldName, String stageName) {
-        if (isBlank(value)) {
+    private void validateStageIdentity(String name, String label, Set<String> stageNames, String path) {
+        if (isBlank(name)) {
+            throw new IllegalArgumentException(path + "[].name is required");
+        }
+        if (isBlank(label)) {
+            throw new IllegalArgumentException(path + "." + name + ".label is required");
+        }
+        if (!stageNames.add(name)) {
+            throw new IllegalArgumentException("Stage names must be unique: " + name);
+        }
+    }
+
+    private void validateTrigger(AppConfig.CameraTrigger trigger, String path) {
+        if (trigger == null || trigger.getCameraId() == null) {
+            throw new IllegalArgumentException(path + "[].cameraId is required");
+        }
+        validateDirectionRange(trigger.getDirectionRange(), path + "[].directionRange");
+    }
+
+    private void validateDirectionRange(AppConfig.DirectionRange range, String path) {
+        if (range == null) {
             return;
         }
-        if (!allowed.contains(value)) {
-            throw new IllegalArgumentException(fieldName + " has unsupported value '" + value + "' for " + stageName);
+        if (range.getFrom() == null || range.getTo() == null) {
+            throw new IllegalArgumentException(path + " must contain both from and to");
         }
+        if (Objects.equals(range.getFrom(), range.getTo())) {
+            throw new IllegalArgumentException(path + " from/to must differ");
+        }
+    }
+
+    private <T> java.util.List<T> safe(java.util.List<T> items) {
+        return items == null ? java.util.List.of() : items;
     }
 
     private boolean isBlank(String value) {

@@ -1,225 +1,90 @@
 # Technical specification
 
-## Components
+## Architecture overview
+The application is split into configuration, repositories, domain services, and web controllers.
 
-### `JacksonConfig`
-- Provides explicit `ObjectMapper` bean for JSON serialization/deserialization dependencies.
-- Uses `findAndRegisterModules()` and relies on `jackson-datatype-jsr310` on classpath, so runtime config can deserialize Java time values (`LocalDateTime` such as `sourceTable.loadFrom`).
-- Guarantees `RuntimeConfig` constructor injection works during application startup.
+### Configuration
+- `AppConfig` contains infrastructure settings (source/sequence/root database, source table, report output, Telegram delivery) and the new sequence-engine specification.
+- `RuntimeConfig` loads `config.json`, validates stage uniqueness, timeout positivity, and direction ranges, then keeps the active config in memory.
 
-### `RuntimeConfig`
-- Loads runtime JSON configuration from `<working_dir>/config.json` at startup.
-- Stores the active config in an `AtomicReference<AppConfig>` so controllers/services always read the latest committed version.
-- Enriches legacy configs with a generated `workflow` section through `WorkflowDefaultsFactory`, validates workflow references/timeouts, and can persist updated config back into `config.json` without restart.
-- Runtime config mutation is only fully live for services that read values directly from `RuntimeConfig` on each operation (`workflow`, `sourceTable`, `notifications`, `reports`). JDBC connection beans are still singleton startup beans, so DB host/port/user/password changes are persisted but require application restart to recreate data sources.
+### Domain model
+- `Detection` is the raw source event (`id`, `plateNumber`, `analyticsId`, `direction`, `createdAt`).
+- `SequenceRecord` represents one plate sequence with `startedAt`, `finishedAt`, ordered `StageWindow`s, and generated notification events.
+- `StageWindow` stores `stageName`, `stageLabel`, `stageType`, `partial`, `candidate`, `timeIn`, `timeOut`, and attached alerts.
+- `StageType` is one of `REAL`, `TRANSITIONAL`, `SINGLE_CAMERA`.
 
-### `JdbcConfig`
-- Creates two PostgreSQL data sources and JDBC templates:
-  - `sourceJdbc`: reads detections.
-  - `sequenceJdbc`: stores computed sequences.
-- Before creating `sequenceDataSource`, invokes `DatabaseBootstrapService.ensureDatabaseExists(...)`.
+## Repository layer
+The repository pattern isolates SQL from business logic.
 
-### `DatabaseBootstrapService`
-- Method: `ensureDatabaseExists(rootDatabase, sequenceDatabase)`
-  - Connects to PostgreSQL using root/admin credentials from config.
-  - Validates required sequence DB user/password presence in runtime config.
-  - Ensures target sequence role exists (`create role ... login password ...`) or updates password (`alter role ...`).
-  - Checks `pg_database` for the target sequence DB using `select exists(...)` (safe when DB is absent).
-  - Creates DB on first start when missing with sequence user as DB owner.
-  - Grants DB-level (`CONNECT`, `TEMPORARY`) and schema-level (`USAGE`, `CREATE` on `public`) permissions for sequence user.
-  - Throws clear `IllegalStateException` when root credentials/permissions are invalid.
+### Interfaces
+- `Repository<T>` — generic initialize/read/replace contract.
+- `DetectionRepository` — detection loading for all rows or a date interval.
+- `SequenceRepository` — persistence for built sequences.
+- `NotificationRepository` — persistence for pending notifications and dispatch state.
 
-### `AppConfig` model
-- `sourceDatabase`, `sequenceDatabase`: credentials + schema + db.
-- `rootDatabase`: PostgreSQL root/admin connection used at startup to auto-create the sequence database if missing.
-- `sourceTable`: source detections table name + optional `loadFrom` timestamp (lower bound for `created_at`).
-- `notifications`: telegram on/off + token/chat id.
-- `timing`: legacy thresholds used only while synthesizing default `workflow` from old camera config; not required when `workflow` is fully specified explicitly.
-- `reports.outputDirectory`: optional folder path for saving generated XLSX file copy on each report request.
-- `workflow`: expanded runtime workflow model with `defaultSequenceCloseTimeoutMinutes` and `stages[]`. Each stage supports `name`, `labelTemplate`, `startTriggers`, `finishTriggers`, candidate/sticky timeout settings, duplicate policies, transition references, and per-trigger notification metadata. This is now the preferred and sufficient way to describe the sequence logic.
-- `cameras`: legacy camera lists for Drive in / Service / Parking logical points plus transition cameras `driveInToService` and `serviceToDriveIn`. Each camera is matched by `analyticsId` and optional direction range. They are only needed for backward compatibility and are converted into a default `workflow` model when `workflow` is omitted from JSON.
-- `servicePosts`: list where each post has one `analyticsId` and two direction ranges (`inDirectionRange`, `outDirectionRange`) to split `Post In` and `Post Out`; `postName` is preserved into `StageWindow.reportLabel()` so reports can show concrete post numbers/names.
-- `DirectionRange.contains(direction)` supports wrap-around intervals that cross `0` degrees (`270 -> 90`) and uses an exclusive upper bound so neighboring ranges can share a border without ambiguous double matches.
+### JDBC implementations
+- `JdbcDetectionRepository` reads from the configured source schema/table.
+- `JdbcSequenceRepository` stores sequence headers in `sequence_records` and stage rows in `sequence_stages`.
+- `JdbcNotificationRepository` stores pending jobs in `pending_notifications` and marks them as sent.
 
-### `WorkflowDefaultsFactory`
-- Method: `enrich(AppConfig)`
-  - Returns config unchanged when `workflow.stages` already exists.
-  - Otherwise synthesizes a workflow model from legacy `cameras` and `timing` sections so the UI/API can expose a declarative stage configuration without breaking older `config.json` files.
-- Generates stage definitions for `drive_in`, `service`, each configured post, `parking`, `backyard`, and `test_drive`, including labels, trigger metadata, and alert timing defaults.
-
-### `DetectionService`
-- Method: `loadAllDetections()`
-  - Builds SQL from runtime config (`schema.table`).
-  - If `sourceTable.loadFrom` is configured, adds `where created_at >= ?` to limit data scan window.
-  - Reads rows sorted by `created_at, id`.
-  - Maps each row to immutable `Detection` record.
-- Method: `loadDetectionsBetween(fromInclusive, toExclusive)`
-  - Builds SQL with `where created_at >= ? and created_at < ?`.
-  - Used by the dated XLSX endpoint so sequence formation is restricted to one requested calendar day.
-  - Reads rows sorted by `created_at, id`.
+## Services
 
 ### `SequenceEngine`
-- Method: `build(List<Detection>, AppConfig)`
-  - Stateless workflow-driven sequence builder.
-  - Compiles `workflow.stages[]` into in-memory stage/trigger definitions (`WorkflowDefinition`, `StageDefinition`, `TriggerDefinition`) and resolves detections by `cameraId + directionRange` instead of a fixed `CameraType` switch.
-  - Tracks one active sequence per plate and normalizes same-timestamp detections for the same plate by shifting later events by `+1 second`.
-  - Uses a state/strategy-style flow internally:
-    - trigger resolution chooses a start/finish strategy from config,
-    - pending candidate/sticky timeout processing runs before each event,
-    - start/finish handlers apply configurable transition policies.
-  - Supports arbitrary config-defined stage names and labels (`service_primary`, `post_3`, `parking_secondary`, etc.), so the report/storage model is no longer tied to a hardcoded stage enum.
-  - Honors `startMode`, `candidateTimeoutMinutes`, `candidateCloseTimeoutMinutes`, `candidateCancelOnEvents`, `finishMode`, `stickyCloseTimeoutMinutes`, `allowedNextStages`, `unexpectedNextStagePolicy`, `timeoutTransitionToStage`, `intermediateStageOnTransition`, `allowPartialFromFinish`, `startDuplicatePolicy`, `finishDuplicatePolicy`, `sameStageReopenAfterMinutes`, and per-stage `sequenceCloseTimeoutMinutes`.
-  - Materializes timeout-driven transitional stages via `timeoutTransitionToStage` and explicit transition insertions via `intermediateStageOnTransition`.
-  - Writes `StageWindow` entries with dynamic `stageName`, rendered `reportLabel`, `sticky`/`transitional` flags, `saveAfterSequenceClosed`, and chronological ordering metadata.
-  - Evaluates alerts from trigger-level notification configuration instead of hardcoding them to a fixed stage enum.
-  - Drops transition-only sequences that finished without any concrete stage windows, preventing synthetic `No stages` records from reaching storage/reporting layers.
+The engine was rewritten around the new stage types only.
 
-### `SequenceStorageService`
-- Method: `initialize()`
-  - Ensures `vehicle_sequences` table exists.
-  - When PostgreSQL connection cannot be obtained, throws `IllegalStateException` with actionable diagnostics (`host`, `port`, `db`, `user`) for operator troubleshooting.
-- Method: `replaceAll(List<SequenceRecord>)`
-  - Deletes previous rows.
-  - Inserts each sequence with path, finish time, stage durations and joined alerts.
+#### Real stages
+- Open on the first matching `inTrigger`.
+- Matching `outTrigger` updates sticky `Out` time.
+- If another real stage starts, the current stage is logically closed while preserving its sticky `Out`.
+- If an `Out` for another real stage arrives while something else is active, a partial real stage is created with empty `In`.
 
-### `AlertJobStorageService`
-- Method: `initialize()`
-  - Ensures `alert_jobs` table and partial pending-due index exist.
-  - Table stores alert queue state (`PENDING`/`SENT`/`CANCELLED`) with timestamps (`trigger_at`, `due_at`, `sent_at`, `cancelled_at`).
-- Method: `upsertPending(...)`
-  - Idempotently inserts or reactivates a pending alert job using unique key (`plate_number`, `alert_type`, `trigger_at`).
-- Method: `cancel(...)`
-  - Cancels only pending jobs for a given alert key when stage is completed in time.
-- Method: `findDuePending(now, limit)`
-  - Returns indexed, due pending jobs ordered by `due_at`.
-- Method: `markSent(id, sentAt)`
-  - Moves pending jobs to `SENT` after successful dispatch attempt.
+#### Transitional stages
+- A candidate is created either from `triggerCameras` or immediately after closing an allowed previous stage.
+- A candidate materializes only after `candidateTimeoutSeconds` without another stage start.
+- Once materialized, it becomes an active transitional stage until the next stage start or sequence finalization.
+- If `sequenceCloseTimeoutOverrideSeconds > 0`, the materialized transitional stage forces a shorter close timeout and is removed from the report when the sequence ends by that override.
 
-### `AlertSchedulerService`
-- Scheduled method: `syncPendingJobs()`
-  - Runs with fixed delay (`alerts.sync.delay.millis`, default `10000`).
-  - Loads detections, rebuilds sequences, and synchronizes DB-backed alert jobs:
-    - `DRIVE_IN_OUT_MISSING` (trigger: `startedAt`, due: `startedAt + driveInToDriveOutAlertMinutes`)
-    - `SERVICE_POST_IN_MISSING` (trigger: `serviceInAt`, due: `serviceInAt + serviceToPostAlertMinutes`)
-  - Cancels pending jobs when expected next stage already exists (`driveInOutAt` / `postInAt`).
-- Scheduled method: `dispatchDueAlerts()`
-  - Runs with fixed delay (`alerts.dispatch.delay.millis`, default `5000`).
-  - Reads due pending jobs in batches, sends Telegram messages, marks jobs as `SENT`.
+#### Single-camera stages
+- First detection opens the stage with both `In` and `Out` initialized to the detection time.
+- Repeated detections on the same camera refresh `Out`.
+- If the gap exceeds `timeoutSeconds`, the current stage closes at the last detection and the next detection starts a new stage.
 
-### `TelegramNotifier`
-- Method: `sendIfEnabled(AppConfig.NotificationsConfig, String)`
-  - No-op when notifications are missing/disabled.
-  - Builds Telegram Bot API request payload and sends POST.
-  - Fails silently (exceptions are swallowed).
+#### Shared rules
+- Duplicate detections with the same camera/direction inside `duplicateSuppressionSeconds` are ignored.
+- Timestamps are normalized per plate so events remain strictly increasing.
+- Sequence closure happens after `sequenceCloseTimeoutMinutes` of inactivity unless a transitional override is active.
 
-### `ConfigController`
-- HTTP GET `/config`
-  - Returns effective runtime config as JSON when JSON is requested.
-  - Returns a richer HTML page with a `<textarea>` editor, runtime/restart notes, and a link to the dedicated `/config/help` manual when HTML is requested.
-- HTTP GET `/config/help`
-  - Returns a standalone Ukrainian HTML manual for operators.
-  - Documents required config blocks, live-vs-restart behavior, `workflow` semantics, trigger fields, common mistakes, and a minimal JSON example.
-- HTTP POST `/config`
-  - Accepts either raw JSON or form-urlencoded `json` payload.
-  - Validates and persists the config through `RuntimeConfig.save(...)`, then updates the in-memory runtime config immediately.
-  - Can persist the full JSON structure, but DB credential changes still require restart because datasource beans are not rebuilt dynamically.
-
-## Practical startup requirements
-
-- For a useful startup, `config.json` must provide:
-  - `sourceDatabase.host|port|db|schema|user|password`
-  - `sequenceDatabase.host|port|db|schema|user|password`
-  - `rootDatabase.host|port|user|password` because current startup always runs sequence-DB bootstrap
-  - `sourceTable.table`
-  - either an explicit `workflow.stages[]`, or legacy `cameras` (optionally with `timing`) so `WorkflowDefaultsFactory` can derive `workflow`
-- Optional on startup:
-  - `sourceTable.loadFrom`
-  - `notifications`
-  - `reports.outputDirectory`
-  - `timing` when explicit `workflow` is already complete
+### `NotificationService`
+- Evaluates camera-based notification rules against detections.
+- Builds pending notification jobs for repository persistence.
+- Dispatches due notifications through `TelegramNotifier`.
+- Attaches produced messages back to overlapping `StageWindow`s in reports.
 
 ### `ReportService`
-- Method: `buildReport()`
-  - Orchestrates:
-    1. load detections,
-    2. build sequences,
-    3. start async storage refresh (`vehicle_sequences`) in background,
-    4. generate XLSX report bytes,
-    5. optionally persist `sequences.xlsx` into `reports.outputDirectory`,
-    6. return HTTP response without waiting for DB refresh completion.
-  - Does not dispatch Telegram alerts anymore (alerts are handled by timed background workers).
-- Method: `buildReport(reportDate)`
-  - Calculates `fromInclusive = reportDate 00:00:00` and `toExclusive = next day 00:00:00`.
-  - Loads only detections inside that window.
-  - Builds the same XLSX structure, but persists/returns it as `sequences-dd-MM-yyyy.xlsx`.
-- Internal method: `toXlsx(...)`
-  - Creates two worksheets:
-    - `Sequences` with stage-oriented columns: `Stage`, `Time in`, `Time out`, `Duration`, `Alerts`.
-    - `Events` with flat stage columns: `Plate`, `Stage`, `In time`, `Out time`, `Duration`, `Alarms`.
-  - For `Sequences`: for each `SequenceRecord`, writes a plate marker row (plate in `Time out` column), then writes one row per available stage (`Drive In`, `Service`, configured post name such as `Post 1`, `Service`, `Backyard`, `Parking`) with dynamic inclusion based on available timestamps. After the final stage row of every non-empty closed sequence, appends `Sequence Closed` with `finishedAt` in the `Time out` column. Records with zero stage windows are skipped entirely.
-  - For `Events`: writes one row per stage occurrence, including repeated `Service` and `Backyard` stages, with the plate repeated on every row; post stages use the preserved `postName` label. Records with zero stage windows are skipped entirely.
-  - Formats timestamps as `yyyy-MM-dd HH:mm:ss` and computes duration as `HH:mm:ss`; duration is empty when one of timestamps is missing, except for open `Post` stages where duration uses `SequenceRecord.finishedAt` while `Out time` remains empty.
-  - Writes `none` in alerts for the first stage row when the sequence has no alerts.
+- Loads detections through `DetectionService`.
+- Builds sequences with `SequenceEngine`.
+- Enriches stages with notification alerts.
+- Persists sequences asynchronously through `SequenceStorageService`.
+- Writes two XLSX sheets:
+  - `Sequences` — grouped by plate.
+  - `Events` — flat stage list with stage type and alerts.
 
-### `SourcePullTriggerService`
-- Method: `triggerPull()`
-  - Provides concurrency-safe trigger for reading source detections.
-  - Protection rules:
-    - only one trigger execution at a time (`RUNNING` status for parallel calls),
-    - 30-second cooldown after each successful trigger (`COOLDOWN` status).
-  - On successful trigger reads detections via `DetectionService.loadAllDetections()` and returns loaded row count.
+### Other services
+- `DetectionService` is a thin domain wrapper over `DetectionRepository`.
+- `SequenceStorageService` is a thin wrapper over `SequenceRepository`.
+- `AlertSchedulerService` periodically syncs pending notifications from detections and dispatches due jobs.
+- `SourcePullTriggerService` triggers source loading manually with a cooldown guard.
+- `DatabaseBootstrapService` ensures the sequence database and role exist before JDBC beans are used.
 
-### `SourceTriggerController`
-- HTTP GET `/source/trigger-pull`.
-- Invokes `SourcePullTriggerService.triggerPull()`.
-- Response statuses:
-  - `200` for `TRIGGERED` (`detectionsLoaded` in body),
-  - `429` for `COOLDOWN` (`retryAfterMillis` in body),
-  - `409` for `RUNNING`.
+## Web layer
+- `ReportController` exposes XLSX downloads.
+- `ConfigController` exposes JSON/HTML config views and updates.
+- `SourceTriggerController` exposes manual source pull.
 
-### `ReportController`
-- HTTP GET `/report/sequences.xlsx`.
-  - Returns XLSX attachment produced by `ReportService.buildReport()` with attachment name `sequences.xlsx`.
-- HTTP GET `/report/sequences.xlsx/{reportDate}` where `reportDate` format is `dd-MM-yyyy`.
-  - Returns XLSX attachment produced by `ReportService.buildReport(reportDate)` with attachment name `sequences-dd-MM-yyyy.xlsx`.
-  - Only detections from the requested day window are used to form sequences.
-
-## Data flow
-
-1. `AlertSchedulerService.syncPendingJobs()` periodically rebuilds sequences and synchronizes `alert_jobs` (`PENDING` upsert or cancel on stage completion).
-2. `AlertSchedulerService.dispatchDueAlerts()` periodically sends only due pending jobs via `TelegramNotifier` and marks them as `SENT`.
-3. Optional trigger request hits `SourceTriggerController` to force source read with cooldown/parallel-call protection.
-4. Report request hits `ReportController`.
-5. `ReportService` asks `DetectionService` for either all detections or the requested day-bounded detection window.
-6. `SequenceEngine` computes sequence records.
-7. `ReportService` starts asynchronous `SequenceStorageService` refresh for `vehicle_sequences` (non-blocking for HTTP response).
-8. XLSX is built in-memory and returned immediately to caller while DB refresh continues in background.
-
-## Testing
-
-Unit tests are isolated from live infrastructure and cover all services:
-- `SequenceEngineTest`: full sequence including Post Out overwrite semantics + direction filtering.
-- `DetectionServiceTest`: SQL construction, JDBC row mapping, and explicit date-range filtering for dated reports.
-- `SequenceStorageServiceTest`: DDL initialization and replace-all persistence flow.
-- `ReportServiceTest`: orchestration, storage refresh, XLSX content, dated filename persistence, and day-bounded report generation.
-- `TelegramNotifierTest`: safe no-op behavior for null/disabled notifications.
-- `SourcePullTriggerServiceTest`: trigger success, cooldown behavior, and parallel-run protection.
-- `AlertSchedulerServiceTest`: pending alert-job sync (upsert/cancel) and due-job dispatch flow.
-
-## Logging
-
-- Application actions are logged to console using SLF4J (startup config, datasource initialization, HTTP requests, source pulls, sequence calculations, persistence operations, report generation and Telegram notifications).
-- Trigger endpoint logs cooldown/running/triggered outcomes for concurrent external callback diagnostics.
-
-Integration test (live PostgreSQL):
-- `PostgresDatabaseOperationsIntegrationTest`: runs against local PostgreSQL (`localhost:5432`) and verifies real DB operations chain: database/bootstrap role provisioning, detection reads from `videoanalytics.alpr_detections`, sequence table creation, and sequence persistence writes. Test auto-skips when PostgreSQL is unavailable.
-
-
-### Updated stage processing rules
-- Stage timeline: each sequence is a chronological list of `StageWindow` entries. Any config-defined stage may appear multiple times, but only one stage can be active at a time.
-- Trigger resolution: detections are matched against workflow triggers in config order. Matching uses `cameraId` plus optional `DirectionRange` with wrap-around support and exclusive upper bound.
-- Candidate flow: `startMode=candidate` creates `PendingCandidate`; it materializes only after `candidateTimeoutMinutes`, may be refreshed by duplicate policy, and is cancelled by configured `candidateCancelOnEvents` or by sequence timeout.
-- Sticky flow: `finishMode=sticky` stores `pendingStickyOutAt`; later real stages or sticky timeout close the stage and may insert `timeoutTransitionToStage` windows.
-- Unexpected transitions: `allowedNextStages` + `unexpectedNextStagePolicy` decide whether the engine ignores an event, starts a partial stage, inserts an intermediate transitional stage, or closes current and opens next.
-- Partial stages: any stage with `allowPartialFromFinish=true` can generate a partial row when only its finish trigger is observed.
-- Validation/runtime safety: `RuntimeConfig` validates workflow references plus supported values for start/finish modes and duplicate/unexpected-transition policies before saving live config updates.
+## Test coverage
+Unit tests cover:
+- sequence rules for real/transitional/single-camera flows,
+- notification cancellation/triggering,
+- report XLSX generation,
+- runtime config validation,
+- config help output.
