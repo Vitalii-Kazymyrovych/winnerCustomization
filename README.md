@@ -36,7 +36,7 @@ Create `config.json` next to the jar by copying `config.json.example`.
 - `GET /source/trigger-pull` — force a manual source pull with cooldown protection.
 
 ## Notifications
-Notification rules are configured per camera. A timer starts when a matching detection arrives. If there are no later detections for the same plate on a different camera before `delaySeconds`, a notification is produced and can be dispatched through Telegram.
+Notification rules are configured per camera. A timer starts when a matching detection arrives. If there are no later detections for the same plate on a different camera before `delaySeconds`, a notification is produced and can be dispatched through Telegram. Report alerts are attached only to sequences and stage rows of that same plate, so one vehicle can no longer leak alerts into another vehicle's XLSX rows.
 
 ## Running locally
 ```bash

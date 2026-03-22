@@ -25,6 +25,7 @@ class NotificationServiceTest {
         ), TestConfigFactory.config());
 
         assertThat(events).hasSize(1);
+        assertThat(events.getFirst().plateNumber()).isEqualTo("AA1111");
         assertThat(events.getFirst().message()).contains("AA1111");
     }
 

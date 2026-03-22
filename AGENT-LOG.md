@@ -102,3 +102,4 @@
 - Introduced repository interfaces plus JDBC implementations for detections, sequences, and pending notifications.
 - Rebuilt notification processing around camera-level rules and rewrote report generation to show stage type and attached alerts.
 - Replaced the old test suite with focused unit tests for the new engine/config/reporting/notification behavior and updated `README.md`, `TECHNICAL_SPEC.md`, and `config.json.example`.
+- Fixed report alert enrichment so notification messages stay on the matching plate only instead of leaking into other vehicles' XLSX rows; added regression coverage in `ReportServiceTest` and documented the plate-scoped alert behavior in `README.md` / `TECHNICAL_SPEC.md`.
