@@ -54,6 +54,7 @@ Notification rules are configured per camera. A timer starts when a matching det
 ## Transitional-stage closure notes
 - `transitionalStages[].sequenceCloseTimeoutOverrideSeconds = 0` means “close the sequence immediately after the transitional stage has been confirmed/materialized”.
 - This is especially important for `Backyard`: the row still appears in the report, but it now closes at the transitional confirmation timestamp instead of remaining open for many hours until report generation.
+- Once a new `real` or `single_camera` stage starts after that transitional row, the temporary override is cleared immediately. This prevents the next normal `Parking`/`Post` interval from being force-closed on the very next detection and avoids bogus multi-day open durations in XLSX.
 
 ## Running locally
 ```bash

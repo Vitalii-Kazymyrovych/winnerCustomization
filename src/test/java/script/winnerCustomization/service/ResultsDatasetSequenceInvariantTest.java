@@ -100,14 +100,22 @@ class ResultsDatasetSequenceInvariantTest {
                         .isNotEqualTo(List.of("backyard")));
         
         assertThat(recordsByPlate.get("KA8611PK")).isNotEmpty();
-        assertThat(recordsByPlate.get("KA8611PK").getFirst().stagesChronologically())
+        assertThat(recordsByPlate.get("KA8611PK").getFirst().stagesChronologically().subList(0, 3))
                 .extracting(SequenceRecord.StageWindow::stageName)
                 .containsExactly("parking", "backyard", "parking");
+        assertThat(recordsByPlate.get("KA8611PK").getFirst().stagesChronologically().get(2).timeOut())
+                .isEqualTo(LocalDateTime.of(2026, 3, 17, 17, 37, 26, 575_000_000));
+        assertThat(recordsByPlate.get("KA8611PK").getFirst().stagesChronologically().get(1).timeOut())
+                .isEqualTo(LocalDateTime.of(2026, 3, 17, 15, 41, 31, 500_000_000));
 
         assertThat(recordsByPlate.get("KA2654TA")).isNotEmpty();
-        assertThat(recordsByPlate.get("KA2654TA").getFirst().stagesChronologically())
+        assertThat(recordsByPlate.get("KA2654TA").getFirst().stagesChronologically().subList(0, 3))
                 .extracting(SequenceRecord.StageWindow::stageName)
                 .containsExactly("parking", "backyard", "parking");
+        assertThat(recordsByPlate.get("KA2654TA").getFirst().stagesChronologically().get(2).timeOut())
+                .isEqualTo(LocalDateTime.of(2026, 3, 17, 15, 14, 39, 991_000_000));
+        assertThat(recordsByPlate.get("KA2654TA").getFirst().stagesChronologically().get(1).timeOut())
+                .isEqualTo(LocalDateTime.of(2026, 3, 17, 14, 44, 12, 677_000_000));
     }
 
     private AppConfig loadConfig() throws Exception {
