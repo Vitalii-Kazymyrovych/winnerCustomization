@@ -123,6 +123,7 @@ public class SequenceEngine {
         if (sequence.activeStage != null && !Objects.equals(sequence.activeStage.stageName(), realMatch.config().getName())) {
             closeActiveStage(sequence, eventTime);
         }
+        sequence.sequenceCloseTimeoutOverrideSeconds = null;
         if (sequence.activeStage == null || !Objects.equals(sequence.activeStage.stageName(), realMatch.config().getName())) {
             StageWindow stage = new StageWindow(realMatch.config().getName(), realMatch.config().getLabel(), StageType.REAL, eventTime, null, false, false, true);
             sequence.record.addStage(stage);
@@ -173,6 +174,7 @@ public class SequenceEngine {
         } else {
             sequence.activeStage.setLastSeenAt(detection.createdAt());
         }
+        sequence.sequenceCloseTimeoutOverrideSeconds = null;
         sequence.activeSingleConfig = singleConfig;
         sequence.lastSingleDetectionAt = detection.createdAt();
     }

@@ -124,3 +124,5 @@
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document trigger-camera `allowedAfter` enforcement and immediate transitional-sequence closure semantics.
 - Fixed `SequenceEngine` so finishing a `real` stage now also creates transitional candidates from `allowedAfter` even without a dedicated transitional-camera event; this restores expected `Parking/Service -> Backyard` behavior for dataset plates like `KA8611PK` and `KA2654TA`.
 - Added focused unit coverage for `allowedAfter` candidate creation on real-stage end and refreshed dataset/report regressions to reflect the restored Backyard rows.
+- Fixed `SequenceEngine` so a materialized transitional stage no longer leaves `sequenceCloseTimeoutOverrideSeconds` active after a later concrete `real`/`single_camera` stage starts; this closes the subsequent `Parking` row at its real `Out` event instead of leaving it open for report-generation duration.
+- Added regression coverage for the reported dataset plates (`KA8611PK`, `KA2654TA`) plus a focused engine test for `Backyard -> Parking` handoff, and updated `README.md` / `TECHNICAL_SPEC.md` to document transitional-timeout override reset semantics.

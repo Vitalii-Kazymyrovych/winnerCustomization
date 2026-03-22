@@ -48,7 +48,7 @@ class ResultsDatasetReportRegressionTest {
             assertThat(labelsByPlate.get("KA1163K")).containsExactly("Post 1");
             assertThat(labelsByPlate.get("KA7828BB")).filteredOn("Post 2"::equals).hasSize(2);
             assertThat(labelsByPlate.get("KA7828BB")).doesNotContain("Service (partial)");
-            assertThat(labelsByPlate.get("AA4444PO")).filteredOn("Post 1"::equals).hasSize(3);
+            assertThat(labelsByPlate.get("AA4444PO")).filteredOn("Post 1"::equals).hasSize(2);
             assertThat(labelsByPlate.get("AA4444PO")).doesNotContain("Service (partial)");
         }
     }

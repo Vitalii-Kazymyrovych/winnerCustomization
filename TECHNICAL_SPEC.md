@@ -47,6 +47,7 @@ The engine is built around the three stage types only.
 - A candidate materializes only after `candidateTimeoutSeconds` without another stage start.
 - If the same transitional stage is already active, repeated trigger-camera detections only refresh internal activity and do not create a second consecutive stage.
 - If `sequenceCloseTimeoutOverrideSeconds` is set (including `0`), the materialized transitional stage owns the sequence inactivity timeout; `0` closes the stage/sequence immediately after materialization time, which is used for Backyard-like terminal transitions.
+- As soon as a later `real` or `single_camera` stage starts, that transitional timeout override is cleared so the newly opened concrete stage falls back to the normal sequence timeout rules.
 
 #### Single-camera stages
 - First detection opens the stage with `In = detection time` and empty `Out`.
