@@ -8,7 +8,7 @@
 - Builds stage windows using deterministic rules:
   - `real` stages open on `inTriggers` and keep a sticky `Out` timestamp from `outTriggers`.
   - `transitional` stages start as candidates and materialize only after `candidateTimeoutSeconds`.
-  - `single_camera` stages keep the first detection as `In`, keep `Out time` empty while the stage is still active, refresh internal `lastSeenAt` on every repeated detection, and close on timeout at the last seen detection.
+  - `single_camera` stages keep the first detection as `In`, stay sticky across repeated detections even when there are large gaps between them, refresh internal `lastSeenAt` on every repeated detection, close at the next stage boundary when one arrives, and close at `lastSeenAt` before sequence/report finalization when the timeout expires.
 - Generates `Sequences` and `Events` sheets in XLSX.
 - Persists built sequences and pending notifications through repositories.
 - Can schedule Telegram notifications when a plate stays on a configured camera for too long.
@@ -60,3 +60,4 @@ Run unit tests with:
 ```bash
 ./mvnw -B test
 ```
+The automated regression suite now also replays the full committed `results/` dataset and checks every plate / sequence for compact single-camera stage rendering and non-overlapping stage order.
