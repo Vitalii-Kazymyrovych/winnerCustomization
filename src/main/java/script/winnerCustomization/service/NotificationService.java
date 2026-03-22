@@ -115,7 +115,7 @@ public class NotificationService {
         List<PendingNotification> due = new ArrayList<>();
         for (PendingNotification notification : new ArrayList<>(pending.values())) {
             if (!notification.dueAt().isAfter(boundary)) {
-                events.add(new SequenceRecord.NotificationEvent(notification.dueAt(), notification.message()));
+                events.add(new SequenceRecord.NotificationEvent(notification.plateNumber(), notification.dueAt(), notification.message()));
                 pending.remove(key(notification.plateNumber(), notification.cameraId()));
                 due.add(notification);
             }

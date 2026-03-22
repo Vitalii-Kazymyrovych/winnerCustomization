@@ -9,7 +9,7 @@ The application is split into configuration, repositories, domain services, and 
 
 ### Domain model
 - `Detection` is the raw source event (`id`, `plateNumber`, `analyticsId`, `direction`, `createdAt`).
-- `SequenceRecord` represents one plate sequence with `startedAt`, `finishedAt`, ordered `StageWindow`s, and generated notification events.
+- `SequenceRecord` represents one plate sequence with `startedAt`, `finishedAt`, ordered `StageWindow`s, and generated notification events. Each `NotificationEvent` keeps its source plate number so report enrichment can stay plate-scoped.
 - `StageWindow` stores `stageName`, `stageLabel`, `stageType`, `partial`, `candidate`, `timeIn`, `timeOut`, and attached alerts.
 - `StageType` is one of `REAL`, `TRANSITIONAL`, `SINGLE_CAMERA`.
 
@@ -58,7 +58,7 @@ The engine was rewritten around the new stage types only.
 - Evaluates camera-based notification rules against detections.
 - Builds pending notification jobs for repository persistence.
 - Dispatches due notifications through `TelegramNotifier`.
-- Attaches produced messages back to overlapping `StageWindow`s in reports.
+- Attaches produced messages back to overlapping `StageWindow`s in reports, but only when the notification plate matches the sequence plate.
 
 ### `ReportService`
 - Loads detections through `DetectionService`.

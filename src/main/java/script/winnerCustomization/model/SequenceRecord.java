@@ -43,7 +43,7 @@ public class SequenceRecord {
                 .toList();
     }
 
-    public record NotificationEvent(LocalDateTime triggeredAt, String message) {}
+    public record NotificationEvent(String plateNumber, LocalDateTime triggeredAt, String message) {}
 
     public enum StageType {
         REAL,

@@ -76,6 +76,9 @@ public class ReportService {
     private void attachNotifications(List<SequenceRecord> records, List<SequenceRecord.NotificationEvent> notifications) {
         for (SequenceRecord.NotificationEvent notification : notifications) {
             for (SequenceRecord record : records) {
+                if (!record.getPlateNumber().equals(notification.plateNumber())) {
+                    continue;
+                }
                 if (record.getStartedAt() != null && !notification.triggeredAt().isBefore(record.getStartedAt())
                         && (record.getFinishedAt() == null || !notification.triggeredAt().isAfter(record.getFinishedAt()))) {
                     record.addNotification(notification);
