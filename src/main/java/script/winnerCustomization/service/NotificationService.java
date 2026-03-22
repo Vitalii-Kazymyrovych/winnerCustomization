@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -59,7 +60,7 @@ public class NotificationService {
             }
         }
         flushDue(pending, LocalDateTime.MAX.minusYears(1), events);
-        return events;
+        return dedupeEvents(events);
     }
 
     public void syncPendingNotifications(List<Detection> detections, AppConfig config) {
@@ -121,6 +122,14 @@ public class NotificationService {
             }
         }
         return due;
+    }
+
+    private List<SequenceRecord.NotificationEvent> dedupeEvents(List<SequenceRecord.NotificationEvent> events) {
+        Map<String, SequenceRecord.NotificationEvent> unique = new LinkedHashMap<>();
+        for (SequenceRecord.NotificationEvent event : events) {
+            unique.putIfAbsent(event.plateNumber() + "|" + event.triggeredAt() + "|" + event.message(), event);
+        }
+        return new ArrayList<>(unique.values());
     }
 
     private List<AppConfig.NotificationRule> safeRules(AppConfig config) {

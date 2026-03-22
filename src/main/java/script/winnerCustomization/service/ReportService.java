@@ -1,5 +1,7 @@
 package script.winnerCustomization.service;
 
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -16,10 +18,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -34,17 +36,20 @@ public class ReportService {
     private final SequenceEngine sequenceEngine;
     private final SequenceStorageService sequenceStorageService;
     private final NotificationService notificationService;
+    private final Clock clock;
 
     public ReportService(RuntimeConfig runtimeConfig,
                          DetectionService detectionService,
                          SequenceEngine sequenceEngine,
                          SequenceStorageService sequenceStorageService,
-                         NotificationService notificationService) {
+                         NotificationService notificationService,
+                         Clock clock) {
         this.runtimeConfig = runtimeConfig;
         this.detectionService = detectionService;
         this.sequenceEngine = sequenceEngine;
         this.sequenceStorageService = sequenceStorageService;
         this.notificationService = notificationService;
+        this.clock = clock;
     }
 
     public byte[] buildReport() throws IOException {
@@ -65,10 +70,11 @@ public class ReportService {
     }
 
     private byte[] buildReport(AppConfig config, List<Detection> detections, String fileName) throws IOException {
-        List<SequenceRecord> records = sequenceEngine.build(detections, config);
+        LocalDateTime reportGeneratedAt = LocalDateTime.now(clock);
+        List<SequenceRecord> records = sequenceEngine.build(detections, config, reportGeneratedAt);
         attachNotifications(records, notificationService.evaluate(detections, config));
         persistSequencesAsync(records);
-        byte[] bytes = toXlsx(records);
+        byte[] bytes = toXlsx(records, reportGeneratedAt);
         persistReportFile(bytes, config, fileName);
         return bytes;
     }
@@ -119,23 +125,29 @@ public class ReportService {
         }
     }
 
-    private byte[] toXlsx(List<SequenceRecord> records) throws IOException {
+    private byte[] toXlsx(List<SequenceRecord> records, LocalDateTime reportGeneratedAt) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            writeSheet(workbook.createSheet("Sequences"), records, false);
-            writeSheet(workbook.createSheet("Events"), records, true);
+            writeSheet(workbook, workbook.createSheet("Sequences"), records, false, reportGeneratedAt);
+            writeSheet(workbook, workbook.createSheet("Events"), records, true, reportGeneratedAt);
             workbook.write(output);
             return output.toByteArray();
         }
     }
 
-    private void writeSheet(XSSFSheet sheet, List<SequenceRecord> records, boolean includePlate) {
+    private void writeSheet(XSSFWorkbook workbook,
+                            XSSFSheet sheet,
+                            List<SequenceRecord> records,
+                            boolean includePlate,
+                            LocalDateTime reportGeneratedAt) {
+        CellStyle centeredStyle = workbook.createCellStyle();
+        centeredStyle.setAlignment(HorizontalAlignment.CENTER);
+
         Row header = sheet.createRow(0);
         int col = 0;
         if (includePlate) {
             header.createCell(col++).setCellValue("Plate");
         }
         header.createCell(col++).setCellValue("Stage");
-        header.createCell(col++).setCellValue("Type");
         header.createCell(col++).setCellValue("In time");
         header.createCell(col++).setCellValue("Out time");
         header.createCell(col++).setCellValue("Duration");
@@ -149,7 +161,8 @@ public class ReportService {
             }
             if (!includePlate) {
                 Row plateRow = sheet.createRow(rowIndex++);
-                plateRow.createCell(0).setCellValue(record.getPlateNumber());
+                plateRow.createCell(2).setCellValue(record.getPlateNumber());
+                plateRow.getCell(2).setCellStyle(centeredStyle);
             }
             for (StageWindow stage : stages) {
                 Row row = sheet.createRow(rowIndex++);
@@ -158,14 +171,19 @@ public class ReportService {
                     row.createCell(dataCol++).setCellValue(record.getPlateNumber());
                 }
                 row.createCell(dataCol++).setCellValue(stage.stageLabel() + (stage.partial() ? " (partial)" : ""));
-                row.createCell(dataCol++).setCellValue(stage.stageType().name());
                 row.createCell(dataCol++).setCellValue(format(stage.timeIn()));
                 row.createCell(dataCol++).setCellValue(format(stage.timeOut()));
-                row.createCell(dataCol++).setCellValue(stage.durationText(record.getFinishedAt()));
+                row.createCell(dataCol++).setCellValue(stage.durationText(reportGeneratedAt));
                 row.createCell(dataCol).setCellValue(String.join(" | ", stage.alerts()));
             }
+            if (!includePlate && record.isClosed()) {
+                Row closedRow = sheet.createRow(rowIndex++);
+                closedRow.createCell(2).setCellValue("Sequence closed");
+                closedRow.getCell(2).setCellStyle(centeredStyle);
+            }
         }
-        for (int i = 0; i < 7; i++) {
+        int totalColumns = includePlate ? 6 : 5;
+        for (int i = 0; i < totalColumns; i++) {
             sheet.autoSizeColumn(i);
         }
     }
