@@ -136,14 +136,16 @@ public class SequenceEngine {
         LocalDateTime eventTime = detection.createdAt();
         if (sequence.activeStage != null && Objects.equals(sequence.activeStage.stageName(), realMatch.config().getName()) && sequence.activeStage.stageType() == StageType.REAL) {
             sequence.activeStage.setTimeOut(eventTime);
-            clearActiveStage(sequence);
             maybeCreateTransitionalCandidateByCamera(sequence, detection, config);
+            maybeCreateTransitionalCandidate(sequence, eventTime, config, realMatch.config().getName(), false);
+            clearActiveStage(sequence);
             return;
         }
         if (sequence.activeStage != null && sequence.activeStage.stageType() == StageType.SINGLE_CAMERA) {
             sequence.activeStage.setTimeOut(eventTime);
-            clearActiveStage(sequence);
             maybeCreateTransitionalCandidateByCamera(sequence, detection, config);
+            maybeCreateTransitionalCandidate(sequence, eventTime, config, sequence.activeStage.stageName(), true);
+            clearActiveStage(sequence);
             return;
         }
         if (sequence.materializedCandidate != null) {

@@ -41,6 +41,7 @@ The engine is built around the three stage types only.
 
 #### Transitional stages
 - A candidate is created either from `triggerCameras` or immediately after closing an allowed previous stage.
+- Closing a `real` stage via its `Out` trigger now immediately seeds those `allowedAfter` candidates too, so transitions such as `Parking -> Backyard` do not depend on a second explicit Backyard-camera event.
 - Camera-triggered transitional candidates are accepted only when the active stage (or the latest non-partial recorded stage after a same-event closure) matches `allowedAfter`; otherwise the trigger is ignored as an impossible standalone transition.
 - Repeated detections for the same transitional source refresh the candidate timeout instead of creating duplicate stages.
 - A candidate materializes only after `candidateTimeoutSeconds` without another stage start.

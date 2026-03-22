@@ -9,6 +9,7 @@
   - `real` stages open on `inTriggers` and keep a sticky `Out` timestamp from `outTriggers`.
 - `transitional` stages start as candidates and materialize only after `candidateTimeoutSeconds`.
 - Transitional trigger cameras are now honored only when the currently active/last concrete stage matches `allowedAfter`, so standalone Backyard/Test-Drive detections do not create impossible stage rows.
+- Transitional candidates are also spawned immediately after a configured `allowedAfter` stage finishes, even if no dedicated transitional-camera detection arrives; for example `Parking -> Backyard` can now appear from a `Parking Out` event alone.
 - `single_camera` stages keep the first detection as `In`, stay sticky across repeated detections even when there are large gaps between them, refresh internal `lastSeenAt` on every repeated detection, close at the next stage boundary when one arrives, and close at `lastSeenAt` before sequence/report finalization when the timeout expires.
 - Generates `Sequences` and `Events` sheets in XLSX.
 - Persists built sequences and pending notifications through repositories.
