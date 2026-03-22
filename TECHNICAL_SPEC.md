@@ -97,4 +97,6 @@ Unit tests cover:
 - notification cancellation/triggering/deduplication,
 - runtime config validation,
 - committed `results/` dataset regression coverage for compact sticky-post reporting on production-like data,
-- full-dataset invariants that iterate through every plate / sequence and verify single-camera stage compaction plus non-overlapping stage order.
+- full-dataset invariants that iterate through every plate / sequence and verify single-camera stage compaction plus non-overlapping stage order,
+- controller/JDBC/bootstrap/startup coverage for HTTP adapters, repository SQL generation, runtime-config file persistence, manual source-pull cooldown behavior, and database bootstrap permission flows,
+- JaCoCo report generation during `./mvnw -B test` for post-run inspection of instruction/branch coverage.

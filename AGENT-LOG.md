@@ -116,3 +116,5 @@
 - Fixed `SequenceEngine` sequence-timeout handling to close active single-camera stages at `lastSeenAt` before finalizing the old sequence, preventing open-ended post rows from leaking across sequence boundaries.
 - Added `ResultsDatasetSequenceInvariantTest` to validate every plate / sequence in `results/alpr_detections.sql` against compact single-camera stage expectations and non-overlapping stage order, and expanded `SequenceEngineTest` with a targeted timeout-split regression.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document sequence-timeout closure for single-camera stages and the new exhaustive dataset replay.
+- Expanded the unit suite to 53 tests covering runtime-config persistence, JDBC adapters, controllers, bootstrap helpers, source-pull cooldown/reentrancy, Telegram failure handling, and additional notification/sequence edge cases.
+- Added JaCoCo report generation to Maven (`./mvnw -B test`) and updated `README.md` / `TECHNICAL_SPEC.md` to document the broader automated verification workflow and generated coverage report.
