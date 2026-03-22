@@ -23,25 +23,18 @@ public class TelegramNotifier {
         this.objectMapper = objectMapper;
     }
 
-    public void sendIfEnabled(AppConfig.NotificationsConfig notifications, String text) {
-        if (notifications == null || !notifications.isEnabled()) {
-            log.debug("Telegram notification skipped because notifications are disabled or missing");
+    public void sendIfEnabled(AppConfig.MessagingConfig messaging, String text) {
+        if (messaging == null || !messaging.isEnabled()) {
             return;
         }
         try {
-            String url = "https://api.telegram.org/bot" + notifications.getTelegramBotToken() + "/sendMessage";
-            log.info("Sending Telegram notification to chatId={}", notifications.getTelegramChatId());
-            String payload = objectMapper.writeValueAsString(Map.of(
-                    "chat_id", notifications.getTelegramChatId(),
-                    "text", text
-            ));
+            String payload = objectMapper.writeValueAsString(Map.of("chat_id", messaging.getTelegramChatId(), "text", text));
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
+                    .uri(URI.create("https://api.telegram.org/bot" + messaging.getTelegramBotToken() + "/sendMessage"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(payload))
                     .build();
             httpClient.send(request, HttpResponse.BodyHandlers.discarding());
-            log.info("Telegram notification sent successfully");
         } catch (Exception exception) {
             log.warn("Failed to send Telegram notification: {}", exception.getMessage());
         }
