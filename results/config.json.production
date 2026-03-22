@@ -26,134 +26,141 @@
     "table": "alpr_detections",
     "loadFrom": "2026-03-16T00:00:00"
   },
-  "notifications": {
+  "reports": {
+    "outputDirectory": "C:/Users/vkazymyrovych/Desktop/reports"
+  },
+  "messaging": {
     "enabled": false,
     "telegramBotToken": "BOT_TOKEN_IF_ENABLED",
     "telegramChatId": "CHAT_ID_IF_ENABLED"
   },
-  "timing": {
-    "driveInToDriveOutAlertMinutes": 15,
-    "serviceToPostAlertMinutes": 15,
-    "testDriveStartMinutes": 5,
-    "testDriveResetMinutes": 60
-  },
-  "cameras": {
-    "driveInIn": [
-      {
-        "name": "Drive in (in) cam 1",
-        "analyticsId": 14,
-        "directionRange": {
-          "from": null,
-          "to": null
-        }
-      }
-    ],
-    "driveInOut": [
-      {
-        "name": "Drive in (out) cam 1",
-        "analyticsId": 15,
-        "directionRange": {
-          "from": null,
-          "to": null
-        }
-      }
-    ],
-    "driveInToService": [
-      {
-        "name": "Drive-In -> Service",
-        "analyticsId": 17,
-        "directionRange": {
-          "from": null,
-          "to": null
-        }
-      }
-    ],
-    "serviceIn": [
-      {
-        "name": "Service (in) from Drive-In",
-        "analyticsId": 19,
-        "directionRange": {
-          "from": null,
-          "to": null
-        }
+  "sequenceCloseTimeoutMinutes": 2880,
+  "allowTransitionalAfterSingleCamera": false,
+  "duplicateSuppressionSeconds": 2,
+  "notifications": [
+    {
+      "cameraId": 14,
+      "delaySeconds": 900,
+      "message": "No Drive in (out) within 15 minutes"
+    },
+    {
+      "cameraId": 25,
+      "delaySeconds": 900,
+      "message": "No Drive in (out) within 15 minutes"
+    },
+    {
+      "cameraId": 19,
+      "delaySeconds": 900,
+      "message": "No Post in within 15 minutes"
+    },
+    {
+      "cameraId": 22,
+      "directionRange": {
+        "from": 130,
+        "to": 310
       },
-      {
-        "name": "Service (in) from Backyard",
-        "analyticsId": 22,
-        "directionRange": {
-          "from": 130,
-          "to": 310
-        }
-      }
-    ],
-    "servicePosts": [
-      {
-        "postName": "Post 1",
-        "analyticsId": 23,
-        "inDirectionRange": {
-          "from": 260,
-          "to": 80
+      "delaySeconds": 900,
+      "message": "No Post in within 15 minutes"
+    }
+  ],
+  "realStages": [
+    {
+      "name": "drive_in",
+      "label": "Drive In",
+      "inTriggers": [
+        {
+          "cameraId": 14
         },
-        "outDirectionRange": {
-          "from": 80,
-          "to": 260
+        {
+          "cameraId": 25
         }
-      },
-      {
-        "postName": "Post 2",
-        "analyticsId": 24,
-        "inDirectionRange": {
-          "from": 280,
-          "to": 100
+      ],
+      "outTriggers": [
+        {
+          "cameraId": 16
+        }
+      ]
+    },
+    {
+      "name": "service",
+      "label": "Service",
+      "inTriggers": [
+        {
+          "cameraId": 19
         },
-        "outDirectionRange": {
-          "from": 100,
-          "to": 280
+        {
+          "cameraId": 22,
+          "directionRange": {
+            "from": 130,
+            "to": 310
+          }
         }
-      }
-    ],
-    "serviceOut": [
-      {
-        "name": "Service (out)",
-        "analyticsId": 22,
-        "directionRange": {
-          "from": 310,
-          "to": 130
+      ],
+      "outTriggers": [
+        {
+          "cameraId": 22,
+          "directionRange": {
+            "from": 310,
+            "to": 130
+          }
         }
-      }
-    ],
-    "serviceToDriveIn": [
-      {
-        "name": "Service -> Drive-In",
-        "analyticsId": 13,
-        "directionRange": {
-          "from": null,
-          "to": null
+      ]
+    },
+    {
+      "name": "parking",
+      "label": "Parking",
+      "inTriggers": [
+        {
+          "cameraId": 20,
+          "directionRange": {
+            "from": 270,
+            "to": 90
+          }
         }
-      }
-    ],
-    "parkingIn": [
-      {
-        "name": "Parking (in)",
-        "analyticsId": 20,
-        "directionRange": {
-          "from": 270,
-          "to": 90
+      ],
+      "outTriggers": [
+        {
+          "cameraId": 20,
+          "directionRange": {
+            "from": 90,
+            "to": 270
+          }
         }
-      }
-    ],
-    "parkingOut": [
-      {
-        "name": "Parking (out)",
-        "analyticsId": 20,
-        "directionRange": {
-          "from": 90,
-          "to": 270
-        }
-      }
-    ]
-  },
-  "reports": {
-    "outputDirectory": "C:/Users/vkazymyrovych/Desktop/reports"
-  }
+      ]
+    }
+  ],
+  "transitionalStages": [
+    {
+      "name": "backyard",
+      "label": "Backyard",
+      "triggerCameras": [17],
+      "candidateTimeoutSeconds": 2,
+      "allowedAfter": ["service", "parking"],
+      "sequenceCloseTimeoutOverrideSeconds": 0,
+      "showInReportIfIncomplete": false
+    },
+    {
+      "name": "test_drive",
+      "label": "Test-Drive",
+      "triggerCameras": [16, 13],
+      "candidateTimeoutSeconds": 300,
+      "allowedAfter": ["drive_in", "service"],
+      "sequenceCloseTimeoutOverrideSeconds": 3600,
+      "showInReportIfIncomplete": false
+    }
+  ],
+  "singleCameraStages": [
+    {
+      "name": "post_1",
+      "label": "Post 1",
+      "cameraId": 23,
+      "timeoutSeconds": 30
+    },
+    {
+      "name": "post_2",
+      "label": "Post 2",
+      "cameraId": 24,
+      "timeoutSeconds": 30
+    }
+  ]
 }
