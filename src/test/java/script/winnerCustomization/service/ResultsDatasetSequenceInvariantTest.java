@@ -82,6 +82,34 @@ class ResultsDatasetSequenceInvariantTest {
         }
     }
 
+    @Test
+    void productionRegressionsCloseBackyardSequencesAndIgnoreStandaloneTransitionalTriggers() throws Exception {
+        AppConfig config = loadConfig();
+        List<Detection> detections = loadDetections();
+
+        Map<String, List<SequenceRecord>> recordsByPlate = new SequenceEngine().build(detections, config, REPORT_GENERATED_AT).stream()
+                .collect(Collectors.groupingBy(SequenceRecord::getPlateNumber));
+
+        assertThat(recordsByPlate.get("AA2292XT")).singleElement().satisfies(record -> {
+            assertThat(record.isClosed()).isTrue();
+            assertThat(record.getFinishedAt()).isEqualTo(LocalDateTime.of(2026, 3, 17, 12, 59, 47, 223_000_000));
+            assertThat(record.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
+                    .containsExactly("parking", "backyard");
+        });
+
+        assertThat(recordsByPlate.get("KA6137MT")).singleElement().satisfies(record -> {
+            assertThat(record.isClosed()).isTrue();
+            assertThat(record.getFinishedAt()).isEqualTo(LocalDateTime.of(2026, 3, 17, 13, 1, 22, 218_000_000));
+            assertThat(record.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
+                    .containsExactly("parking", "drive_in", "backyard");
+        });
+
+        assertThat(recordsByPlate.get("KA0082XM")).allSatisfy(record ->
+                assertThat(record.stagesChronologically())
+                        .extracting(SequenceRecord.StageWindow::stageName)
+                        .isNotEqualTo(List.of("backyard")));
+    }
+
     private List<ExpectedSingleStage> deriveExpectedSingleStages(List<Detection> detections,
                                                                  Map<String, AppConfig.SingleCameraStageConfig> singleByCamera,
                                                                  Integer sequenceCloseTimeoutMinutes) {

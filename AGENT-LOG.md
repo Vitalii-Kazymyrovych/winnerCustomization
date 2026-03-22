@@ -118,3 +118,7 @@
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document sequence-timeout closure for single-camera stages and the new exhaustive dataset replay.
 - Expanded the unit suite to 53 tests covering runtime-config persistence, JDBC adapters, controllers, bootstrap helpers, source-pull cooldown/reentrancy, Telegram failure handling, and additional notification/sequence edge cases.
 - Added JaCoCo report generation to Maven (`./mvnw -B test`) and updated `README.md` / `TECHNICAL_SPEC.md` to document the broader automated verification workflow and generated coverage report.
+- Fixed `SequenceEngine` so transitional trigger cameras respect `allowedAfter` even when fired directly from a camera event, which prevents impossible standalone/consecutive `Backyard` or `Test-Drive` rows from being materialized.
+- Fixed transitional-stage timeout handling so `sequenceCloseTimeoutOverrideSeconds = 0` closes confirmed Backyard-like stages immediately at their confirmation timestamp instead of leaving sequences open until report generation.
+- Added regression coverage for the reported production plates (`AA2292XT`, `KA6137MT`, `KA0082XM`) plus focused unit tests for camera-trigger eligibility and zero-timeout transitional closure.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document trigger-camera `allowedAfter` enforcement and immediate transitional-sequence closure semantics.

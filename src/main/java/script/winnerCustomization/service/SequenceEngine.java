@@ -45,6 +45,7 @@ public class SequenceEngine {
             if (closeBySequenceTimeout(sequence, detection.createdAt(), config)) {
                 closeBySingleTimeout(sequence, detection.createdAt(), config);
                 materializeCandidateIfDue(sequence, detection.createdAt());
+                closeByTransitionalTimeout(sequence, detection.createdAt());
                 finalizeSequence(sequence, sequence.lastActivityAt(), true);
                 finished.add(sequence.record);
                 sequence = new ActiveSequence(new SequenceRecord(detection.plateNumber(), detection.createdAt()));
@@ -59,6 +60,7 @@ public class SequenceEngine {
             if (reportGeneratedAt != null) {
                 closeBySingleTimeout(sequence, reportGeneratedAt, config);
                 materializeCandidateIfDue(sequence, reportGeneratedAt);
+                closeByTransitionalTimeout(sequence, reportGeneratedAt);
             }
             boolean closed = isClosed(sequence);
             finalizeSequence(sequence, closed ? sequence.lastActivityAt() : null, closed);
@@ -176,6 +178,9 @@ public class SequenceEngine {
     private void maybeCreateTransitionalCandidateByCamera(ActiveSequence sequence, Detection detection, AppConfig config) {
         for (AppConfig.TransitionalStageConfig stage : safeTransitionalStages(config)) {
             if (stage.getTriggerCameras() != null && stage.getTriggerCameras().contains(detection.analyticsId())) {
+                if (!transitionalAllowedFromCurrentContext(sequence, stage)) {
+                    continue;
+                }
                 createCandidate(sequence, stage, detection.createdAt());
                 return;
             }
@@ -246,6 +251,7 @@ public class SequenceEngine {
         sequence.activeStage = stage;
         sequence.materializedCandidate = stage;
         sequence.materializedCandidateConfig = sequence.pendingCandidate.config();
+        sequence.sequenceCloseTimeoutOverrideSeconds = sequence.pendingCandidate.config().getSequenceCloseTimeoutOverrideSeconds();
         sequence.pendingCandidate = null;
     }
 
@@ -259,6 +265,25 @@ public class SequenceEngine {
             sequence.activeStage = null;
             sequence.activeSingleConfig = null;
             maybeCreateTransitionalCandidate(sequence, sequence.lastSingleDetectionAt, config, stageName, true);
+        }
+    }
+
+    private void closeByTransitionalTimeout(ActiveSequence sequence, LocalDateTime boundary) {
+        if (sequence.activeStage == null
+                || sequence.activeStage.stageType() != StageType.TRANSITIONAL
+                || boundary == null
+                || sequence.sequenceCloseTimeoutOverrideSeconds == null) {
+            return;
+        }
+        LocalDateTime stageActivityAt = sequence.activeStage.lastSeenAt() != null
+                ? sequence.activeStage.lastSeenAt()
+                : sequence.activeStage.timeIn();
+        if (stageActivityAt == null) {
+            return;
+        }
+        if (Duration.between(stageActivityAt, boundary).toSeconds() > Math.max(0, sequence.sequenceCloseTimeoutOverrideSeconds)) {
+            sequence.activeStage.setTimeOut(stageActivityAt);
+            clearActiveStage(sequence);
         }
     }
 
@@ -279,8 +304,8 @@ public class SequenceEngine {
     }
 
     private long resolveSequenceTimeoutSeconds(ActiveSequence sequence, AppConfig config) {
-        if (sequence.materializedCandidateConfig != null && positive(sequence.materializedCandidateConfig.getSequenceCloseTimeoutOverrideSeconds()) > 0) {
-            return sequence.materializedCandidateConfig.getSequenceCloseTimeoutOverrideSeconds();
+        if (sequence.sequenceCloseTimeoutOverrideSeconds != null) {
+            return Math.max(0, sequence.sequenceCloseTimeoutOverrideSeconds);
         }
         return Math.max(1, positive(config.getSequenceCloseTimeoutMinutes()) * 60L);
     }
@@ -332,6 +357,26 @@ public class SequenceEngine {
 
     private void cancelCandidateIfPending(ActiveSequence sequence) {
         sequence.pendingCandidate = null;
+    }
+
+    private boolean transitionalAllowedFromCurrentContext(ActiveSequence sequence, AppConfig.TransitionalStageConfig config) {
+        if (sequence.activeStage != null && Objects.equals(sequence.activeStage.stageName(), config.getName())) {
+            return true;
+        }
+        if (config.getAllowedAfter() == null || config.getAllowedAfter().isEmpty()) {
+            return true;
+        }
+        if (sequence.activeStage != null) {
+            return config.getAllowedAfter().contains(sequence.activeStage.stageName());
+        }
+        for (int index = sequence.record.getStages().size() - 1; index >= 0; index--) {
+            StageWindow previous = sequence.record.getStages().get(index);
+            if (previous.partial()) {
+                continue;
+            }
+            return config.getAllowedAfter().contains(previous.stageName());
+        }
+        return false;
     }
 
     private RealMatch matchRealIn(Detection detection, AppConfig config) {
@@ -414,6 +459,7 @@ public class SequenceEngine {
         private PendingCandidate pendingCandidate;
         private StageWindow materializedCandidate;
         private AppConfig.TransitionalStageConfig materializedCandidateConfig;
+        private Integer sequenceCloseTimeoutOverrideSeconds;
 
         private ActiveSequence(SequenceRecord record) {
             this.record = record;
@@ -423,8 +469,20 @@ public class SequenceEngine {
             if (activeStage != null && activeStage.stageType() == StageType.SINGLE_CAMERA && lastSingleDetectionAt != null) {
                 return lastSingleDetectionAt;
             }
-            if (activeStage != null && activeStage.timeOut() != null) {
-                return activeStage.timeOut();
+            if (activeStage != null && activeStage.lastSeenAt() != null) {
+                return activeStage.lastSeenAt();
+            }
+            if (!record.getStages().isEmpty()) {
+                StageWindow lastRecordedStage = record.getStages().getLast();
+                if (lastRecordedStage.timeOut() != null) {
+                    return lastRecordedStage.timeOut();
+                }
+                if (lastRecordedStage.lastSeenAt() != null) {
+                    return lastRecordedStage.lastSeenAt();
+                }
+                if (lastRecordedStage.timeIn() != null) {
+                    return lastRecordedStage.timeIn();
+                }
             }
             if (lastDetectionAt != null) {
                 return lastDetectionAt;

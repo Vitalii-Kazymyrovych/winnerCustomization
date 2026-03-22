@@ -41,9 +41,11 @@ The engine is built around the three stage types only.
 
 #### Transitional stages
 - A candidate is created either from `triggerCameras` or immediately after closing an allowed previous stage.
+- Camera-triggered transitional candidates are accepted only when the active stage (or the latest non-partial recorded stage after a same-event closure) matches `allowedAfter`; otherwise the trigger is ignored as an impossible standalone transition.
 - Repeated detections for the same transitional source refresh the candidate timeout instead of creating duplicate stages.
 - A candidate materializes only after `candidateTimeoutSeconds` without another stage start.
 - If the same transitional stage is already active, repeated trigger-camera detections only refresh internal activity and do not create a second consecutive stage.
+- If `sequenceCloseTimeoutOverrideSeconds` is set (including `0`), the materialized transitional stage owns the sequence inactivity timeout; `0` closes the stage/sequence immediately after materialization time, which is used for Backyard-like terminal transitions.
 
 #### Single-camera stages
 - First detection opens the stage with `In = detection time` and empty `Out`.
