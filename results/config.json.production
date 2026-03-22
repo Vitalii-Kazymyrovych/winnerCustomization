@@ -144,7 +144,7 @@
       "label": "Test-Drive",
       "triggerCameras": [16, 13],
       "candidateTimeoutSeconds": 300,
-      "allowedAfter": ["drive_in", "service"],
+      "allowedAfter": ["drive_in"],
       "sequenceCloseTimeoutOverrideSeconds": 3600,
       "showInReportIfIncomplete": false
     }
