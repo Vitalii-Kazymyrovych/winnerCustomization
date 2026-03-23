@@ -40,10 +40,14 @@ class ResultsDatasetCsvSnapshotTest {
 
         attachNotifications(records, notificationService.evaluate(detections, config));
 
-        String actual = String.join("\n", toCsvLines(records)) + "\n";
-        String expected = Files.readString(Path.of("results/expected_sequences_logic.csv"));
+        String actual = normalizeLineEndings(String.join("\n", toCsvLines(records)) + "\n");
+        String expected = normalizeLineEndings(Files.readString(Path.of("results/expected_sequences_logic.csv")));
 
         assertThat(actual).isEqualTo(expected);
+    }
+
+    private String normalizeLineEndings(String value) {
+        return value.replace("\r\n", "\n").replace('\r', '\n');
     }
 
     private List<String> toCsvLines(List<SequenceRecord> records) {

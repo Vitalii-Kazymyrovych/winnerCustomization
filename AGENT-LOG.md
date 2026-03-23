@@ -138,3 +138,6 @@
 - Added focused unit coverage for hidden-vs-materialized transitional rows and same-stage re-entry cancellation, refreshed committed-results regression expectations, and added exact dataset snapshot verification against `results/expected_sequences_logic.csv`.
 - Generated and committed `results/expected_sequences_logic.csv` as the canonical CSV report for `results/alpr_detections.sql` + `results/config.json.production`.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document the new transitional-reporting semantics and committed CSV snapshot workflow.
+- Fixed `ResultsDatasetCsvSnapshotTest` to normalize CRLF/LF before comparing the committed CSV snapshot and pinned `*.csv` to LF in `.gitattributes` for more stable cross-platform checkouts.
+- Added Maven Java-runtime enforcement for `[21,22)` so the project stays explicitly on Java 21 instead of silently running tests/JaCoCo on a newer JDK.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the cross-platform snapshot handling and the Java 21 build requirement.

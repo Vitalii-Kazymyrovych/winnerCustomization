@@ -69,5 +69,6 @@ Run unit tests with:
 ```bash
 ./mvnw -B test
 ```
+Run Maven with Java 21 specifically: the build now enforces a Java runtime in the `[21,22)` range so the project version and JaCoCo setup stay aligned.
 This now also generates a JaCoCo HTML coverage report in `target/site/jacoco/index.html` so you can inspect which branches were exercised.
-The automated regression suite replays the full committed `results/` dataset, checks every plate / sequence for compact single-camera stage rendering and non-overlapping stage order, compares the generated stage timeline against the committed logic snapshot `results/expected_sequences_logic.csv`, and additionally verifies controllers, JDBC adapters, runtime-config persistence, notification scheduling, bootstrap helpers, and startup wiring with isolated unit tests.
+The automated regression suite replays the full committed `results/` dataset, checks every plate / sequence for compact single-camera stage rendering and non-overlapping stage order, compares the generated stage timeline against the committed logic snapshot `results/expected_sequences_logic.csv`, normalizes CSV line endings before comparing so the snapshot stays stable on Windows/macOS/Linux checkouts, and additionally verifies controllers, JDBC adapters, runtime-config persistence, notification scheduling, bootstrap helpers, and startup wiring with isolated unit tests.

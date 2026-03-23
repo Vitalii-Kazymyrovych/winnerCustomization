@@ -102,7 +102,8 @@ Unit tests cover:
 - notification cancellation/triggering/deduplication,
 - runtime config validation,
 - committed `results/` dataset regression coverage for compact sticky-post reporting on production-like data,
-- exact CSV snapshot coverage against `results/expected_sequences_logic.csv`,
+- exact CSV snapshot coverage against `results/expected_sequences_logic.csv`, with line-ending normalization so CRLF/LF checkouts compare identically across platforms,
 - full-dataset invariants that iterate through every plate / sequence and verify single-camera stage compaction plus non-overlapping stage order,
 - controller/JDBC/bootstrap/startup coverage for HTTP adapters, repository SQL generation, runtime-config file persistence, manual source-pull cooldown behavior, and database bootstrap permission flows,
+- Java runtime enforcement in Maven for `[21,22)` so the declared project version and test/JaCoCo toolchain stay aligned,
 - JaCoCo report generation during `./mvnw -B test` for post-run inspection of instruction/branch coverage.
