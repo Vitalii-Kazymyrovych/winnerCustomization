@@ -41,7 +41,13 @@ public class ReportService {
     public byte[] buildReport(LocalDate reportDate) throws IOException {
         LocalDateTime from = reportDate.atStartOfDay();
         LocalDateTime to = reportDate.plusDays(1).atStartOfDay();
-        return buildReport(to, detectionRepository.findBetween(from, to));
+        LocalDateTime reportAt = LocalDateTime.now(clock);
+        var fullResult = processor.process(detectionRepository.findAll(), runtimeConfig.get(), reportAt);
+        var filtered = fullResult.sequences().stream()
+                .map(sequence -> sequence.filtered(from, to, reportAt))
+                .filter(sequence -> !sequence.stagesChronologically().isEmpty())
+                .toList();
+        return writer.write(new StageSequenceProcessor.ProcessingResult(filtered), reportAt);
     }
 
     public String buildDatedReportFileName(LocalDate reportDate) {

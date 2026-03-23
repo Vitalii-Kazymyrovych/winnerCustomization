@@ -47,60 +47,68 @@ class StageSequenceProcessorTest {
         var stages = result.sequences().getFirst().stagesChronologically();
         assertThat(stages).extracting(SequenceRecord.StageWindow::reportLabel)
                 .containsExactly("Service", "Backyard", "Drive In (partial)");
+        assertThat(stages.get(1).timeIn()).isEqualTo(base.plusSeconds(5));
         assertThat(stages.get(1).timeOut()).isEqualTo(base.plusSeconds(19));
         assertThat(stages.get(2).timeIn()).isNull();
         assertThat(stages.get(2).timeOut()).isEqualTo(base.plusSeconds(20));
     }
 
     @Test
-    void transitionalCandidateResetsAndMaterializesOnlyAfterTimeout() {
+    void transitionalTriggerStartsStableStageImmediately() {
         var config = TestConfigFactory.standardConfig();
         LocalDateTime base = LocalDateTime.of(2026, 3, 23, 12, 0);
         var result = processor.process(List.of(
                 detection(1, "CC3333", 1003, null, base),
                 detection(2, "CC3333", 1004, null, base.plusSeconds(5)),
                 detection(3, "CC3333", 2001, null, base.plusSeconds(8)),
-                detection(4, "CC3333", 2001, null, base.plusSeconds(16))
+                detection(4, "CC3333", 2001, null, base.plusSeconds(16)),
+                detection(5, "CC3333", 1001, 90, base.plusSeconds(25))
         ), config, base.plusSeconds(30));
 
         var stages = result.sequences().getFirst().stagesChronologically();
         assertThat(stages).extracting(SequenceRecord.StageWindow::reportLabel)
-                .containsExactly("Service", "Backyard");
+                .containsExactly("Service", "Backyard", "Drive In");
         assertThat(stages.get(1).timeIn()).isEqualTo(base.plusSeconds(8));
-        assertThat(stages.get(1).timeOut()).isNull();
+        assertThat(stages.get(1).timeOut()).isEqualTo(base.plusSeconds(24));
     }
 
     @Test
-    void transitionalCandidateIsCancelledWhenAnotherStageStartsBeforeTimeout() {
+    void allowedAfterCreatesVisibleTransitionalBridgeBeforeNextStage() {
         var config = TestConfigFactory.standardConfig();
         LocalDateTime base = LocalDateTime.of(2026, 3, 23, 13, 0);
         var result = processor.process(List.of(
-                detection(1, "DD4444", 1003, null, base),
-                detection(2, "DD4444", 1004, null, base.plusSeconds(5)),
-                detection(3, "DD4444", 1001, 90, base.plusSeconds(12))
+                detection(1, "DD4444", 3001, null, base),
+                detection(2, "DD4444", 3001, null, base.plusSeconds(2)),
+                detection(3, "DD4444", 1001, 90, base.plusSeconds(20))
         ), config, base.plusMinutes(5));
 
         var stages = result.sequences().getFirst().stagesChronologically();
         assertThat(stages).extracting(SequenceRecord.StageWindow::reportLabel)
-                .containsExactly("Service", "Drive In");
+                .containsExactly("Post 1", "Backyard", "Drive In");
+        assertThat(stages.get(0).timeIn()).isEqualTo(base);
+        assertThat(stages.get(0).timeOut()).isEqualTo(base.plusSeconds(2));
+        assertThat(stages.get(1).timeIn()).isEqualTo(base.plusSeconds(3));
+        assertThat(stages.get(1).timeOut()).isEqualTo(base.plusSeconds(19));
     }
 
     @Test
-    void singleCameraStageClosesAtLastDetectionAndNextStageStartsOneSecondLater() {
+    void singleCameraStageUsesFirstDetectionAsInAndLastDetectionAsOut() {
         var config = TestConfigFactory.standardConfig();
         config.getTransitionalStages().getFirst().setAllowedAfter(List.of());
         LocalDateTime base = LocalDateTime.of(2026, 3, 23, 14, 0);
         var result = processor.process(List.of(
                 detection(1, "EE5555", 3001, null, base),
                 detection(2, "EE5555", 3001, null, base.plusSeconds(2)),
-                detection(3, "EE5555", 1001, 90, base.plusSeconds(20))
+                detection(3, "EE5555", 3001, null, base.plusSeconds(20)),
+                detection(4, "EE5555", 1001, 90, base.plusSeconds(40))
         ), config, base.plusMinutes(5));
 
         var stages = result.sequences().getFirst().stagesChronologically();
         assertThat(stages).extracting(SequenceRecord.StageWindow::reportLabel)
                 .containsExactly("Post 1", "Drive In");
-        assertThat(stages.get(0).timeOut()).isEqualTo(base.plusSeconds(2));
-        assertThat(stages.get(1).timeIn()).isEqualTo(base.plusSeconds(3));
+        assertThat(stages.get(0).timeIn()).isEqualTo(base);
+        assertThat(stages.get(0).timeOut()).isEqualTo(base.plusSeconds(20));
+        assertThat(stages.get(1).timeIn()).isEqualTo(base.plusSeconds(40));
     }
 
     @Test
@@ -117,7 +125,7 @@ class StageSequenceProcessorTest {
         var first = result.sequences().stream().filter(it -> it.getPlateNumber().equals("FF6666")).findFirst().orElseThrow();
         assertThat(first.stagesChronologically()).singleElement().satisfies(stage -> assertThat(stage.timeOut()).isNull());
         var second = result.sequences().stream().filter(it -> it.getPlateNumber().equals("GG7777")).findFirst().orElseThrow();
-        assertThat(second.stagesChronologically()).extracting(SequenceRecord.StageWindow::reportLabel).containsExactly("Service");
+        assertThat(second.stagesChronologically()).extracting(SequenceRecord.StageWindow::reportLabel).containsExactly("Service", "Backyard");
     }
 
     private Detection detection(long id, String plate, int camera, Integer direction, LocalDateTime timestamp) {

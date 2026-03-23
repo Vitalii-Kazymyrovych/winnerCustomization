@@ -16,11 +16,9 @@
 - `StageSequenceProcessor` — основной движок логики из `logic.txt`.
 - Processor сортирует detections, ведёт активную последовательность на номер, отслеживает:
   - active real/single/transitional stage;
-  - transitional candidate;
   - sticky `Out` для real stages;
-  - timeout закрытия single-camera stage;
   - timeout закрытия sequence;
-  - синтетический `nextStageStartHint` для правила `single_camera -> next stage starts at lastDetection + 1s`.
+  - implicit transitional bridges между завершённым stage и следующим stage.
 - На выходе processor отдаёт `ProcessingResult` со списком `SequenceRecord`.
 
 ### `notifications`
@@ -54,22 +52,27 @@
 - `Out` без активного stage создаёт partial stage.
 
 ### Transitional stage
-- Candidate создаётся либо explicit trigger-камерой, либо после завершения stage из `allowedAfter`.
-- Candidate materializes только если до `candidateTimeoutSeconds` не стартовал другой stage.
-- Повторный trigger того же transitional stage сбрасывает таймер кандидата.
-- Materialized transitional stage заканчивается при старте любого следующего stage.
-- Если sequence закрывается на incomplete transitional stage и `showInReportIfIncomplete=false`, этап удаляется из отчёта.
+- Explicit trigger-камера открывает transitional stage сразу на timestamp detection.
+- Повторный detection той же transitional-камеры расширяет текущий stage, обновляя `lastSeen`.
+- Если previous stage указан в `allowedAfter`, processor может создать implicit transitional bridge от `previousStageOut + 1s` до `nextStageStart - 1s`.
+- `candidateTimeoutSeconds` используется как минимальная длина такого implicit bridge; если gap короче, bridge не добавляется.
+- Transitional stage закрывается при старте следующего stage или при закрытии sequence на `lastSeen`.
 
 ### Single-camera stage
 - Первый detection создаёт stage.
 - Каждое следующее detection той же камеры обновляет `lastSeen`.
-- После `timeoutSeconds` этап закрывается на timestamp последнего detection.
-- Следующий stage стартует с `lastSeen + 1s`, чтобы сохранить непрерывную шкалу.
+- Stage хранится как единый визит: `timeIn = first detection`, `timeOut = last detection`.
+- При старте другого stage single-camera stage закрывается на timestamp последнего detection, а не на время следующего этапа.
+- `timeoutSeconds` больше не дробит визит на отдельные report windows; завершение визита подтверждается следующим stage либо закрытием sequence.
 
 ### Sequence close
 - Активная последовательность существует на один номер.
 - Закрытие наступает по отсутствию detections в течение global timeout или stage-specific transitional timeout override.
-- При sequence close активные real/single stages сохраняются без `Out`.
+- При sequence close active real stage без `Out` сохраняется без `Out`, а active single/transitional stages завершаются на `lastSeen`.
+
+### Historical reporting
+- `ReportService.buildReport(LocalDate)` теперь пересчитывает sequence state по полной истории detections (`findAll()`), чтобы старые дни знали о поздних `Out`, переходах и завершениях stage.
+- После полного пересчёта сервис фильтрует только те `StageWindow`, которые пересекают календарное окно `[date 00:00, date+1 00:00)`.
 
 ## Persistence and integration
 - `DetectionRepository` читает ALPR detections из source DB.
