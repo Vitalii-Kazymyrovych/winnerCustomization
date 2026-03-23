@@ -126,3 +126,7 @@
 - Added focused unit coverage for `allowedAfter` candidate creation on real-stage end and refreshed dataset/report regressions to reflect the restored Backyard rows.
 - Fixed `SequenceEngine` so a materialized transitional stage no longer leaves `sequenceCloseTimeoutOverrideSeconds` active after a later concrete `real`/`single_camera` stage starts; this closes the subsequent `Parking` row at its real `Out` event instead of leaving it open for report-generation duration.
 - Added regression coverage for the reported dataset plates (`KA8611PK`, `KA2654TA`) plus a focused engine test for `Backyard -> Parking` handoff, and updated `README.md` / `TECHNICAL_SPEC.md` to document transitional-timeout override reset semantics.
+
+- Reworked `SequenceEngine` again around explicit active-stage / pending-candidate state so the repo now consistently models sticky real-stage `Out`, partial real recoveries, transitional materialization/expiry, and timeout-driven single-camera splitting.
+- Rewrote `SequenceEngineTest` / `SequenceEngineAdditionalTest` into spec-oriented timeline cases and refreshed dataset/report regression expectations so the committed `results/` replay matches the new engine behavior.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the current stage-engine semantics (real sticky Out, transitional candidate reset/expiry, and timeout-split single-camera stages).
