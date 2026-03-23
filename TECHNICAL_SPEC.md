@@ -44,7 +44,7 @@ The engine is built around the three stage types only.
 - Closing a `real` stage via its `Out` trigger now immediately seeds those `allowedAfter` candidates too, so transitions such as `Parking -> Backyard` do not depend on a second explicit Backyard-camera event.
 - Camera-triggered transitional candidates are accepted only when the active stage (or the latest non-partial recorded stage after a same-event closure) matches `allowedAfter`; otherwise the trigger is ignored as an impossible standalone transition.
 - Repeated detections for the same transitional source refresh the candidate timeout instead of creating duplicate stages.
-- A candidate materializes only after `candidateTimeoutSeconds` without another stage start.
+- A candidate materializes only after `candidateTimeoutSeconds` without another stage start, and repeated detections from the same source refresh that deadline instead of spawning duplicate transitional rows.
 - If the same transitional stage is already active, repeated trigger-camera detections only refresh internal activity and do not create a second consecutive stage.
 - If `sequenceCloseTimeoutOverrideSeconds` is set (including `0`), the materialized transitional stage owns the sequence inactivity timeout; `0` closes the stage/sequence immediately after materialization time, which is used for Backyard-like terminal transitions.
 - As soon as a later `real` or `single_camera` stage starts, that transitional timeout override is cleared so the newly opened concrete stage falls back to the normal sequence timeout rules.
@@ -52,9 +52,9 @@ The engine is built around the three stage types only.
 #### Single-camera stages
 - First detection opens the stage with `In = detection time` and empty `Out`.
 - Repeated detections on the same camera refresh `lastSeenAt` only.
-- Repeated detections for the same single-camera stage keep one sticky stage window even if the gaps between detections exceed `timeoutSeconds`.
-- A matching real-stage `Out` event closes the active single-camera stage at that real boundary instead of emitting a synthetic partial real row.
-- If no later boundary arrives, sequence-timeout finalization and report finalization both close the stage at `lastSeenAt` once `timeoutSeconds` has elapsed; otherwise the stage stays open in XLSX output.
+- Repeated detections for the same single-camera stage refresh `lastSeenAt` until the configured timeout expires; after that timeout, the next detection starts a brand-new stage row for the same camera.
+- A matching real-stage `Out` event creates a partial real recovery row but no longer destroys the active single-camera context unless the new concrete stage boundary actually takes over the timeline.
+- If no later boundary arrives, the stage closes at `lastSeenAt` once `timeoutSeconds` has elapsed; if the sequence itself closes first, the row is persisted as incomplete with empty `Out`.
 
 #### Shared rules
 - Duplicate detections with the same camera/direction inside `duplicateSuppressionSeconds` are ignored.
