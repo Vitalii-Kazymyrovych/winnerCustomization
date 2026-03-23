@@ -38,6 +38,17 @@ public class SequenceRecord {
                 .toList();
     }
 
+    public SequenceRecord filtered(LocalDateTime fromInclusive, LocalDateTime toExclusive, LocalDateTime reportAt) {
+        SequenceRecord filtered = new SequenceRecord(plateNumber, startedAt);
+        filtered.setClosed(closed);
+        filtered.setFinishedAt(finishedAt);
+        stagesChronologically().stream()
+                .filter(stage -> stage.overlaps(fromInclusive, toExclusive, reportAt))
+                .forEach(filtered::addStage);
+        getNotifications().forEach(filtered::addNotification);
+        return filtered;
+    }
+
     public enum StageType { REAL, TRANSITIONAL, SINGLE_CAMERA }
 
     public record StageWindow(
@@ -71,6 +82,15 @@ public class SequenceRecord {
             }
             LocalDateTime effectiveEnd = timeOut != null ? timeOut : reportAt;
             return Duration.between(timeIn, effectiveEnd);
+        }
+
+        public boolean overlaps(LocalDateTime fromInclusive, LocalDateTime toExclusive, LocalDateTime reportAt) {
+            LocalDateTime effectiveStart = timeIn != null ? timeIn : timeOut;
+            LocalDateTime effectiveEnd = timeOut != null ? timeOut : reportAt;
+            if (effectiveStart == null || effectiveEnd == null) {
+                return false;
+            }
+            return effectiveStart.isBefore(toExclusive) && !effectiveEnd.isBefore(fromInclusive);
         }
     }
 

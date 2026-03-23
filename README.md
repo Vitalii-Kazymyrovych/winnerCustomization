@@ -5,9 +5,11 @@
 ## Что умеет
 - Обрабатывать три типа этапов: `real`, `transitional`, `single_camera`.
 - Восстанавливать цепочку этапов по одному номеру с учётом дедупликации, sticky `Out`, partial-событий и таймаутов закрытия.
-- Материализовывать transitional-этапы только после `candidateTimeoutSeconds`.
+- Показывать `transitional` как стабильные окна маршрута: либо по explicit trigger-камере, либо как мост между завершённым этапом и следующим этапом по `allowedAfter`.
+- Для `single_camera` использовать `In = первый detection`, `Out = последний detection` текущего визита, а не дробить этап на timeout-фрагменты.
 - Периодически пересчитывать alarm-события по правилам `notifications[]` и отправлять Telegram-сообщения, если таймаут ожидания уже истёк.
 - Генерировать Excel-файл со структурой `Sequences` и `Events`, как в примере `results/sequences.xlsx`.
+- Для исторической даты пересчитывать отчёт из всей доступной истории detections, а затем фильтровать только этапы, пересекающие выбранный день.
 
 ## Конфигурация
 В production рядом с `.jar` должен лежать `config.json`. В репозиторий коммитится только `config.json.example`.
@@ -17,9 +19,9 @@
 - `notifications[]` — камеры/направления, которые создают alarm и текст уведомления.
 - `realStages[]` — этапы с разделением на `In`/`Out`.
 - `transitionalStages[]` — кандидаты переходных этапов с `allowedAfter`, `triggerCameras` и `candidateTimeoutSeconds`.
-- `singleCameraStages[]` — sticky-этапы без разделения на `In`/`Out`.
+- `singleCameraStages[]` — этапы одного поста/камеры, где `In` — первый detection визита, а `Out` — последний detection визита.
 
-Удалённые поля `allowTransitionalAfterSingleCamera` и `duplicateSuppressionSeconds` больше не используются: переходы после single-camera этапов определяются через `allowedAfter`, а одинаковые подряд `In` для уже активного real-этапа игнорируются логикой движка.
+`candidateTimeoutSeconds` теперь используется как минимальная длина стабильного implicit transitional-моста после этапов из `allowedAfter`: если следующий этап начинается слишком быстро, переход не добавляется в отчёт. Explicit transitional trigger-камеры начинают этап сразу.
 
 ## Запуск
 ```bash

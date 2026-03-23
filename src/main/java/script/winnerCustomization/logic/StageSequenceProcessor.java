@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,9 +71,7 @@ public class StageSequenceProcessor {
         private final String plate;
         private final SequenceRecord record;
         private StageRuntime activeStage;
-        private TransitionalCandidate candidate;
         private LocalDateTime lastDetectionAt;
-        private LocalDateTime nextStageStartHint;
         private boolean closed;
 
         private SequenceState(String plate, LocalDateTime startedAt) {
@@ -93,7 +90,7 @@ public class StageSequenceProcessor {
             Optional<AppConfig.SingleCameraStageConfig> singleMatch = matchSingle(detection, config);
             Optional<RealTriggerMatch> realIn = matchRealIn(detection, config);
             Optional<RealTriggerMatch> realOut = matchRealOut(detection, config);
-            Optional<AppConfig.TransitionalStageConfig> explicitTransition = matchTransitionalTrigger(detection, config);
+            Optional<AppConfig.TransitionalStageConfig> transition = matchTransitionalTrigger(detection, config);
 
             if (singleMatch.isPresent()) {
                 startOrUpdateSingle(singleMatch.get(), detection.createdAt(), config);
@@ -101,47 +98,19 @@ public class StageSequenceProcessor {
                 startReal(realIn.get().stage(), detection.createdAt(), config);
             } else if (realOut.isPresent()) {
                 applyRealOut(realOut.get().stage(), detection.createdAt(), config);
-            } else if (explicitTransition.isPresent()) {
-                if (activeStage != null
-                        && activeStage.type == SequenceRecord.StageType.TRANSITIONAL
-                        && Objects.equals(activeStage.stageName, explicitTransition.get().getName())) {
-                    activeStage.lastSeen = detection.createdAt();
-                } else {
-                    touchCandidate(explicitTransition.get(), detection.createdAt(), false, null, config);
-                }
+            } else if (transition.isPresent()) {
+                startOrUpdateTransitional(transition.get(), detection.createdAt(), config);
             }
-
-            cancelNotificationsByOtherCamera(detection, config);
-        }
-
-        private void cancelNotificationsByOtherCamera(Detection detection, AppConfig config) {
-            // notification planner operates separately; sequence engine only stores report alerts.
         }
 
         private void advanceTime(LocalDateTime boundary, AppConfig config) {
-            boolean progressed;
-            do {
-                progressed = false;
-                if (activeStage != null && activeStage.type == SequenceRecord.StageType.SINGLE_CAMERA) {
-                    LocalDateTime timeoutAt = activeStage.lastSeen.plusSeconds(activeStage.singleConfig.getTimeoutSeconds());
-                    if (!timeoutAt.isAfter(boundary)) {
-                        nextStageStartHint = activeStage.lastSeen.plusSeconds(1);
-                        closeActiveAt(activeStage.lastSeen, false, config, true);
-                        progressed = true;
-                        continue;
-                    }
-                }
-                if (candidate != null && !candidate.materializedAt.isPresent() && !candidate.dueAt().isAfter(boundary)) {
-                    materializeCandidate(candidate, config);
-                    progressed = true;
-                    continue;
-                }
-                LocalDateTime sequenceTimeoutAt = lastDetectionAt.plusSeconds(resolveSequenceTimeoutSeconds(config));
-                if (!sequenceTimeoutAt.isAfter(boundary) && boundary.isAfter(lastDetectionAt)) {
-                    closeSequence(sequenceTimeoutAt, config);
-                    progressed = true;
-                }
-            } while (progressed && !closed);
+            if (closed || boundary.isBefore(lastDetectionAt)) {
+                return;
+            }
+            if (!lastDetectionAt.plusSeconds(resolveSequenceTimeoutSeconds(config)).isAfter(boundary)
+                    && boundary.isAfter(lastDetectionAt)) {
+                closeSequence(lastDetectionAt.plusSeconds(resolveSequenceTimeoutSeconds(config)), config);
+            }
         }
 
         private long resolveSequenceTimeoutSeconds(AppConfig config) {
@@ -166,8 +135,10 @@ public class StageSequenceProcessor {
                 activeStage.lastSeen = timestamp;
                 return;
             }
-            startNewStage(stage.getName(), stage.getLabel(), SequenceRecord.StageType.SINGLE_CAMERA,
-                    timestamp, false, null, stage, config, true);
+            closeActiveBefore(timestamp, config, true);
+            activeStage = new StageRuntime(stage.getName(), stage.getLabel(), SequenceRecord.StageType.SINGLE_CAMERA, timestamp);
+            activeStage.singleConfig = stage;
+            activeStage.lastSeen = timestamp;
         }
 
         private void startReal(AppConfig.RealStageConfig stage, LocalDateTime timestamp, AppConfig config) {
@@ -175,13 +146,16 @@ public class StageSequenceProcessor {
                     && activeStage.type == SequenceRecord.StageType.REAL
                     && Objects.equals(activeStage.stageName, stage.getName())) {
                 if (activeStage.timeOut != null && timestamp.isAfter(activeStage.timeOut)) {
-                    closeActiveAt(activeStage.timeOut, false, config, true);
+                    closeActiveBefore(timestamp, config, false);
                 } else {
                     return;
                 }
+            } else {
+                closeActiveBefore(timestamp, config, true);
             }
-            startNewStage(stage.getName(), stage.getLabel(), SequenceRecord.StageType.REAL,
-                    timestamp, false, stage, null, config, true);
+            activeStage = new StageRuntime(stage.getName(), stage.getLabel(), SequenceRecord.StageType.REAL, timestamp);
+            activeStage.realConfig = stage;
+            activeStage.lastSeen = timestamp;
         }
 
         private void applyRealOut(AppConfig.RealStageConfig stage, LocalDateTime timestamp, AppConfig config) {
@@ -192,132 +166,100 @@ public class StageSequenceProcessor {
                 activeStage.lastSeen = timestamp;
                 return;
             }
-            if (activeStage != null) {
-                closeActiveAt(timestamp.minusSeconds(1), false, config, true);
-            }
+            closeActiveBefore(timestamp, config, true);
             record.addStage(new SequenceRecord.StageWindow(stage.getName(), stage.getLabel(), SequenceRecord.StageType.REAL,
                     null, timestamp, true, false, true));
         }
 
-        private void startNewStage(String stageName,
-                                   String label,
-                                   SequenceRecord.StageType type,
-                                   LocalDateTime timeIn,
-                                   boolean candidateStage,
-                                   AppConfig.RealStageConfig realConfig,
-                                   AppConfig.SingleCameraStageConfig singleConfig,
-                                   AppConfig config,
-                                   boolean closePreviousMinusOneSecond) {
-            LocalDateTime effectiveTimeIn = nextStageStartHint != null && nextStageStartHint.isBefore(timeIn) ? nextStageStartHint : timeIn;
-            nextStageStartHint = null;
-            if (activeStage != null) {
-                LocalDateTime closeAt = closePreviousMinusOneSecond ? effectiveTimeIn.minusSeconds(1) : effectiveTimeIn;
-                closeActiveAt(closeAt, false, config, true);
-            }
-            cancelCandidateBecauseOfNewStage(stageName, effectiveTimeIn);
-            activeStage = new StageRuntime(stageName, label, type, effectiveTimeIn);
-            activeStage.realConfig = realConfig;
-            activeStage.singleConfig = singleConfig;
-            activeStage.lastSeen = effectiveTimeIn;
-        }
-
-        private void cancelCandidateBecauseOfNewStage(String stageName, LocalDateTime timestamp) {
-            if (candidate == null) {
+        private void startOrUpdateTransitional(AppConfig.TransitionalStageConfig stage, LocalDateTime timestamp, AppConfig config) {
+            if (activeStage != null
+                    && activeStage.type == SequenceRecord.StageType.TRANSITIONAL
+                    && Objects.equals(activeStage.stageName, stage.getName())) {
+                activeStage.lastSeen = timestamp;
                 return;
             }
-            if (candidate.stage.getName().equals(stageName) && candidate.sameSourceRepeatAllowed(timestamp)) {
-                candidate.refresh(timestamp);
-                return;
-            }
-            if (timestamp.isBefore(candidate.dueAt())) {
-                candidate = null;
-            } else if (!candidate.materializedAt.isPresent()) {
-                materializeCandidate(candidate, null);
-                candidate = null;
-            }
+            closeActiveBefore(timestamp, config, false);
+            activeStage = new StageRuntime(stage.getName(), stage.getLabel(), SequenceRecord.StageType.TRANSITIONAL, timestamp);
+            activeStage.transitionalConfig = stage;
+            activeStage.lastSeen = timestamp;
         }
 
-        private void touchCandidate(AppConfig.TransitionalStageConfig stage,
-                                    LocalDateTime eventTimestamp,
-                                    boolean fromStageEnd,
-                                    String sourceStageName,
-                                    AppConfig config) {
-            if (candidate != null && candidate.stage.getName().equals(stage.getName())) {
-                candidate.refresh(eventTimestamp);
-                return;
-            }
-            if (candidate != null && eventTimestamp.isBefore(candidate.dueAt())) {
-                candidate = null;
-            }
-            candidate = new TransitionalCandidate(stage, eventTimestamp, fromStageEnd, sourceStageName);
-            if (config != null) {
-                advanceTime(eventTimestamp, config);
-            }
-        }
-
-        private void materializeCandidate(TransitionalCandidate pending, AppConfig config) {
-            candidate = null;
-            if (activeStage != null) {
-                closeActiveAt(pending.startAt().minusSeconds(1), false, config, false);
-            }
-            activeStage = new StageRuntime(pending.stage.getName(), pending.stage.getLabel(), SequenceRecord.StageType.TRANSITIONAL, pending.startAt());
-            activeStage.transitionalConfig = pending.stage;
-            activeStage.lastSeen = pending.lastSourceTimestamp;
-        }
-
-        private void closeActiveAt(LocalDateTime timestamp, boolean dueToSequenceClose, AppConfig config, boolean createCandidates) {
+        private void closeActiveBefore(LocalDateTime nextStageAt, AppConfig config, boolean allowImplicitTransition) {
             if (activeStage == null) {
                 return;
             }
-            LocalDateTime out = activeStage.type == SequenceRecord.StageType.REAL && dueToSequenceClose ? null : timestamp;
-            if (activeStage.type == SequenceRecord.StageType.SINGLE_CAMERA && dueToSequenceClose) {
-                out = null;
-            }
-            if (activeStage.type == SequenceRecord.StageType.TRANSITIONAL && dueToSequenceClose) {
-                boolean showIncomplete = Boolean.TRUE.equals(activeStage.transitionalConfig.getShowInReportIfIncomplete());
-                if (!showIncomplete) {
-                    activeStage = null;
-                    return;
-                }
-                out = null;
-            }
-            record.addStage(new SequenceRecord.StageWindow(activeStage.stageName, activeStage.label, activeStage.type,
-                    activeStage.timeIn, out, false, false, true));
-            if (createCandidates && out != null) {
-                createCandidatesFromStageEnd(activeStage.stageName, out, config);
-            }
+            StageRuntime closing = activeStage;
             activeStage = null;
+            LocalDateTime stageOut = resolveOutForStageSwitch(closing, nextStageAt);
+            record.addStage(new SequenceRecord.StageWindow(closing.stageName, closing.label, closing.type,
+                    closing.timeIn, stageOut, false, false, true));
+            if (allowImplicitTransition && stageOut != null) {
+                maybeAddImplicitTransition(closing.stageName, stageOut, nextStageAt, config);
+            }
         }
 
-        private void createCandidatesFromStageEnd(String stageName, LocalDateTime eventTimestamp, AppConfig config) {
-            if (config == null) {
-                return;
-            }
+        private LocalDateTime resolveOutForStageSwitch(StageRuntime stage, LocalDateTime nextStageAt) {
+            return switch (stage.type) {
+                case SINGLE_CAMERA -> stage.lastSeen;
+                case TRANSITIONAL -> nextStageAt.minusSeconds(1);
+                case REAL -> stage.timeOut != null && !stage.timeOut.isAfter(nextStageAt)
+                        ? stage.timeOut
+                        : nextStageAt.minusSeconds(1);
+            };
+        }
+
+        private void maybeAddImplicitTransition(String previousStageName,
+                                                LocalDateTime previousStageOut,
+                                                LocalDateTime nextStageAt,
+                                                AppConfig config) {
             for (AppConfig.TransitionalStageConfig stage : config.getTransitionalStages()) {
-                if (stage.getAllowedAfter().contains(stageName)) {
-                    touchCandidate(stage, eventTimestamp, true, stageName, config);
+                if (!stage.getAllowedAfter().contains(previousStageName)) {
+                    continue;
                 }
+                LocalDateTime transitionStart = previousStageOut.plusSeconds(1);
+                LocalDateTime earliestStableStart = transitionStart.plusSeconds(stage.getCandidateTimeoutSeconds());
+                LocalDateTime transitionOut = nextStageAt.minusSeconds(1);
+                if (!earliestStableStart.isAfter(nextStageAt) && !transitionStart.isAfter(transitionOut)) {
+                    record.addStage(new SequenceRecord.StageWindow(stage.getName(), stage.getLabel(), SequenceRecord.StageType.TRANSITIONAL,
+                            transitionStart, transitionOut, false, false, true));
+                }
+                return;
             }
         }
 
         private void closeSequence(LocalDateTime boundary, AppConfig config) {
-            if (candidate != null && !candidate.materializedAt.isPresent()) {
-                candidate = null;
-            }
             if (activeStage != null) {
-                closeActiveAt(boundary, true, config, true);
+                StageRuntime closing = activeStage;
+                activeStage = null;
+                LocalDateTime stageOut = resolveOutForSequenceClose(closing, boundary);
+                record.addStage(new SequenceRecord.StageWindow(closing.stageName, closing.label, closing.type,
+                        closing.timeIn, stageOut, false, false, true));
+                if (stageOut != null) {
+                    maybeAddImplicitTransition(closing.stageName, stageOut, boundary, config);
+                }
             }
             record.setClosed(true);
             record.setFinishedAt(boundary);
             closed = true;
         }
 
+        private LocalDateTime resolveOutForSequenceClose(StageRuntime stage, LocalDateTime boundary) {
+            return switch (stage.type) {
+                case SINGLE_CAMERA, TRANSITIONAL -> stage.lastSeen;
+                case REAL -> stage.timeOut;
+            };
+        }
+
         private SequenceRecord toRecord(LocalDateTime reportAt) {
             if (!closed) {
                 record.setFinishedAt(reportAt);
                 if (activeStage != null) {
+                    LocalDateTime stageOut = activeStage.type == SequenceRecord.StageType.SINGLE_CAMERA
+                            || activeStage.type == SequenceRecord.StageType.TRANSITIONAL
+                            ? activeStage.lastSeen
+                            : activeStage.timeOut;
                     record.addStage(new SequenceRecord.StageWindow(activeStage.stageName, activeStage.label, activeStage.type,
-                            activeStage.timeIn, null, false, false, true));
+                            activeStage.timeIn, stageOut, false, false, true));
                     activeStage = null;
                 }
             }
@@ -384,42 +326,6 @@ public class StageSequenceProcessor {
             this.type = type;
             this.timeIn = timeIn;
             this.lastSeen = timeIn;
-        }
-    }
-
-    private static final class TransitionalCandidate {
-        private final AppConfig.TransitionalStageConfig stage;
-        private final boolean fromStageEnd;
-        private final String sourceStageName;
-        private final LocalDateTime createdAt;
-        private LocalDateTime lastSourceTimestamp;
-        private Optional<LocalDateTime> materializedAt = Optional.empty();
-
-        private TransitionalCandidate(AppConfig.TransitionalStageConfig stage,
-                                      LocalDateTime eventTimestamp,
-                                      boolean fromStageEnd,
-                                      String sourceStageName) {
-            this.stage = stage;
-            this.createdAt = eventTimestamp;
-            this.lastSourceTimestamp = eventTimestamp;
-            this.fromStageEnd = fromStageEnd;
-            this.sourceStageName = sourceStageName;
-        }
-
-        private LocalDateTime startAt() {
-            return fromStageEnd ? createdAt.plusSeconds(1) : createdAt;
-        }
-
-        private LocalDateTime dueAt() {
-            return lastSourceTimestamp.plusSeconds(stage.getCandidateTimeoutSeconds());
-        }
-
-        private boolean sameSourceRepeatAllowed(LocalDateTime timestamp) {
-            return !timestamp.isBefore(lastSourceTimestamp);
-        }
-
-        private void refresh(LocalDateTime timestamp) {
-            lastSourceTimestamp = timestamp;
         }
     }
 }
