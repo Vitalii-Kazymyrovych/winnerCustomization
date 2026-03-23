@@ -2,6 +2,7 @@ package script.winnerCustomization.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -18,6 +19,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -44,10 +46,24 @@ class ReportServiceTest {
         assertThat(repository.findAllCalled).isTrue();
         assertThat(repository.findBetweenCalled).isFalse();
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(report))) {
-            assertThat(workbook.getSheet("Events").getRow(1).getCell(1).getStringCellValue()).isEqualTo("Post 1");
-            assertThat(workbook.getSheet("Events").getRow(1).getCell(2).getStringCellValue()).isEqualTo("2026-03-22 23:55:00");
-            assertThat(workbook.getSheet("Events").getRow(1).getCell(3).getStringCellValue()).isEqualTo("2026-03-23 00:10:00");
+            List<List<String>> rows = new ArrayList<>();
+            workbook.getSheet("Events").forEach(row -> rows.add(readRow(row)));
+            assertThat(rows).anySatisfy(row -> {
+                assertThat(row.get(1)).isEqualTo("Backyard");
+                assertThat(row.get(2)).isEqualTo("2026-03-22 23:55:01");
+                assertThat(row.get(3)).isEqualTo("2026-03-23 00:09:59");
+            });
+            assertThat(rows).anySatisfy(row -> assertThat(row.get(1)).isEqualTo("Drive In"));
         }
+    }
+
+    private List<String> readRow(Row row) {
+        List<String> values = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            var cell = row.getCell(i);
+            values.add(cell == null ? "" : cell.getStringCellValue());
+        }
+        return values;
     }
 
     private RuntimeConfig runtimeConfig(AppConfig config) {
