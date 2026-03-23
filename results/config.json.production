@@ -1,25 +1,25 @@
 {
   "sourceDatabase": {
-    "host": "SOURCE_DB_HOST",
+    "host": "localhost",
     "port": 5432,
-    "db": "source_database_name",
+    "db": "videoanalytics",
     "schema": "videoanalytics",
-    "user": "source_user",
-    "password": "source_password"
+    "user": "postgres",
+    "password": "postgres"
   },
   "sequenceDatabase": {
-    "host": "SEQUENCE_DB_HOST",
+    "host": "localhost",
     "port": 5432,
-    "db": "sequences_database_name",
-    "schema": "public",
-    "user": "sequence_user",
-    "password": "sequence_password"
+    "db": "customization",
+    "schema": "customization",
+    "user": "postgres",
+    "password": "postgres"
   },
   "rootDatabase": {
-    "host": "SEQUENCE_DB_HOST",
+    "host": "localhost",
     "port": 5432,
-    "user": "postgres_root_user",
-    "password": "postgres_root_password",
+    "user": "postgres",
+    "password": "postgres",
     "maintenanceDb": "postgres"
   },
   "sourceTable": {
@@ -134,9 +134,9 @@
       "name": "backyard",
       "label": "Backyard",
       "triggerCameras": [17],
-      "candidateTimeoutSeconds": 2,
+      "candidateTimeoutSeconds": 300,
       "allowedAfter": ["service", "parking"],
-      "sequenceCloseTimeoutOverrideSeconds": 0,
+      "sequenceCloseTimeoutOverrideSeconds": 172800,
       "showInReportIfIncomplete": false
     },
     {
@@ -154,13 +154,13 @@
       "name": "post_1",
       "label": "Post 1",
       "cameraId": 23,
-      "timeoutSeconds": 30
+      "timeoutSeconds": 600
     },
     {
       "name": "post_2",
       "label": "Post 2",
       "cameraId": 24,
-      "timeoutSeconds": 30
+      "timeoutSeconds": 600
     }
   ]
 }
