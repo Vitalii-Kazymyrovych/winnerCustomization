@@ -91,16 +91,15 @@
 ### Single-camera stage
 - `startOrUpdateSingle(...)`:
   - открывает визит поста по первой detection;
-  - обновляет `lastSeen` по следующим detections той же камеры.
-- `expireSingleStage(...)`:
-  - закрывает визит на `lastSeen`, если прошёл `timeoutSeconds` без новых detections;
-  - после закрытия создаёт stage-end transitional candidates по `allowedAfter`.
+  - обновляет `lastSeen` по следующим detections той же камеры без отдельного stage-timeout.
+- `closeActiveForStageStart(...)` + `resolveOutForStageSwitch(...)`:
+  - при появлении следующего этапа закрывают active `single_camera` на `lastSeen`;
+  - это убирает дробление постов из-за пауз между detections, пока машина остаётся на той же камере.
 
 ### Sequence close
 - `advanceTime(...)` циклически обрабатывает:
-  1. timeout single-camera stage;
-  2. materialization due candidates;
-  3. глобальный/stage-specific sequence close timeout.
+  1. materialization due candidates;
+  2. глобальный/stage-specific sequence close timeout.
 - `closeSequence(...)`:
   - очищает незрелые candidates;
   - сохраняет незавершённые `real`/`single_camera` без `timeOut`;
@@ -129,7 +128,7 @@
   - отмену candidate при старте другого stage;
   - sticky `Out` и reopen real stage;
   - partial `Out` поверх active transitional;
-  - повторный single-camera visit;
+  - непрерывный single-camera визит без timeout-дробления и его закрытие при переходе на другую камеру;
   - sequence close с удалением incomplete transitional.
 - `ReportServiceTest` проверяет перерасчёт отчёта по полной истории.
 - `RuntimeConfigTest` проверяет валидацию `sourceRefresh`.
