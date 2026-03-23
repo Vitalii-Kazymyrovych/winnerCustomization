@@ -35,6 +35,10 @@ public final class TestConfigFactory {
         messaging.setEnabled(false);
         config.setMessaging(messaging);
         config.setSequenceCloseTimeoutMinutes(30);
+        AppConfig.SourceRefreshConfig sourceRefresh = new AppConfig.SourceRefreshConfig();
+        sourceRefresh.setEnabled(true);
+        sourceRefresh.setIntervalSeconds(15);
+        config.setSourceRefresh(sourceRefresh);
 
         AppConfig.RealStageConfig driveIn = new AppConfig.RealStageConfig();
         driveIn.setName("drive_in");

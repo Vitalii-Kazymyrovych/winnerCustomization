@@ -35,6 +35,10 @@
     "telegramChatId": "CHAT_ID_IF_ENABLED"
   },
   "sequenceCloseTimeoutMinutes": 2880,
+  "sourceRefresh": {
+    "enabled": true,
+    "intervalSeconds": 30
+  },
   "notifications": [
     {
       "cameraId": 1001,

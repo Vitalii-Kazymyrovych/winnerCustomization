@@ -39,6 +39,17 @@ class RuntimeConfigTest {
                 .hasMessageContaining("Stage names must be unique");
     }
 
+
+    @Test
+    void rejectsNonPositiveSourceRefreshInterval() {
+        AppConfig config = TestConfigFactory.standardConfig();
+        config.getSourceRefresh().setIntervalSeconds(0);
+
+        assertThatThrownBy(() -> runtimeConfig.validate(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sourceRefresh.intervalSeconds must be positive");
+    }
+
     @Test
     void loadReloadAndSaveUseConfigNearWorkingDirectory() throws Exception {
         Path workdir = Files.createTempDirectory("runtime-config");

@@ -12,6 +12,7 @@ public class AppConfig {
     private ReportConfig reports;
     private MessagingConfig messaging;
     private Integer sequenceCloseTimeoutMinutes = 2880;
+    private SourceRefreshConfig sourceRefresh = new SourceRefreshConfig();
     private List<NotificationRule> notifications = new ArrayList<>();
     private List<RealStageConfig> realStages = new ArrayList<>();
     private List<TransitionalStageConfig> transitionalStages = new ArrayList<>();
@@ -31,6 +32,8 @@ public class AppConfig {
     public void setMessaging(MessagingConfig messaging) { this.messaging = messaging; }
     public Integer getSequenceCloseTimeoutMinutes() { return sequenceCloseTimeoutMinutes; }
     public void setSequenceCloseTimeoutMinutes(Integer sequenceCloseTimeoutMinutes) { this.sequenceCloseTimeoutMinutes = sequenceCloseTimeoutMinutes; }
+    public SourceRefreshConfig getSourceRefresh() { return sourceRefresh; }
+    public void setSourceRefresh(SourceRefreshConfig sourceRefresh) { this.sourceRefresh = sourceRefresh; }
     public List<NotificationRule> getNotifications() { return notifications; }
     public void setNotifications(List<NotificationRule> notifications) { this.notifications = notifications; }
     public List<RealStageConfig> getRealStages() { return realStages; }
@@ -128,6 +131,17 @@ public class AppConfig {
         public void setCameraId(Integer cameraId) { this.cameraId = cameraId; }
         public DirectionRange getDirectionRange() { return directionRange; }
         public void setDirectionRange(DirectionRange directionRange) { this.directionRange = directionRange; }
+    }
+
+
+    public static class SourceRefreshConfig {
+        private boolean enabled = true;
+        private Integer intervalSeconds = 30;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public Integer getIntervalSeconds() { return intervalSeconds; }
+        public void setIntervalSeconds(Integer intervalSeconds) { this.intervalSeconds = intervalSeconds; }
     }
 
     public static class NotificationRule {
