@@ -92,7 +92,7 @@ class StageSequenceProcessorTest {
     }
 
     @Test
-    void singleStageCanReappearAfterItsOwnTimeoutWithoutImplicitTransition() {
+    void singleStageKeepsCollectingSameCameraDetectionsWithoutStageTimeout() {
         var config = TestConfigFactory.standardConfig();
         config.getTransitionalStages().getFirst().setAllowedAfter(List.of());
         LocalDateTime base = LocalDateTime.of(2026, 3, 23, 12, 0);
@@ -105,11 +105,31 @@ class StageSequenceProcessorTest {
 
         var stages = result.sequences().getFirst().stagesChronologically();
         assertThat(stages).extracting(SequenceRecord.StageWindow::reportLabel)
-                .containsExactly("Post 1", "Post 1");
+                .containsExactly("Post 1");
+        assertThat(stages.getFirst().timeIn()).isEqualTo(base);
+        assertThat(stages.getFirst().timeOut()).isNull();
+    }
+
+    @Test
+    void singleStageClosesOnLastPostDetectionWhenAnotherCameraAppears() {
+        var config = TestConfigFactory.standardConfig();
+        config.getTransitionalStages().getFirst().setAllowedAfter(List.of());
+        LocalDateTime base = LocalDateTime.of(2026, 3, 23, 12, 30);
+
+        var result = processor.process(List.of(
+                detection(1, "EF5656", 3001, null, base),
+                detection(2, "EF5656", 3001, null, base.plusSeconds(2)),
+                detection(3, "EF5656", 3001, null, base.plusSeconds(20)),
+                detection(4, "EF5656", 1003, null, base.plusSeconds(25))
+        ), config, base.plusMinutes(1));
+
+        var stages = result.sequences().getFirst().stagesChronologically();
+        assertThat(stages).extracting(SequenceRecord.StageWindow::reportLabel)
+                .containsExactly("Post 1", "Service");
         assertThat(stages.get(0).timeIn()).isEqualTo(base);
-        assertThat(stages.get(0).timeOut()).isEqualTo(base.plusSeconds(2));
-        assertThat(stages.get(1).timeIn()).isEqualTo(base.plusSeconds(20));
-        assertThat(stages.get(1).timeOut()).isEqualTo(base.plusSeconds(20));
+        assertThat(stages.get(0).timeOut()).isEqualTo(base.plusSeconds(20));
+        assertThat(stages.get(1).timeIn()).isEqualTo(base.plusSeconds(25));
+        assertThat(stages.get(1).timeOut()).isNull();
     }
 
     @Test

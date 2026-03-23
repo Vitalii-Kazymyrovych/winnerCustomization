@@ -117,11 +117,6 @@ public class StageSequenceProcessor {
             do {
                 progressed = false;
 
-                if (expireSingleStage(boundary, config)) {
-                    progressed = true;
-                    continue;
-                }
-
                 TransitionalCandidate dueCandidate = earliestDueCandidate(boundary);
                 if (dueCandidate != null) {
                     materializeCandidate(dueCandidate, config);
@@ -136,21 +131,6 @@ public class StageSequenceProcessor {
                     progressed = true;
                 }
             } while (progressed && !closed);
-        }
-
-        private boolean expireSingleStage(LocalDateTime boundary, AppConfig config) {
-            if (activeStage == null || activeStage.type != SequenceRecord.StageType.SINGLE_CAMERA) {
-                return false;
-            }
-            LocalDateTime expiresAt = activeStage.lastSeen.plusSeconds(activeStage.singleConfig.getTimeoutSeconds());
-            if (expiresAt.isAfter(boundary)) {
-                return false;
-            }
-            StageRuntime closing = activeStage;
-            activeStage = null;
-            addClosedStage(closing, closing.lastSeen, true);
-            createStageEndCandidates(closing.stageName, closing.lastSeen, config);
-            return true;
         }
 
         private long resolveSequenceTimeoutSeconds(AppConfig config) {

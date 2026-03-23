@@ -49,9 +49,9 @@ class ReportServiceTest {
             List<List<String>> rows = new ArrayList<>();
             workbook.getSheet("Events").forEach(row -> rows.add(readRow(row)));
             assertThat(rows).anySatisfy(row -> {
-                assertThat(row.get(1)).isEqualTo("Backyard");
-                assertThat(row.get(2)).isEqualTo("2026-03-22 23:55:01");
-                assertThat(row.get(3)).isEqualTo("2026-03-23 00:09:59");
+                assertThat(row.get(1)).isEqualTo("Post 1");
+                assertThat(row.get(2)).isEqualTo("2026-03-22 23:55:00");
+                assertThat(row.get(3)).isEqualTo("2026-03-23 00:10:00");
             });
             assertThat(rows).anySatisfy(row -> assertThat(row.get(1)).isEqualTo("Drive In"));
         }
