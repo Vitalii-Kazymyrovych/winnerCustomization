@@ -38,6 +38,23 @@ class SequenceEngineTest {
     }
 
     @Test
+    void reopeningSameRealStageBeforeCandidateTimeoutCancelsPendingTransitional() {
+        AppConfig config = TestConfigFactory.config();
+        config.getTransitionalStages().getFirst().setShowInReportIfIncomplete(true);
+        config.getTransitionalStages().getFirst().setSequenceCloseTimeoutOverrideSeconds(3600);
+        config.getTransitionalStages().getFirst().setCandidateTimeoutSeconds(300);
+
+        SequenceRecord record = engine.build(List.of(
+                new Detection(1, "AA1111", 1003, 10, LocalDateTime.of(2026, 3, 1, 10, 0)),
+                new Detection(2, "AA1111", 1005, 10, LocalDateTime.of(2026, 3, 1, 10, 10)),
+                new Detection(3, "AA1111", 1003, 10, LocalDateTime.of(2026, 3, 1, 10, 14))
+        ), config, LocalDateTime.of(2026, 3, 1, 11, 0)).getFirst();
+
+        assertThat(record.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
+                .containsExactly("service", "service");
+    }
+
+    @Test
     void partialRealOutDoesNotDestroyActiveSingleCameraStage() {
         List<Detection> detections = List.of(
                 new Detection(1, "AA1111", 1101, null, LocalDateTime.of(2026, 3, 1, 10, 0)),

@@ -48,6 +48,8 @@ class ResultsDatasetReportRegressionTest {
             assertThat(labelsByPlate.get("KA1163K")).isNotEmpty().allMatch("Post 1"::equals);
             assertThat(labelsByPlate.get("KA7828BB")).filteredOn("Post 2"::equals).isNotEmpty();
             assertThat(labelsByPlate.get("AA4444PO")).filteredOn("Post 1"::equals).isNotEmpty();
+            assertThat(labelsByPlate.get("KA8611PK")).containsSubsequence("Parking", "Backyard", "Parking");
+            assertThat(labelsByPlate.get("KA2654TA")).containsSubsequence("Parking", "Backyard", "Parking");
         }
     }
 

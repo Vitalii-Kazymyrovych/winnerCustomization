@@ -93,6 +93,26 @@ class SequenceEngineAdditionalTest {
     }
 
     @Test
+    void materializedTransitionalStageStillAppearsWhenLaterConcreteStageStarts() {
+        AppConfig config = TestFixtures.configWithReportDirectory("");
+        config.getTransitionalStages().getFirst().setShowInReportIfIncomplete(false);
+        config.getTransitionalStages().getFirst().setSequenceCloseTimeoutOverrideSeconds(3600);
+
+        SequenceRecord record = engine.build(List.of(
+                new Detection(1, "AA1111", 1003, 10, LocalDateTime.of(2026, 3, 22, 10, 0)),
+                new Detection(2, "AA1111", 1005, 10, LocalDateTime.of(2026, 3, 22, 10, 1)),
+                new Detection(3, "AA1111", 1003, 10, LocalDateTime.of(2026, 3, 22, 10, 10))
+        ), config, LocalDateTime.of(2026, 3, 22, 11, 0)).getFirst();
+
+        assertThat(record.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
+                .containsExactly("service", "backyard", "service");
+        assertThat(record.stagesChronologically().get(1).timeIn())
+                .isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 1, 1));
+        assertThat(record.stagesChronologically().get(1).timeOut())
+                .isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 9, 59));
+    }
+
+    @Test
     void partialRealOutClosesMaterializedTransitionalAtPreviousSecond() {
         AppConfig config = TestFixtures.configWithReportDirectory("");
         config.getTransitionalStages().getFirst().setShowInReportIfIncomplete(true);

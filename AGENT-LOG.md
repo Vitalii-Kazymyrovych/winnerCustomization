@@ -130,3 +130,11 @@
 - Reworked `SequenceEngine` again around explicit active-stage / pending-candidate state so the repo now consistently models sticky real-stage `Out`, partial real recoveries, transitional materialization/expiry, and timeout-driven single-camera splitting.
 - Rewrote `SequenceEngineTest` / `SequenceEngineAdditionalTest` into spec-oriented timeline cases and refreshed dataset/report regression expectations so the committed `results/` replay matches the new engine behavior.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document the current stage-engine semantics (real sticky Out, transitional candidate reset/expiry, and timeout-split single-camera stages).
+
+## 2026-03-23
+- Fixed `SequenceEngine` so materialized transitional stages are still shown in reports even when `showInReportIfIncomplete=false`; that flag now hides only terminal incomplete transitional rows after timeout-based sequence closure.
+- Fixed same-stage real re-entry handling to cancel stale transitional candidates, preventing impossible `Backyard -> Service` overlaps when a stage reopens before candidate timeout.
+- Updated transitional candidate refresh logic for repeated same-source stage-end events so dataset replays keep non-overlapping `Service/Parking -> Backyard` timelines.
+- Added focused unit coverage for hidden-vs-materialized transitional rows and same-stage re-entry cancellation, refreshed committed-results regression expectations, and added exact dataset snapshot verification against `results/expected_sequences_logic.csv`.
+- Generated and committed `results/expected_sequences_logic.csv` as the canonical CSV report for `results/alpr_detections.sql` + `results/config.json.production`.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the new transitional-reporting semantics and committed CSV snapshot workflow.

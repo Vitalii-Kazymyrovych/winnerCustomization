@@ -160,6 +160,7 @@ public class SequenceEngine {
                 && sequence.activeStage.type == StageType.REAL
                 && Objects.equals(sequence.activeStage.window.stageName(), config.getName())) {
             if (sequence.activeStage.stickyOutAt != null && !eventTime.isBefore(sequence.activeStage.stickyOutAt)) {
+                cancelPendingCandidate(sequence);
                 clearActiveStage(sequence);
             } else {
                 return;
@@ -260,7 +261,7 @@ public class SequenceEngine {
         if (sequence.pendingCandidate != null
                 && Objects.equals(sequence.pendingCandidate.config().getName(), config.getName())
                 && Objects.equals(sequence.pendingCandidate.sourceKey(), sourceKey)) {
-            sequence.pendingCandidate = new PendingCandidate(config, sequence.pendingCandidate.timeIn(), materializeAt, sourceKey);
+            sequence.pendingCandidate = new PendingCandidate(config, timeIn, materializeAt, sourceKey);
             return;
         }
         sequence.pendingCandidate = new PendingCandidate(config, timeIn, materializeAt, sourceKey);
@@ -271,7 +272,6 @@ public class SequenceEngine {
             return;
         }
         closeActiveForNextStage(sequence, sequence.pendingCandidate.timeIn());
-        boolean show = !Boolean.FALSE.equals(sequence.pendingCandidate.config().getShowInReportIfIncomplete());
         StageWindow stage = new StageWindow(
                 sequence.pendingCandidate.config().getName(),
                 sequence.pendingCandidate.config().getLabel(),
@@ -280,7 +280,7 @@ public class SequenceEngine {
                 null,
                 false,
                 false,
-                show);
+                true);
         stage.setLastSeenAt(sequence.pendingCandidate.materializeAt());
         sequence.record.addStage(stage);
         sequence.activeStage = ActiveStage.transitional(stage, sequence.pendingCandidate.config());
