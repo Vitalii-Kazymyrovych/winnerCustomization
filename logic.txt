@@ -1,0 +1,175 @@
+Drive-In, Service, Parking — real
+Test-Drive, Backyard — transitional
+Posts — single_camera
+
+Alarm rule:
+
+* Alarm is tied to certain camera + direction event
+* Alarm is cancelled by any other detection except the same camera
+
+---
+
+Stage type: real
+Has at least one In and one Out (can have more)
+
+Deduplication:
+
+* All In events are deduplicated if same stage is already active
+
+Out policy:
+
+* Sticky — each next Out overrides previous Out timestamp
+
+Logic:
+
+* First In event opens stage
+* If another stage is active, it closes at same timestamp - 1 s
+* Repeated In while same stage is active is ignored
+* Out updates stage Out timestamp, but does NOT close stage
+* Stage closes only when:
+
+  * another stage starts
+  * sequence closes
+* If In happens after Out, previous stage is considered fully closed and new stage starts
+
+Partial:
+
+* Out without matching active stage of same type creates partial stage
+* Partial stage has empty In Time, Out Time = detection timestamp, empty Duration
+* If partial stage is created while transitional stage is active, transitional closes at partial Out timestamp - 1s
+
+Reporting:
+
+* Active real stage with In and without Out is shown in report with duration = report generation timestamp - In Time
+* Real stage with Out and without In is shown with empty In Time and empty Duration
+* If sequence closes while real stage is still active, stage is saved without Out Time and duration
+
+---
+
+Stage type: transitional
+Applies to: Backyard, Test-Drive
+
+Candidate:
+
+* yes
+
+Creation:
+
+* Candidate is created:
+
+  * after end of configured stage
+  * or after detection on one of configured trigger cameras
+
+Time model:
+
+* Stage In = event timestamp that created candidate + 1s if candidate came from stage end
+* If candidate came from explicit trigger camera, Stage In = trigger timestamp
+* Stage Out = next stage start timestamp - 1s
+
+Materialization:
+
+* Stage becomes real only if no other stage starts before candidateTimeout
+* Transitional stage is created only if time gap is at least candidateTimeout
+* If another stage starts before candidateTimeout, candidate is cancelled and not shown in report
+
+Candidate lifecycle:
+
+* Repeated detections of same source do NOT cancel candidate
+* They only reset candidateTimeout based on latest timestamp
+* Candidate is cancelled by:
+
+  * start of another stage before candidateTimeout
+
+Logic:
+
+* Candidate continuously resets by source detections of same source
+* If no next stage appears within timeout, transitional materializes
+* Transitional ends at beginning of ANY next stage: real or single_camera or even another transitional (for example Backyard -> Test-Drive)
+* Transitional can have custom sequenceClosingTimeout, overriding general sequenceClosingTimeout
+* If Transitional materialized and report is generated before timeout expires, it is shown as active stage with duration = report generation time - In Time
+* If no next stage appears until Transitional sequenceClosingTimeout expires and "showInReportIfIncomplete": false:
+
+  * sequence closes
+  * Transitional is removed from final report and is not saved
+
+Reporting:
+
+* Only materialized transitional stages are shown
+* Active materialized transitional stage is shown with duration = report generation time - In
+* Closed transitional stage duration = Out - In
+
+---
+
+Stage type: single_camera
+Applies to: Post n
+
+Model:
+
+* No In/Out separation
+* First detection = In
+* Last detection = Out
+
+Logic:
+
+* First detection starts stage
+* Previous stage closes at detection timestamp - 1s
+* Each next detection updates stage activity and last timestamp
+* If no detections for stage timeout, stage closes at timestamp of last detection
+* Next stage starts at same timestamp + 1s
+* Same Post may appear multiple times in one sequence as separate stages
+
+Transitions:
+
+* Can transition to any stage type
+
+Reporting:
+* Always has In = first detection
+* Out = last detection if stage already ended
+* If stage is still active at report generation time, duration = report generation time - In
+* If sequence closes while single_camera stage is active, stage is saved without Out Time
+
+---
+
+Global rules
+
+Sequence:
+
+* One plate = one active sequence
+* First detected valid stage starts sequence
+
+Sequence close:
+
+* Sequence closes when:
+
+  * no detections for sequenceClosingTimeout
+  * or stage-specific sequenceClosingTimeout overrides global one
+* If sequence closes while real or single_camera stage is active, last stage is saved without Out Time
+* If sequence closes by transitional timeout and "showInReportIfIncomplete": false, transitional is removed from final report
+
+Stage interaction:
+
+* Only one active stage at a time, excluding transitional candidate
+* Any new stage start closes previous active stage at same timestamp or at timestamp - 1s according to stage type rules
+
+Transitions:
+
+* Transitional ends on any next stage type configured as valid next stage
+* Optionally transitional may also be created after certain cameras events
+
+Priority if same timestamp fallback is needed:
+
+1. Sticky update current stage
+2. Close previous stage
+3. Open next stage
+
+Duplicates:
+
+* Same event for already applied state is ignored
+* Same-source repeated detections for transitional source only reset candidate timeout
+
+Consistency:
+
+* No overlapping stages
+* No micro-gap transitional stages shorter than candidateTimeout
+* No gaps between reported stages except where transitional was not allowed by config
+* Timeline remains continuous until sequence closes
