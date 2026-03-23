@@ -4,6 +4,7 @@
 
 ## What the application does
 - Loads detections from PostgreSQL.
+- Starts a plate sequence only from the first detection that actually matches a configured stage or transitional trigger, so stray/unknown detections do not shift sequence start time.
 - Groups detections by plate into chronological sequences.
 - Builds stage windows using deterministic rules:
   - `real` stages open on `inTriggers` and keep a sticky `Out` timestamp from `outTriggers`.
@@ -26,7 +27,7 @@ Create `config.json` next to the jar by copying `config.json.example`.
 - `duplicateSuppressionSeconds` — duplicate detection suppression window.
 - `notifications[]` — camera-based alert rules.
 - `realStages[]` — main business stages with explicit `In` and `Out` triggers.
-- `transitionalStages[]` — intermediate candidates.
+- `transitionalStages[]` — intermediate candidates. `triggerCameras` may be omitted when the stage should be created only from `allowedAfter` stage endings.
 - `singleCameraStages[]` — post-like sticky stages.
 - `messaging` — Telegram delivery settings for dispatched notifications.
 - `reports.outputDirectory` — optional folder where generated XLSX files are stored.
@@ -51,7 +52,7 @@ Create `config.json` next to the jar by copying `config.json.example`.
 - `GET /source/trigger-pull` — force a manual source pull with cooldown protection.
 
 ## Notifications
-Notification rules are configured per camera. A timer starts when a matching detection arrives. If there are no later detections for the same plate on a different camera before `delaySeconds`, a notification is produced and can be dispatched through Telegram. Report alerts are attached only to sequences and stage rows of that same plate, and identical `(plate, trigger time, message)` notifications are deduplicated before enrichment so the same alert text is not repeated in one row.
+Notification rules are configured per camera. A timer starts on the first matching camera+direction detection. Repeated detections on that same camera do not cancel or postpone the pending alarm; only a later detection for the same plate on a different camera cancels it before `delaySeconds`. Report alerts are attached only to sequences and stage rows of that same plate, and identical `(plate, trigger time, message)` notifications are deduplicated before enrichment so the same alert text is not repeated in one row.
 
 ## Transitional-stage closure notes
 - `transitionalStages[].sequenceCloseTimeoutOverrideSeconds = 0` means “close the sequence immediately after the transitional stage has been confirmed/materialized”.

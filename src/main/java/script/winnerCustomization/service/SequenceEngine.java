@@ -42,19 +42,25 @@ public class SequenceEngine {
             }
             lastDetectionByPlate.put(detection.plateNumber(), detection);
 
-            ActiveSequence sequence = activeByPlate.computeIfAbsent(
-                    detection.plateNumber(),
-                    plate -> new ActiveSequence(new SequenceRecord(plate, detection.createdAt())));
-
-            if (advanceUntil(sequence, detection.createdAt(), config)) {
+            ActiveSequence sequence = activeByPlate.get(detection.plateNumber());
+            if (sequence != null && advanceUntil(sequence, detection.createdAt(), config)) {
                 finishRecord(sequence, sequence.closedAt, true);
-                finished.add(sequence.record);
-                sequence = new ActiveSequence(new SequenceRecord(detection.plateNumber(), detection.createdAt()));
-                activeByPlate.put(detection.plateNumber(), sequence);
+                if (!sequence.record.getStages().isEmpty()) {
+                    finished.add(sequence.record);
+                }
+                activeByPlate.remove(detection.plateNumber());
+                sequence = null;
             }
 
-            applyDetection(sequence, detection, config);
-            sequence.lastDetectionAt = detection.createdAt();
+            if (sequence == null) {
+                sequence = new ActiveSequence(new SequenceRecord(detection.plateNumber(), detection.createdAt()));
+            }
+
+            boolean applied = applyDetection(sequence, detection, config);
+            if (applied) {
+                sequence.lastDetectionAt = detection.createdAt();
+                activeByPlate.put(detection.plateNumber(), sequence);
+            }
         }
 
         for (ActiveSequence sequence : activeByPlate.values()) {
@@ -135,24 +141,24 @@ public class SequenceEngine {
         return config.getDuplicateSuppressionSeconds() == null ? 2 : Math.max(0, config.getDuplicateSuppressionSeconds());
     }
 
-    private void applyDetection(ActiveSequence sequence, Detection detection, AppConfig config) {
+    private boolean applyDetection(ActiveSequence sequence, Detection detection, AppConfig config) {
         RealMatch realIn = matchRealIn(detection, config);
         RealMatch realOut = matchRealOut(detection, config);
         AppConfig.SingleCameraStageConfig single = matchSingle(detection, config);
 
         if (realIn != null) {
             startRealStage(sequence, realIn.config(), detection.createdAt());
-            return;
+            return true;
         }
         if (single != null) {
             openOrRefreshSingle(sequence, single, detection.createdAt());
-            return;
+            return true;
         }
         if (realOut != null) {
             handleRealOut(sequence, realOut.config(), detection.createdAt(), config);
-            return;
+            return true;
         }
-        maybeCreateTransitionalCandidateByCamera(sequence, detection, config);
+        return maybeCreateTransitionalCandidateByCamera(sequence, detection, config);
     }
 
     private void startRealStage(ActiveSequence sequence, AppConfig.RealStageConfig config, LocalDateTime eventTime) {
@@ -215,7 +221,7 @@ public class SequenceEngine {
         maybeCreateTransitionalCandidateByCamera(sequence, new Detection(0L, sequence.record.getPlateNumber(), config.getOutTriggers().isEmpty() ? null : config.getOutTriggers().getFirst().getCameraId(), null, eventTime), appConfig);
     }
 
-    private void maybeCreateTransitionalCandidateByCamera(ActiveSequence sequence, Detection detection, AppConfig config) {
+    private boolean maybeCreateTransitionalCandidateByCamera(ActiveSequence sequence, Detection detection, AppConfig config) {
         for (AppConfig.TransitionalStageConfig stage : safeTransitionalStages(config)) {
             if (stage.getTriggerCameras() == null || !stage.getTriggerCameras().contains(detection.analyticsId())) {
                 continue;
@@ -224,8 +230,9 @@ public class SequenceEngine {
                 continue;
             }
             createOrRefreshCandidate(sequence, stage, detection.createdAt(), detection.createdAt(), "camera:" + detection.analyticsId());
-            return;
+            return true;
         }
+        return false;
     }
 
     private void maybeCreateTransitionalCandidate(ActiveSequence sequence,

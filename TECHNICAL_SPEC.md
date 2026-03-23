@@ -5,7 +5,7 @@ The application is split into configuration, repositories, domain services, and 
 
 ### Configuration
 - `AppConfig` contains infrastructure settings (source/sequence/root database, source table, report output, Telegram delivery) and the sequence-engine specification.
-- `RuntimeConfig` loads `config.json`, validates stage uniqueness, timeout positivity, and direction ranges, then keeps the active config in memory.
+- `RuntimeConfig` loads `config.json`, validates stage uniqueness, timeout positivity, and direction ranges, and requires each transitional stage to define at least one creation path (`triggerCameras` and/or `allowedAfter`), then keeps the active config in memory.
 
 ## Domain model
 - `Detection` is the raw source event (`id`, `plateNumber`, `analyticsId`, `direction`, `createdAt`).
@@ -59,10 +59,12 @@ The engine is built around the three stage types only.
 #### Shared rules
 - Duplicate detections with the same camera/direction inside `duplicateSuppressionSeconds` are ignored.
 - Timestamps are normalized per plate so events remain strictly increasing.
+- A sequence object is created only when a detection actually matches a configured real/single-camera stage or a valid transitional trigger, so unknown detections do not move `startedAt`.
 - Sequence closure happens after `sequenceCloseTimeoutMinutes` of inactivity unless an open stage or pending candidate still keeps the sequence active.
 
 ### `NotificationService`
 - Evaluates camera-based notification rules against detections.
+- Keeps the first matching camera event as the active alarm anchor; repeated detections on that same camera do not postpone the alarm, while any detection on a different camera for the same plate cancels it.
 - Builds pending notification jobs for repository persistence.
 - Dispatches due notifications through `TelegramNotifier`.
 - Deduplicates identical `(plate, triggeredAt, message)` notification events before report enrichment.

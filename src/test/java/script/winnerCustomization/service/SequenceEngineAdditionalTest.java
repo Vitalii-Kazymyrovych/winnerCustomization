@@ -32,6 +32,19 @@ class SequenceEngineAdditionalTest {
                 .containsExactly("drive_in");
     }
 
+
+    @Test
+    void invalidDetectionsBeforeFirstValidStageDoNotShiftSequenceStart() {
+        AppConfig config = TestFixtures.configWithReportDirectory("");
+
+        SequenceRecord record = engine.build(List.of(
+                new Detection(1, "AA1111", 9999, null, LocalDateTime.of(2026, 3, 22, 9, 55)),
+                new Detection(2, "AA1111", 1001, 10, LocalDateTime.of(2026, 3, 22, 10, 0))
+        ), config, LocalDateTime.of(2026, 3, 22, 11, 0)).getFirst();
+
+        assertThat(record.getStartedAt()).isEqualTo(LocalDateTime.of(2026, 3, 22, 10, 0));
+    }
+
     @Test
     void duplicateSuppressionKeepsOnlyMeaningfulStateChanges() {
         AppConfig config = TestFixtures.configWithReportDirectory("");
