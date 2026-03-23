@@ -35,19 +35,17 @@
     "telegramChatId": "CHAT_ID_IF_ENABLED"
   },
   "sequenceCloseTimeoutMinutes": 2880,
-  "allowTransitionalAfterSingleCamera": false,
-  "duplicateSuppressionSeconds": 2,
   "notifications": [
     {
       "cameraId": 1001,
       "directionRange": { "from": 0, "to": 180 },
       "delaySeconds": 900,
-      "message": "Автомобіль довго стоїть на Drive-In"
+      "message": "No Drive in (out) within 15 minutes"
     },
     {
       "cameraId": 1101,
-      "delaySeconds": 1800,
-      "message": "Автомобіль затримався на Post"
+      "delaySeconds": 900,
+      "message": "No Post in within 15 minutes"
     }
   ],
   "realStages": [
@@ -65,21 +63,10 @@
       "name": "service",
       "label": "Service",
       "inTriggers": [
-        { "cameraId": 1003, "directionRange": { "from": 0, "to": 360 } }
+        { "cameraId": 1003 }
       ],
       "outTriggers": [
-        { "cameraId": 1005, "directionRange": { "from": 0, "to": 180 } },
-        { "cameraId": 1005, "directionRange": { "from": 180, "to": 360 } }
-      ]
-    },
-    {
-      "name": "parking",
-      "label": "Parking",
-      "inTriggers": [
-        { "cameraId": 1006 }
-      ],
-      "outTriggers": [
-        { "cameraId": 1007 }
+        { "cameraId": 1004 }
       ]
     }
   ],
@@ -87,20 +74,20 @@
     {
       "name": "backyard",
       "label": "Backyard",
-      "triggerCameras": [1008],
-      "candidateTimeoutSeconds": 2,
-      "allowedAfter": ["service", "drive_in"],
+      "triggerCameras": [2001],
+      "candidateTimeoutSeconds": 10,
+      "allowedAfter": ["service", "post_1"],
       "sequenceCloseTimeoutOverrideSeconds": 0,
       "showInReportIfIncomplete": false
     },
     {
       "name": "test_drive",
       "label": "Test-Drive",
-      "triggerCameras": [1002, 1009],
-      "candidateTimeoutSeconds": 1800,
-      "allowedAfter": ["service", "parking"],
-      "sequenceCloseTimeoutOverrideSeconds": 3600,
-      "showInReportIfIncomplete": false
+      "triggerCameras": [2002],
+      "candidateTimeoutSeconds": 5,
+      "allowedAfter": ["backyard"],
+      "sequenceCloseTimeoutOverrideSeconds": 900,
+      "showInReportIfIncomplete": true
     }
   ],
   "singleCameraStages": [
@@ -108,12 +95,6 @@
       "name": "post_1",
       "label": "Post 1",
       "cameraId": 1101,
-      "timeoutSeconds": 30
-    },
-    {
-      "name": "post_2",
-      "label": "Post 2",
-      "cameraId": 1102,
       "timeoutSeconds": 30
     }
   ]
