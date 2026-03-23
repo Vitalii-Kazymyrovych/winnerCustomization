@@ -8,9 +8,11 @@
 - Builds stage windows using deterministic rules:
   - `real` stages open on `inTriggers` and keep a sticky `Out` timestamp from `outTriggers`.
 - `transitional` stages start as candidates and materialize only after `candidateTimeoutSeconds`.
+- `real` stages treat `Out` as a sticky boundary marker: it updates report `Out time`, but the stage remains the active context until another stage starts or the sequence finally closes.
+- `transitional` stages remain candidates first: repeated detections from the same trigger source extend the candidate timeout, materialization happens only after the quiet gap is long enough, and `showInReportIfIncomplete = false` removes terminal transitional rows from the saved report when their own close timeout expires.
 - Transitional trigger cameras are now honored only when the currently active/last concrete stage matches `allowedAfter`, so standalone Backyard/Test-Drive detections do not create impossible stage rows.
 - Transitional candidates are also spawned immediately after a configured `allowedAfter` stage finishes, even if no dedicated transitional-camera detection arrives; for example `Parking -> Backyard` can now appear from a `Parking Out` event alone.
-- `single_camera` stages keep the first detection as `In`, stay sticky across repeated detections even when there are large gaps between them, refresh internal `lastSeenAt` on every repeated detection, close at the next stage boundary when one arrives, and close at `lastSeenAt` before sequence/report finalization when the timeout expires.
+- `single_camera` stages keep the first detection as `In`, refresh `lastSeenAt` on every repeated detection, split into a fresh stage after `timeoutSeconds` of silence, close at the next concrete stage boundary when one arrives, and stay open in the report only while neither their own timeout nor the sequence timeout has expired.
 - Generates `Sequences` and `Events` sheets in XLSX.
 - Persists built sequences and pending notifications through repositories.
 - Can schedule Telegram notifications when a plate stays on a configured camera for too long.
