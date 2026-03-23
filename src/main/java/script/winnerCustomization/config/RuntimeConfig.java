@@ -11,8 +11,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -63,18 +64,9 @@ public class RuntimeConfig {
         if (config == null) {
             throw new IllegalArgumentException("Config body is required");
         }
-        if (config.getSourceDatabase() == null || isBlank(config.getSourceDatabase().getSchema())) {
-            throw new IllegalArgumentException("sourceDatabase.schema is required");
-        }
-        if (config.getSourceTable() == null || isBlank(config.getSourceTable().getTable())) {
-            throw new IllegalArgumentException("sourceTable.table is required");
-        }
-        if (config.getSequenceCloseTimeoutMinutes() == null || config.getSequenceCloseTimeoutMinutes() <= 0) {
-            throw new IllegalArgumentException("sequenceCloseTimeoutMinutes must be positive");
-        }
-        if (config.getDuplicateSuppressionSeconds() == null || config.getDuplicateSuppressionSeconds() < 0) {
-            throw new IllegalArgumentException("duplicateSuppressionSeconds must be zero or positive");
-        }
+        require(config.getSourceDatabase() != null && !isBlank(config.getSourceDatabase().getSchema()), "sourceDatabase.schema is required");
+        require(config.getSourceTable() != null && !isBlank(config.getSourceTable().getTable()), "sourceTable.table is required");
+        require(config.getSequenceCloseTimeoutMinutes() != null && config.getSequenceCloseTimeoutMinutes() > 0, "sequenceCloseTimeoutMinutes must be positive");
 
         Set<String> stageNames = new HashSet<>();
         validateRealStages(config, stageNames);
@@ -86,12 +78,8 @@ public class RuntimeConfig {
     private void validateRealStages(AppConfig config, Set<String> stageNames) {
         for (AppConfig.RealStageConfig stage : safe(config.getRealStages())) {
             validateStageIdentity(stage.getName(), stage.getLabel(), stageNames, "realStages");
-            if (safe(stage.getInTriggers()).isEmpty()) {
-                throw new IllegalArgumentException("realStages." + stage.getName() + ".inTriggers must not be empty");
-            }
-            if (safe(stage.getOutTriggers()).isEmpty()) {
-                throw new IllegalArgumentException("realStages." + stage.getName() + ".outTriggers must not be empty");
-            }
+            require(!safe(stage.getInTriggers()).isEmpty(), "realStages." + stage.getName() + ".inTriggers must not be empty");
+            require(!safe(stage.getOutTriggers()).isEmpty(), "realStages." + stage.getName() + ".outTriggers must not be empty");
             stage.getInTriggers().forEach(trigger -> validateTrigger(trigger, "realStages." + stage.getName() + ".inTriggers"));
             stage.getOutTriggers().forEach(trigger -> validateTrigger(trigger, "realStages." + stage.getName() + ".outTriggers"));
         }
@@ -100,66 +88,45 @@ public class RuntimeConfig {
     private void validateSingleStages(AppConfig config, Set<String> stageNames) {
         for (AppConfig.SingleCameraStageConfig stage : safe(config.getSingleCameraStages())) {
             validateStageIdentity(stage.getName(), stage.getLabel(), stageNames, "singleCameraStages");
-            if (stage.getCameraId() == null) {
-                throw new IllegalArgumentException("singleCameraStages." + stage.getName() + ".cameraId is required");
-            }
-            if (stage.getTimeoutSeconds() == null || stage.getTimeoutSeconds() <= 0) {
-                throw new IllegalArgumentException("singleCameraStages." + stage.getName() + ".timeoutSeconds must be positive");
-            }
+            require(stage.getCameraId() != null, "singleCameraStages." + stage.getName() + ".cameraId is required");
+            require(stage.getTimeoutSeconds() != null && stage.getTimeoutSeconds() > 0,
+                    "singleCameraStages." + stage.getName() + ".timeoutSeconds must be positive");
         }
     }
 
     private void validateTransitionalStages(AppConfig config, Set<String> stageNames) {
         for (AppConfig.TransitionalStageConfig stage : safe(config.getTransitionalStages())) {
             validateStageIdentity(stage.getName(), stage.getLabel(), stageNames, "transitionalStages");
-            if (safe(stage.getTriggerCameras()).isEmpty() && safe(stage.getAllowedAfter()).isEmpty()) {
-                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".must define triggerCameras or allowedAfter");
-            }
-            if (stage.getCandidateTimeoutSeconds() == null || stage.getCandidateTimeoutSeconds() <= 0) {
-                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".candidateTimeoutSeconds must be positive");
-            }
-            if (stage.getSequenceCloseTimeoutOverrideSeconds() != null && stage.getSequenceCloseTimeoutOverrideSeconds() < 0) {
-                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".sequenceCloseTimeoutOverrideSeconds must be zero or positive");
-            }
+            require(!safe(stage.getTriggerCameras()).isEmpty() || !safe(stage.getAllowedAfter()).isEmpty(),
+                    "transitionalStages." + stage.getName() + ".must define triggerCameras or allowedAfter");
+            require(stage.getCandidateTimeoutSeconds() != null && stage.getCandidateTimeoutSeconds() > 0,
+                    "transitionalStages." + stage.getName() + ".candidateTimeoutSeconds must be positive");
+            require(stage.getSequenceCloseTimeoutOverrideSeconds() == null || stage.getSequenceCloseTimeoutOverrideSeconds() >= 0,
+                    "transitionalStages." + stage.getName() + ".sequenceCloseTimeoutOverrideSeconds must be zero or positive");
             for (String allowed : safe(stage.getAllowedAfter())) {
-                if (!stageNames.contains(allowed)) {
-                    throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".allowedAfter references unknown stage '" + allowed + "'");
-                }
+                require(stageNames.contains(allowed),
+                        "transitionalStages." + stage.getName() + ".allowedAfter references unknown stage '" + allowed + "'");
             }
         }
     }
 
     private void validateNotifications(AppConfig config) {
         for (AppConfig.NotificationRule rule : safe(config.getNotifications())) {
-            if (rule.getCameraId() == null) {
-                throw new IllegalArgumentException("notifications[].cameraId is required");
-            }
-            if (rule.getDelaySeconds() == null || rule.getDelaySeconds() <= 0) {
-                throw new IllegalArgumentException("notifications[].delaySeconds must be positive");
-            }
-            if (isBlank(rule.getMessage())) {
-                throw new IllegalArgumentException("notifications[].message is required");
-            }
+            require(rule.getCameraId() != null, "notifications[].cameraId is required");
+            require(rule.getDelaySeconds() != null && rule.getDelaySeconds() > 0, "notifications[].delaySeconds must be positive");
+            require(!isBlank(rule.getMessage()), "notifications[].message is required");
             validateDirectionRange(rule.getDirectionRange(), "notifications[].directionRange");
         }
     }
 
     private void validateStageIdentity(String name, String label, Set<String> stageNames, String path) {
-        if (isBlank(name)) {
-            throw new IllegalArgumentException(path + "[].name is required");
-        }
-        if (isBlank(label)) {
-            throw new IllegalArgumentException(path + "." + name + ".label is required");
-        }
-        if (!stageNames.add(name)) {
-            throw new IllegalArgumentException("Stage names must be unique: " + name);
-        }
+        require(!isBlank(name), path + "[].name is required");
+        require(!isBlank(label), path + "." + name + ".label is required");
+        require(stageNames.add(name), "Stage names must be unique: " + name);
     }
 
     private void validateTrigger(AppConfig.CameraTrigger trigger, String path) {
-        if (trigger == null || trigger.getCameraId() == null) {
-            throw new IllegalArgumentException(path + "[].cameraId is required");
-        }
+        require(trigger != null && trigger.getCameraId() != null, path + "[].cameraId is required");
         validateDirectionRange(trigger.getDirectionRange(), path + "[].directionRange");
     }
 
@@ -167,19 +134,21 @@ public class RuntimeConfig {
         if (range == null) {
             return;
         }
-        if (range.getFrom() == null || range.getTo() == null) {
-            throw new IllegalArgumentException(path + " must contain both from and to");
-        }
-        if (Objects.equals(range.getFrom(), range.getTo())) {
-            throw new IllegalArgumentException(path + " from/to must differ");
-        }
+        require(range.getFrom() != null && range.getTo() != null, path + " must contain both from and to");
+        require(!Objects.equals(range.getFrom(), range.getTo()), path + " from/to must differ");
     }
 
-    private <T> java.util.List<T> safe(java.util.List<T> items) {
-        return items == null ? java.util.List.of() : items;
+    private <T> List<T> safe(List<T> items) {
+        return items == null ? List.of() : items;
     }
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private void require(boolean condition, String message) {
+        if (!condition) {
+            throw new IllegalArgumentException(message);
+        }
     }
 }

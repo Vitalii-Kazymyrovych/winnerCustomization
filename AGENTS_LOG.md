@@ -1,0 +1,1 @@
+- 2026-03-23: rebuilt the stage engine around `logic/StageSequenceProcessor`, removed obsolete config fields from `AppConfig`/`config.json.example`, added notification planner/sender/report writer services, replaced tests with logic-focused coverage, and refreshed README + TECHNICAL_SPEC.

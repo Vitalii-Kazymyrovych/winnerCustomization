@@ -12,8 +12,6 @@ public class AppConfig {
     private ReportConfig reports;
     private MessagingConfig messaging;
     private Integer sequenceCloseTimeoutMinutes = 2880;
-    private Boolean allowTransitionalAfterSingleCamera = false;
-    private Integer duplicateSuppressionSeconds = 2;
     private List<NotificationRule> notifications = new ArrayList<>();
     private List<RealStageConfig> realStages = new ArrayList<>();
     private List<TransitionalStageConfig> transitionalStages = new ArrayList<>();
@@ -33,10 +31,6 @@ public class AppConfig {
     public void setMessaging(MessagingConfig messaging) { this.messaging = messaging; }
     public Integer getSequenceCloseTimeoutMinutes() { return sequenceCloseTimeoutMinutes; }
     public void setSequenceCloseTimeoutMinutes(Integer sequenceCloseTimeoutMinutes) { this.sequenceCloseTimeoutMinutes = sequenceCloseTimeoutMinutes; }
-    public Boolean getAllowTransitionalAfterSingleCamera() { return allowTransitionalAfterSingleCamera; }
-    public void setAllowTransitionalAfterSingleCamera(Boolean allowTransitionalAfterSingleCamera) { this.allowTransitionalAfterSingleCamera = allowTransitionalAfterSingleCamera; }
-    public Integer getDuplicateSuppressionSeconds() { return duplicateSuppressionSeconds; }
-    public void setDuplicateSuppressionSeconds(Integer duplicateSuppressionSeconds) { this.duplicateSuppressionSeconds = duplicateSuppressionSeconds; }
     public List<NotificationRule> getNotifications() { return notifications; }
     public void setNotifications(List<NotificationRule> notifications) { this.notifications = notifications; }
     public List<RealStageConfig> getRealStages() { return realStages; }
