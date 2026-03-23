@@ -49,7 +49,7 @@ public class NotificationService {
                     pending.remove(key);
                     continue;
                 }
-                if (matches(rule, detection)) {
+                if (matches(rule, detection) && existing == null) {
                     pending.put(key, new PendingNotification(0L,
                             detection.plateNumber(),
                             rule.getCameraId(),
@@ -86,7 +86,7 @@ public class NotificationService {
                     pending.remove(key);
                     continue;
                 }
-                if (matches(rule, detection)) {
+                if (matches(rule, detection) && existing == null) {
                     PendingNotification notification = new PendingNotification(0L,
                             detection.plateNumber(),
                             rule.getCameraId(),

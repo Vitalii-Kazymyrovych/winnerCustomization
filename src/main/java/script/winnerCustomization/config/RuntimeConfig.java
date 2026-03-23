@@ -112,8 +112,8 @@ public class RuntimeConfig {
     private void validateTransitionalStages(AppConfig config, Set<String> stageNames) {
         for (AppConfig.TransitionalStageConfig stage : safe(config.getTransitionalStages())) {
             validateStageIdentity(stage.getName(), stage.getLabel(), stageNames, "transitionalStages");
-            if (safe(stage.getTriggerCameras()).isEmpty()) {
-                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".triggerCameras must not be empty");
+            if (safe(stage.getTriggerCameras()).isEmpty() && safe(stage.getAllowedAfter()).isEmpty()) {
+                throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".must define triggerCameras or allowedAfter");
             }
             if (stage.getCandidateTimeoutSeconds() == null || stage.getCandidateTimeoutSeconds() <= 0) {
                 throw new IllegalArgumentException("transitionalStages." + stage.getName() + ".candidateTimeoutSeconds must be positive");

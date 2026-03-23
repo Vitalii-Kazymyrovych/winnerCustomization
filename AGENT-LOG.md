@@ -130,3 +130,9 @@
 - Reworked `SequenceEngine` again around explicit active-stage / pending-candidate state so the repo now consistently models sticky real-stage `Out`, partial real recoveries, transitional materialization/expiry, and timeout-driven single-camera splitting.
 - Rewrote `SequenceEngineTest` / `SequenceEngineAdditionalTest` into spec-oriented timeline cases and refreshed dataset/report regression expectations so the committed `results/` replay matches the new engine behavior.
 - Updated `README.md` and `TECHNICAL_SPEC.md` to document the current stage-engine semantics (real sticky Out, transitional candidate reset/expiry, and timeout-split single-camera stages).
+
+## 2026-03-23
+- Fixed `SequenceEngine` so plate sequences start only from the first valid stage/trigger detection; unknown detections are ignored instead of shifting `SequenceRecord.startedAt`.
+- Fixed `NotificationService` alarm anchoring so repeated detections on the same configured camera no longer postpone a pending alarm; only a different camera detection cancels it.
+- Relaxed transitional-stage validation in `RuntimeConfig`: a transitional stage may now omit `triggerCameras` when it is created purely from `allowedAfter` stage endings, and added unit coverage for the new validation/engine/notification rules.
+- Updated `README.md` and `TECHNICAL_SPEC.md` to document the corrected sequence-start, notification, and transitional-config behavior.

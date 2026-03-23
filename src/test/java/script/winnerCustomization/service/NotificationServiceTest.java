@@ -42,6 +42,21 @@ class NotificationServiceTest {
         assertThat(events).isEmpty();
     }
 
+
+    @Test
+    void repeatedDetectionsOnSameCameraDoNotResetPendingAlarm() {
+        NotificationService service = service(new InMemoryNotificationRepository());
+
+        List<SequenceRecord.NotificationEvent> events = service.evaluate(List.of(
+                new Detection(1, "AA1111", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 0)),
+                new Detection(2, "AA1111", 1001, null, LocalDateTime.of(2026, 3, 1, 10, 5)),
+                new Detection(3, "AA1111", 1003, null, LocalDateTime.of(2026, 3, 1, 10, 20))
+        ), TestConfigFactory.config());
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().triggeredAt()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 15));
+    }
+
     @Test
     void deduplicatesEqualMessagesTriggeredAtSameTimeFromDifferentCameras() {
         NotificationService service = service(new InMemoryNotificationRepository());

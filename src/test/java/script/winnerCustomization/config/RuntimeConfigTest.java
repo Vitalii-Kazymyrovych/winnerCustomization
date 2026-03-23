@@ -6,12 +6,24 @@ import script.winnerCustomization.model.AppConfig;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RuntimeConfigTest {
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+
+    @Test
+    void allowsTransitionalStageWithoutTriggerCamerasWhenAllowedAfterIsConfigured() {
+        AppConfig config = TestFixtures.configWithReportDirectory("");
+        AppConfig.TransitionalStageConfig backyard = config.getTransitionalStages().getFirst();
+        backyard.setTriggerCameras(List.of());
+        backyard.setAllowedAfter(List.of("service"));
+
+        runtimeConfig().validate(config);
+    }
 
     @Test
     void rejectsDuplicateStageNames() {
@@ -124,9 +136,10 @@ class RuntimeConfigTest {
 
         AppConfig missingTriggerCameras = TestFixtures.configWithReportDirectory("");
         missingTriggerCameras.getTransitionalStages().getFirst().setTriggerCameras(java.util.List.of());
+        missingTriggerCameras.getTransitionalStages().getFirst().setAllowedAfter(java.util.List.of());
         assertThatThrownBy(() -> runtimeConfig.validate(missingTriggerCameras))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("triggerCameras must not be empty");
+                .hasMessageContaining("must define triggerCameras or allowedAfter");
     }
 
     private RuntimeConfig runtimeConfig() {
