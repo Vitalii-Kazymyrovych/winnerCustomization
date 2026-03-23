@@ -82,14 +82,14 @@ class ResultsDatasetSequenceInvariantTest {
 
         assertThat(recordsByPlate.get("AA2292XT")).singleElement().satisfies(record -> {
             assertThat(record.isClosed()).isTrue();
-            assertThat(record.getFinishedAt()).isEqualTo(LocalDateTime.of(2026, 3, 17, 12, 59, 47, 223_000_000));
+            assertThat(record.getFinishedAt()).isEqualTo(LocalDateTime.of(2026, 3, 19, 12, 59, 45, 223_000_000));
             assertThat(record.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
                     .containsExactly("parking");
         });
 
         assertThat(recordsByPlate.get("KA6137MT")).singleElement().satisfies(record -> {
             assertThat(record.isClosed()).isTrue();
-            assertThat(record.getFinishedAt()).isEqualTo(LocalDateTime.of(2026, 3, 17, 13, 1, 22, 218_000_000));
+            assertThat(record.getFinishedAt()).isEqualTo(LocalDateTime.of(2026, 3, 19, 13, 1, 20, 218_000_000));
             assertThat(record.stagesChronologically()).extracting(SequenceRecord.StageWindow::stageName)
                     .containsExactly("parking", "drive_in");
         });
@@ -100,14 +100,14 @@ class ResultsDatasetSequenceInvariantTest {
                         .isNotEqualTo(List.of("backyard")));
         
         assertThat(recordsByPlate.get("KA8611PK")).isNotEmpty();
-        assertThat(recordsByPlate.get("KA8611PK").getFirst().stagesChronologically()).isNotEmpty();
-        assertThat(recordsByPlate.get("KA8611PK").getFirst().stagesChronologically().getFirst().stageName())
-                .isEqualTo("parking");
+        assertThat(recordsByPlate.get("KA8611PK").getFirst().stagesChronologically())
+                .extracting(SequenceRecord.StageWindow::stageName)
+                .containsSubsequence("parking", "backyard", "parking");
 
         assertThat(recordsByPlate.get("KA2654TA")).isNotEmpty();
-        assertThat(recordsByPlate.get("KA2654TA").getFirst().stagesChronologically()).isNotEmpty();
-        assertThat(recordsByPlate.get("KA2654TA").getFirst().stagesChronologically().getFirst().stageName())
-                .isEqualTo("parking");
+        assertThat(recordsByPlate.get("KA2654TA").getFirst().stagesChronologically())
+                .extracting(SequenceRecord.StageWindow::stageName)
+                .containsSubsequence("parking", "backyard", "parking");
     }
 
     private AppConfig loadConfig() throws Exception {

@@ -45,6 +45,7 @@ The engine is built around the three stage types only.
 - Camera-triggered transitional candidates are accepted only when the active stage (or the latest non-partial recorded stage after a same-event closure) matches `allowedAfter`; otherwise the trigger is ignored as an impossible standalone transition.
 - Repeated detections for the same transitional source refresh the candidate timeout instead of creating duplicate stages.
 - A candidate materializes only after `candidateTimeoutSeconds` without another stage start, and repeated detections from the same source refresh that deadline instead of spawning duplicate transitional rows.
+- Once a transitional candidate has materialized, the resulting stage is always reportable; `showInReportIfIncomplete = false` only removes it later if the sequence ends on that transitional timeout without any following concrete stage.
 - If the same transitional stage is already active, repeated trigger-camera detections only refresh internal activity and do not create a second consecutive stage.
 - If `sequenceCloseTimeoutOverrideSeconds` is set (including `0`), the materialized transitional stage owns the sequence inactivity timeout; `0` closes the stage/sequence immediately after materialization time, which is used for Backyard-like terminal transitions.
 - As soon as a later `real` or `single_camera` stage starts, that transitional timeout override is cleared so the newly opened concrete stage falls back to the normal sequence timeout rules.
@@ -101,6 +102,7 @@ Unit tests cover:
 - notification cancellation/triggering/deduplication,
 - runtime config validation,
 - committed `results/` dataset regression coverage for compact sticky-post reporting on production-like data,
+- exact CSV snapshot coverage against `results/expected_sequences_logic.csv`,
 - full-dataset invariants that iterate through every plate / sequence and verify single-camera stage compaction plus non-overlapping stage order,
 - controller/JDBC/bootstrap/startup coverage for HTTP adapters, repository SQL generation, runtime-config file persistence, manual source-pull cooldown behavior, and database bootstrap permission flows,
 - JaCoCo report generation during `./mvnw -B test` for post-run inspection of instruction/branch coverage.

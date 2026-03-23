@@ -9,7 +9,7 @@
   - `real` stages open on `inTriggers` and keep a sticky `Out` timestamp from `outTriggers`.
 - `transitional` stages start as candidates and materialize only after `candidateTimeoutSeconds`.
 - `real` stages treat `Out` as a sticky boundary marker: it updates report `Out time`, but the stage remains the active context until another stage starts or the sequence finally closes.
-- `transitional` stages remain candidates first: repeated detections from the same trigger source extend the candidate timeout, materialization happens only after the quiet gap is long enough, and `showInReportIfIncomplete = false` removes terminal transitional rows from the saved report when their own close timeout expires.
+- `transitional` stages remain candidates first: repeated detections from the same trigger source extend the candidate timeout, materialization happens only after the quiet gap is long enough, and `showInReportIfIncomplete = false` removes only terminal incomplete transitional rows when their own close timeout expires.
 - Transitional trigger cameras are now honored only when the currently active/last concrete stage matches `allowedAfter`, so standalone Backyard/Test-Drive detections do not create impossible stage rows.
 - Transitional candidates are also spawned immediately after a configured `allowedAfter` stage finishes, even if no dedicated transitional-camera detection arrives; for example `Parking -> Backyard` can now appear from a `Parking Out` event alone.
 - `single_camera` stages keep the first detection as `In`, refresh `lastSeenAt` on every repeated detection, split into a fresh stage after `timeoutSeconds` of silence, close at the next concrete stage boundary when one arrives, and stay open in the report only while neither their own timeout nor the sequence timeout has expired.
@@ -70,4 +70,4 @@ Run unit tests with:
 ./mvnw -B test
 ```
 This now also generates a JaCoCo HTML coverage report in `target/site/jacoco/index.html` so you can inspect which branches were exercised.
-The automated regression suite replays the full committed `results/` dataset, checks every plate / sequence for compact single-camera stage rendering and non-overlapping stage order, and additionally verifies controllers, JDBC adapters, runtime-config persistence, notification scheduling, bootstrap helpers, and startup wiring with isolated unit tests.
+The automated regression suite replays the full committed `results/` dataset, checks every plate / sequence for compact single-camera stage rendering and non-overlapping stage order, compares the generated stage timeline against the committed logic snapshot `results/expected_sequences_logic.csv`, and additionally verifies controllers, JDBC adapters, runtime-config persistence, notification scheduling, bootstrap helpers, and startup wiring with isolated unit tests.
