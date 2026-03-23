@@ -41,6 +41,16 @@ class RuntimeConfigTest {
 
 
     @Test
+    void rejectsMissingReportOutputDirectory() {
+        AppConfig config = TestConfigFactory.standardConfig();
+        config.getReports().setOutputDirectory("   ");
+
+        assertThatThrownBy(() -> runtimeConfig.validate(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("reports.outputDirectory is required");
+    }
+
+    @Test
     void rejectsNonPositiveSourceRefreshInterval() {
         AppConfig config = TestConfigFactory.standardConfig();
         config.getSourceRefresh().setIntervalSeconds(0);
