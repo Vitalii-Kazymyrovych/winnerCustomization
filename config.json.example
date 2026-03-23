@@ -35,8 +35,6 @@
     "telegramChatId": "CHAT_ID_IF_ENABLED"
   },
   "sequenceCloseTimeoutMinutes": 2880,
-  "allowTransitionalAfterSingleCamera": false,
-  "duplicateSuppressionSeconds": 2,
   "notifications": [
     {
       "cameraId": 1001,
