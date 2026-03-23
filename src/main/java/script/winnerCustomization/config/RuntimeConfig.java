@@ -67,6 +67,7 @@ public class RuntimeConfig {
         require(config.getSourceDatabase() != null && !isBlank(config.getSourceDatabase().getSchema()), "sourceDatabase.schema is required");
         require(config.getSourceTable() != null && !isBlank(config.getSourceTable().getTable()), "sourceTable.table is required");
         require(config.getSequenceCloseTimeoutMinutes() != null && config.getSequenceCloseTimeoutMinutes() > 0, "sequenceCloseTimeoutMinutes must be positive");
+        require(config.getReports() != null && !isBlank(config.getReports().getOutputDirectory()), "reports.outputDirectory is required");
         require(config.getSourceRefresh() != null, "sourceRefresh is required");
         require(config.getSourceRefresh().getIntervalSeconds() != null && config.getSourceRefresh().getIntervalSeconds() > 0,
                 "sourceRefresh.intervalSeconds must be positive");

@@ -5,7 +5,7 @@
 ### `config`
 - `RuntimeConfig`
   - читает `config.json` из `user.dir`;
-  - валидирует обязательные поля, включая `sourceRefresh.intervalSeconds`;
+  - валидирует обязательные поля, включая `reports.outputDirectory` и `sourceRefresh.intervalSeconds`;
   - хранит актуальный `AppConfig` в `AtomicReference`;
   - умеет `load()`, `reload()` и `save()`.
 - `JacksonConfig`, `JdbcConfig`, `TimeConfig` создают инфраструктурные Spring beans.
@@ -27,7 +27,9 @@
 
 ### `service`
 - `ReportService`
-  - строит отчёт на текущий момент;
+  - строит Excel-отчёт на текущий момент или для исторической даты;
+  - сохраняет файл в `reports.outputDirectory`, создавая директорию при необходимости;
+  - относительный `reports.outputDirectory` резолвит относительно папки, где лежит `config.json`;
   - для исторической даты всегда перерабатывает полную историю detections и только потом фильтрует нужный день.
 - `SourcePullTriggerService`
   - вручную запускает чтение detections, пересчёт sequences и `replaceAll()` в sequence repository;
@@ -51,7 +53,7 @@
 - `SequenceReportWriter` формирует workbook `Sequences` + `Events` через Apache POI.
 
 ### `web`
-- Контроллеры делегируют операции в сервисы и не содержат sequence-логики.
+- Контроллеры делегируют операции в сервисы и не содержат sequence-логики. `ReportController` больше не отдаёт xlsx как attachment, а возвращает JSON со статусом, путём сохранённого файла и размером.
 
 ## Sequence processing rules
 
@@ -106,7 +108,7 @@
   - сохраняет незавершённый `transitional` только если `showInReportIfIncomplete = true`.
 
 ## Historical reporting
-- `ReportService.buildReport(LocalDate)` больше не использует day-bounded fetch как источник истины.
+- `ReportService.saveReport(LocalDate)` больше не использует day-bounded fetch как источник истины.
 - Алгоритм:
   1. загружает полную историю `DetectionRepository.findAll()`;
   2. прогоняет `StageSequenceProcessor.process(...)` на весь объём;

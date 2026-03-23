@@ -15,6 +15,8 @@ import script.winnerCustomization.report.SequenceReportWriter;
 import script.winnerCustomization.repository.DetectionRepository;
 
 import java.io.ByteArrayInputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -28,24 +30,31 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReportServiceTest {
 
     @Test
-    void datedReportReprocessesFullHistoryBeforeFilteringDayWindow() throws Exception {
+    void datedReportReprocessesFullHistoryBeforeFilteringDayWindowAndSavesFile() throws Exception {
         InMemoryDetectionRepository repository = new InMemoryDetectionRepository(List.of(
                 new Detection(1, "AA1111", 3001, null, java.time.LocalDateTime.of(2026, 3, 22, 23, 55)),
                 new Detection(2, "AA1111", 3001, null, java.time.LocalDateTime.of(2026, 3, 23, 0, 10)),
                 new Detection(3, "AA1111", 1001, 90, java.time.LocalDateTime.of(2026, 3, 23, 0, 20))
         ));
+        AppConfig config = TestConfigFactory.standardConfig();
+        Path outputDirectory = Files.createTempDirectory("dated-report-output");
+        config.getReports().setOutputDirectory(outputDirectory.toString());
+
         ReportService service = new ReportService(
                 repository,
-                runtimeConfig(TestConfigFactory.standardConfig()),
+                runtimeConfig(config),
                 new StageSequenceProcessor(),
                 new SequenceReportWriter(),
                 Clock.fixed(Instant.parse("2026-03-24T00:00:00Z"), ZoneOffset.UTC));
 
-        byte[] report = service.buildReport(LocalDate.of(2026, 3, 23));
+        ReportService.SavedReport savedReport = service.saveReport(LocalDate.of(2026, 3, 23));
 
         assertThat(repository.findAllCalled).isTrue();
         assertThat(repository.findBetweenCalled).isFalse();
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(report))) {
+        assertThat(savedReport.path()).isEqualTo(outputDirectory.resolve("sequences-2026-03-23.xlsx"));
+        assertThat(savedReport.path()).exists();
+        assertThat(savedReport.sizeBytes()).isGreaterThan(0);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(savedReport.path()))) {
             List<List<String>> rows = new ArrayList<>();
             workbook.getSheet("Events").forEach(row -> rows.add(readRow(row)));
             assertThat(rows).anySatisfy(row -> {
@@ -54,6 +63,30 @@ class ReportServiceTest {
                 assertThat(row.get(3)).isEqualTo("2026-03-23 00:10:00");
             });
             assertThat(rows).anySatisfy(row -> assertThat(row.get(1)).isEqualTo("Drive In"));
+        }
+    }
+
+    @Test
+    void currentReportUsesConfiguredRelativeOutputDirectoryNearConfigJson() throws Exception {
+        AppConfig config = TestConfigFactory.standardConfig();
+        config.getReports().setOutputDirectory("reports-out");
+        Path configDirectory = Files.createTempDirectory("runtime-config-dir");
+
+        ReportService service = new ReportService(
+                new InMemoryDetectionRepository(List.of()),
+                runtimeConfig(config, configDirectory.resolve("config.json")),
+                new StageSequenceProcessor(),
+                new SequenceReportWriter(),
+                Clock.fixed(Instant.parse("2026-03-24T00:00:00Z"), ZoneOffset.UTC));
+
+        ReportService.SavedReport savedReport = service.saveReport();
+
+        assertThat(savedReport.path()).isEqualTo(configDirectory.resolve("reports-out").resolve("sequences.xlsx"));
+        assertThat(savedReport.path()).exists();
+        assertThat(savedReport.sizeBytes()).isGreaterThan(0);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(Files.readAllBytes(savedReport.path())))) {
+            assertThat(workbook.getSheet("Sequences")).isNotNull();
+            assertThat(workbook.getSheet("Events")).isNotNull();
         }
     }
 
@@ -67,8 +100,13 @@ class ReportServiceTest {
     }
 
     private RuntimeConfig runtimeConfig(AppConfig config) {
+        return runtimeConfig(config, Path.of(System.getProperty("user.dir"), "config.json"));
+    }
+
+    private RuntimeConfig runtimeConfig(AppConfig config, Path configPath) {
         RuntimeConfig runtimeConfig = new RuntimeConfig(new ObjectMapper().registerModule(new JavaTimeModule()));
         ReflectionTestUtils.setField(runtimeConfig, "appConfig", new java.util.concurrent.atomic.AtomicReference<>(config));
+        ReflectionTestUtils.setField(runtimeConfig, "configPath", configPath);
         return runtimeConfig;
     }
 

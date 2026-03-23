@@ -1,6 +1,6 @@
 # winnerCustomization
 
-Приложение читает события ALPR из source-таблицы, строит последовательности этапов по номеру автомобиля, сохраняет пересчитанные sequence records, формирует Excel-отчёт и отправляет уведомления по правилам из `config.json`.
+Приложение читает события ALPR из source-таблицы, строит последовательности этапов по номеру автомобиля, сохраняет пересчитанные sequence records, формирует Excel-отчёт в папку из `config.json` и отправляет уведомления по правилам из `config.json`.
 
 ## Что умеет
 - Обрабатывать три типа этапов: `real`, `transitional`, `single_camera`.
@@ -23,6 +23,7 @@
 - `sequenceCloseTimeoutMinutes` — общий тайм-аут закрытия последовательности.
 - `sourceRefresh.enabled` — включает/выключает фоновый опрос source database.
 - `sourceRefresh.intervalSeconds` — интервал фонового обновления и логирования pull-прохода.
+- `reports.outputDirectory` — папка, в которую HTTP endpoint сохраняет Excel-отчёты. Можно указать абсолютный путь вроде `C:/Users/vkazymyrovych/Desktop/reports` или путь относительно папки с `config.json`.
 - `notifications[]` — камеры/направления, которые создают alarm и текст уведомления.
 - `realStages[]` — этапы с отдельными `In`/`Out`-триггерами.
 - `transitionalStages[]` — переходные этапы с `triggerCameras`, `allowedAfter`, `candidateTimeoutSeconds`, опциональным `sequenceCloseTimeoutOverrideSeconds` и флагом `showInReportIfIncomplete`.
@@ -62,8 +63,8 @@
 ## HTTP endpoints
 - `GET /config` — текущее содержимое runtime-конфига.
 - `POST /config` — сохранить новый конфиг.
-- `GET /report/sequences.xlsx` — собрать актуальный Excel-отчёт.
-- `GET /report/sequences.xlsx/{dd-MM-yyyy}` — отчёт по календарной дате.
+- `GET /report/sequences.xlsx` — триггерит сохранение актуального Excel-отчёта в `reports.outputDirectory`.
+- `GET /report/sequences.xlsx/{dd-MM-yyyy}` — триггерит сохранение Excel-отчёта за календарную дату в `reports.outputDirectory`.
 - `GET /source/trigger-pull` — вручную пересчитать последовательности и записать их в sequence storage.
 
 ## Логи и фоновое обновление
