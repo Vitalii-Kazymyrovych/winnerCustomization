@@ -70,7 +70,7 @@ public class ReportService {
         Files.createDirectories(outputDirectory);
         Path savedPath = outputDirectory.resolve(fileName);
         Files.write(savedPath, body);
-        return new SavedReport(savedPath, body.length);
+        return new SavedReport(fileName, savedPath, body.length, body);
     }
 
     private Path resolveOutputDirectory(AppConfig config) {
@@ -90,6 +90,6 @@ public class ReportService {
         return writer.write(processor.process(detections, runtimeConfig.get(), reportAt), reportAt);
     }
 
-    public record SavedReport(Path path, long sizeBytes) {
+    public record SavedReport(String fileName, Path path, long sizeBytes, byte[] body) {
     }
 }

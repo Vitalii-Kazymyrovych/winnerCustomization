@@ -8,3 +8,4 @@
 
 - 2026-03-23: Updated `StageSequenceProcessor` so single-camera stages no longer auto-close on their own timeout; they now stay open across all same-camera detections and close on the last post detection only when another camera/stage starts. Added regression tests and refreshed README/technical spec.
 
+- 2026-03-23: Restored XLSX download responses on `/report/sequences.xlsx` endpoints while keeping report persistence to `reports.outputDirectory`, added response metadata/body coverage in service tests plus controller attachment tests, and updated README/technical spec.

@@ -29,6 +29,7 @@
 - `ReportService`
   - строит Excel-отчёт на текущий момент или для исторической даты;
   - сохраняет файл в `reports.outputDirectory`, создавая директорию при необходимости;
+  - возвращает метаданные сохранённого файла вместе с `byte[]` отчёта, чтобы web-слой мог отдать attachment без повторной генерации;
   - относительный `reports.outputDirectory` резолвит относительно папки, где лежит `config.json`;
   - для исторической даты всегда перерабатывает полную историю detections и только потом фильтрует нужный день.
 - `SourcePullTriggerService`
@@ -53,7 +54,7 @@
 - `SequenceReportWriter` формирует workbook `Sequences` + `Events` через Apache POI.
 
 ### `web`
-- Контроллеры делегируют операции в сервисы и не содержат sequence-логики. `ReportController` больше не отдаёт xlsx как attachment, а возвращает JSON со статусом, путём сохранённого файла и размером.
+- Контроллеры делегируют операции в сервисы и не содержат sequence-логики. `ReportController` отдаёт xlsx как attachment, выставляет `X-Saved-Report-Path` с фактическим путём сохранения и использует тот же файл/байты, которые одновременно сохраняются на диск.
 
 ## Sequence processing rules
 
@@ -108,11 +109,12 @@
   - сохраняет незавершённый `transitional` только если `showInReportIfIncomplete = true`.
 
 ## Historical reporting
-- `ReportService.saveReport(LocalDate)` больше не использует day-bounded fetch как источник истины.
+- `ReportService.saveReport(LocalDate)` не использует day-bounded fetch как источник истины.
 - Алгоритм:
   1. загружает полную историю `DetectionRepository.findAll()`;
   2. прогоняет `StageSequenceProcessor.process(...)` на весь объём;
-  3. фильтрует `SequenceRecord`/`StageWindow`, пересекающие окно `[dayStart, nextDayStart)`.
+  3. фильтрует `SequenceRecord`/`StageWindow`, пересекающие окно `[dayStart, nextDayStart)`;
+  4. сохраняет итоговый `.xlsx` в `reports.outputDirectory` и возвращает те же байты в HTTP download response.
 
 ## Scheduled source refresh and logging
 - `SourceRefreshSchedulerService.refreshSequencesFromSource()` вызывается по fixed delay.
@@ -132,6 +134,7 @@
   - partial `Out` поверх active transitional;
   - непрерывный single-camera визит без timeout-дробления и его закрытие при переходе на другую камеру;
   - sequence close с удалением incomplete transitional.
-- `ReportServiceTest` проверяет перерасчёт отчёта по полной истории.
+- `ReportServiceTest` проверяет перерасчёт отчёта по полной истории и совпадение сохранённого файла с байтами, отданными в web-слой.
+- `ReportControllerTest` проверяет attachment-ответ, `Content-Disposition`, `Content-Length` и заголовок `X-Saved-Report-Path`.
 - `RuntimeConfigTest` проверяет валидацию `sourceRefresh`.
 - `SourceRefreshSchedulerServiceTest` проверяет scheduled refresh при enabled/disabled config.

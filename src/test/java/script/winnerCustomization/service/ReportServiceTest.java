@@ -51,9 +51,11 @@ class ReportServiceTest {
 
         assertThat(repository.findAllCalled).isTrue();
         assertThat(repository.findBetweenCalled).isFalse();
+        assertThat(savedReport.fileName()).isEqualTo("sequences-2026-03-23.xlsx");
         assertThat(savedReport.path()).isEqualTo(outputDirectory.resolve("sequences-2026-03-23.xlsx"));
         assertThat(savedReport.path()).exists();
         assertThat(savedReport.sizeBytes()).isGreaterThan(0);
+        assertThat(savedReport.body()).isEqualTo(Files.readAllBytes(savedReport.path()));
         try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(savedReport.path()))) {
             List<List<String>> rows = new ArrayList<>();
             workbook.getSheet("Events").forEach(row -> rows.add(readRow(row)));
@@ -81,10 +83,12 @@ class ReportServiceTest {
 
         ReportService.SavedReport savedReport = service.saveReport();
 
+        assertThat(savedReport.fileName()).isEqualTo("sequences.xlsx");
         assertThat(savedReport.path()).isEqualTo(configDirectory.resolve("reports-out").resolve("sequences.xlsx"));
         assertThat(savedReport.path()).exists();
         assertThat(savedReport.sizeBytes()).isGreaterThan(0);
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(Files.readAllBytes(savedReport.path())))) {
+        assertThat(savedReport.body()).isEqualTo(Files.readAllBytes(savedReport.path()));
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(savedReport.body()))) {
             assertThat(workbook.getSheet("Sequences")).isNotNull();
             assertThat(workbook.getSheet("Events")).isNotNull();
         }
