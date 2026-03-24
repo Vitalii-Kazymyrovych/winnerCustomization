@@ -52,7 +52,11 @@ public class ReportController {
                         .filename(savedReport.fileName())
                         .build()
                         .toString())
-                .header("X-Saved-Report-Path", savedReport.path().toString())
+                .header("X-Saved-Report-Path", normalizeForHeader(savedReport.path().toString()))
                 .body(savedReport.body());
+    }
+
+    private String normalizeForHeader(String savedPath) {
+        return savedPath.replace("\\", "/");
     }
 }

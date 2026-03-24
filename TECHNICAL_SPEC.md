@@ -54,7 +54,7 @@
 - `SequenceReportWriter` формирует workbook `Sequences` + `Events` через Apache POI.
 
 ### `web`
-- Контроллеры делегируют операции в сервисы и не содержат sequence-логики. `ReportController` отдаёт xlsx как attachment, выставляет `X-Saved-Report-Path` с фактическим путём сохранения и использует тот же файл/байты, которые одновременно сохраняются на диск.
+- Контроллеры делегируют операции в сервисы и не содержат sequence-логики. `ReportController` отдаёт xlsx как attachment, выставляет `X-Saved-Report-Path` с фактическим путём сохранения в нормализованном slash-формате (`/`) и использует тот же файл/байты, которые одновременно сохраняются на диск.
 
 ## Sequence processing rules
 
