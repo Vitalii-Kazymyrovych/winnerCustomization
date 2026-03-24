@@ -63,8 +63,8 @@
 ## HTTP endpoints
 - `GET /config` — текущее содержимое runtime-конфига.
 - `POST /config` — сохранить новый конфиг.
-- `GET /report/sequences.xlsx` — скачивает актуальный Excel-отчёт как attachment и одновременно сохраняет его в `reports.outputDirectory`.
-- `GET /report/sequences.xlsx/{dd-MM-yyyy}` — скачивает Excel-отчёт за календарную дату как attachment и одновременно сохраняет его в `reports.outputDirectory`.
+- `GET /report/sequences.xlsx` — скачивает актуальный Excel-отчёт как attachment и одновременно сохраняет его в `reports.outputDirectory`; заголовок `X-Saved-Report-Path` возвращается в slash-формате (`/`) для кросс-платформенной совместимости.
+- `GET /report/sequences.xlsx/{dd-MM-yyyy}` — скачивает Excel-отчёт за календарную дату как attachment и одновременно сохраняет его в `reports.outputDirectory`; заголовок `X-Saved-Report-Path` также нормализуется в slash-формат.
 - `GET /source/trigger-pull` — вручную пересчитать последовательности и записать их в sequence storage.
 
 ## Логи и фоновое обновление
