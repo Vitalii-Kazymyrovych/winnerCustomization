@@ -1,0 +1,35 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "rootUser": "postgres",
+    "rootPassword": "change-me",
+    "maintenanceDb": "postgres",
+    "source": {
+      "db": "source_db",
+      "schema": "videoanalytics",
+      "user": "source_user",
+      "password": "source_password"
+    },
+    "sequence": {
+      "db": "sequence_db",
+      "schema": "sequence_engine",
+      "user": "sequence_user",
+      "password": "sequence_password"
+    }
+  },
+  "sourceRefreshSeconds": 10,
+  "reportsDir": "./reports",
+  "messaging": {
+    "enabled": false,
+    "telegramBotToken": "BOT_TOKEN_IF_ENABLED",
+    "telegramChatId": "CHAT_ID_IF_ENABLED"
+  },
+  "workflow": {
+    "sequenceCloseTimeoutMinutes": 2880,
+    "real": [],
+    "transitional": [],
+    "singleCamera": []
+  },
+  "alerts": []
+}
