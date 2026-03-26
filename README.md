@@ -1,28 +1,32 @@
 # ALPR Sequence Engine
 
-Spring Boot application that reads ALPR detections, builds stage sequences per plate, tracks durations and alerts, and provides XLSX reports.
+Spring Boot application that reads ALPR detections, builds per-plate sequences, evaluates stage transitions incrementally, tracks alerts, and exports XLSX reports.
 
 ## What it does
 
 - Loads configuration from `config.json` placed next to the jar.
-- Rebuilds full state from detections on startup and on each refresh interval.
+- Performs startup rebuild, then **incremental polling** using `lastProcessedTimestamp` and `findNewerThan(...)`.
 - Processes stage types:
-  - real (`in`/`out` triggers with direction tolerance)
-  - transitional (trigger based)
+  - real (`in`/`out` triggers with circular direction tolerance)
+  - transitional (camera trigger + `allowedAfter` candidate auto-start)
   - single-camera (camera-only stage)
-- Tracks active/closed sequences and stage durations in UTC.
-- Sends alerts to Telegram (or logs alerts when messaging is disabled).
-- Exposes reports:
-  - `GET /report/sequences.xlsx`
-  - `GET /report/sequences.xlsx/{dd-MM-yyyy}`
-- Exposes JSON endpoint:
-  - `GET /api/sequences`
+- Maintains stage duration and sequence lifecycle in UTC.
+- Closes sequences using default timeout or transitional override timeout (`sequenceCloseTimeoutOverrideMinutes`).
+- Creates/cancels/suppresses alerts and fires them by real elapsed UTC time.
+- Sends alerts to Telegram (or logs when messaging is disabled).
+- Builds XLSX reports and saves them to `reportsDir`.
+
+## Endpoints
+
+- `GET /api/sequences` — current sequence state as JSON.
+- `GET /report/sequences.xlsx` — full report.
+- `GET /report/sequences.xlsx/{dd-MM-yyyy}` — UTC-day filtered report.
 
 ## Configuration
 
 1. Copy `config.json.example` to `config.json`.
-2. Fill database credentials and workflow/alerts.
-3. Keep `config.json` local only (already gitignored).
+2. Fill database credentials, workflow, and alerts.
+3. Keep `config.json` local only (already ignored by git).
 
 ## Run
 
@@ -36,4 +40,4 @@ Spring Boot application that reads ALPR detections, builds stage sequences per p
 ./mvnw -B test
 ```
 
-Unit tests are local-only (no live DB, Telegram, or external services).
+Unit tests are local-only and do not call live VEZHA/Telegram/DB services.

@@ -22,6 +22,7 @@ public class EngineOrchestratorService {
     private final AppConfig appConfig;
 
     private LocalDateTime lastProcessedTimestamp;
+    private LocalDateTime lastPollTimestamp;
 
     public EngineOrchestratorService(SourceDetectionRepository sourceDetectionRepository,
                                      SequenceEngineService sequenceEngineService,
@@ -36,11 +37,12 @@ public class EngineOrchestratorService {
     @PostConstruct
     public void startupRebuild() {
         rebuildAll();
+        lastPollTimestamp = LocalDateTime.now(ZoneOffset.UTC);
     }
 
     @Scheduled(fixedDelayString = "#{@appConfig.sourceRefreshSeconds * 1000}")
     public void pollAndRebuild() {
-        rebuildAll();
+        applyIncremental();
     }
 
     private synchronized void rebuildAll() {
@@ -51,5 +53,29 @@ public class EngineOrchestratorService {
         lastProcessedTimestamp = snapshot.lastProcessedTimestamp();
         log.info("Rebuild finished. sequences={}, alerts={}, lastProcessed={}",
             snapshot.sequences().size(), snapshot.alerts().size(), lastProcessedTimestamp);
+    }
+
+    private synchronized void applyIncremental() {
+        LocalDateTime nowUtc = LocalDateTime.now(ZoneOffset.UTC);
+        if (lastProcessedTimestamp == null) {
+            rebuildAll();
+            lastPollTimestamp = nowUtc;
+            return;
+        }
+        var newDetections = sourceDetectionRepository.findNewerThan(lastProcessedTimestamp);
+        var snapshot = sequenceEngineService.applyIncremental(
+            sequenceStateRepository.findAllSequences(),
+            sequenceStateRepository.findAllAlerts(),
+            newDetections,
+            lastPollTimestamp,
+            nowUtc
+        );
+        sequenceStateRepository.replaceAll(snapshot.sequences(), snapshot.alerts());
+        if (snapshot.lastProcessedTimestamp() != null) {
+            lastProcessedTimestamp = snapshot.lastProcessedTimestamp();
+        }
+        lastPollTimestamp = nowUtc;
+        log.info("Incremental poll finished. newDetections={}, sequences={}, alerts={}, lastProcessed={}",
+            newDetections.size(), snapshot.sequences().size(), snapshot.alerts().size(), lastProcessedTimestamp);
     }
 }

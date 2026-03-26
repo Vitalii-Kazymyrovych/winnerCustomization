@@ -4,6 +4,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
+import script.winnerCustomization.config.AppConfig;
 import script.winnerCustomization.model.Sequence;
 import script.winnerCustomization.model.Stage;
 import script.winnerCustomization.repository.SequenceStateRepository;
@@ -24,17 +25,19 @@ import java.util.List;
 @Service
 public class ReportServiceImpl implements ReportService {
     private final SequenceStateRepository sequenceStateRepository;
+    private final AppConfig appConfig;
 
-    public ReportServiceImpl(SequenceStateRepository sequenceStateRepository) {
+    public ReportServiceImpl(SequenceStateRepository sequenceStateRepository, AppConfig appConfig) {
         this.sequenceStateRepository = sequenceStateRepository;
+        this.appConfig = appConfig;
     }
 
     @Override
     public byte[] buildReport(LocalDate filterDayUtc) throws IOException {
         List<Sequence> sequences = sequenceStateRepository.findAllSequences();
         if (filterDayUtc != null) {
-            LocalDateTime start = filterDayUtc.atStartOfDay();
-            LocalDateTime end = filterDayUtc.plusDays(1).atStartOfDay().minusNanos(1);
+            LocalDateTime start = filterDayUtc.atStartOfDay(ZoneOffset.UTC).toLocalDateTime();
+            LocalDateTime end = filterDayUtc.plusDays(1).atStartOfDay(ZoneOffset.UTC).toLocalDateTime().minusNanos(1);
             sequences = sequences.stream().filter(s -> activeOnDay(s, start, end)).toList();
         }
 
@@ -43,12 +46,15 @@ public class ReportServiceImpl implements ReportService {
             writeSheet(workbook.createSheet("Sequences (Closed)"), sequences.stream().filter(Sequence::isClosed).toList());
             writeEvents(workbook.createSheet("Events"), sequences);
             workbook.write(out);
-            return out.toByteArray();
+            byte[] reportBytes = out.toByteArray();
+            saveReport(reportBytes, filterDayUtc);
+            return reportBytes;
         }
     }
 
     private void writeSheet(Sheet sheet, List<Sequence> sequences) {
         int rowNum = 0;
+        writeHeader(sheet, rowNum++);
         for (Sequence sequence : sequences) {
             Row plateRow = sheet.createRow(rowNum++);
             plateRow.createCell(1).setCellValue(sequence.getPlate());
@@ -71,6 +77,7 @@ public class ReportServiceImpl implements ReportService {
         events = events.stream().filter(s -> s.getTimeoutSeconds() <= 0).sorted(Comparator.comparing(Stage::getInTime,
             Comparator.nullsLast(Comparator.reverseOrder()))).toList();
         int rowNum = 0;
+        writeHeader(sheet, rowNum++);
         for (Stage stage : events) {
             Row row = sheet.createRow(rowNum++);
             row.createCell(0).setCellValue(stage.getLabel());
@@ -84,7 +91,29 @@ public class ReportServiceImpl implements ReportService {
     private boolean activeOnDay(Sequence sequence, LocalDateTime start, LocalDateTime end) {
         LocalDateTime seqStart = sequence.getStages().stream().map(Stage::getInTime).filter(t -> t != null).min(LocalDateTime::compareTo).orElse(null);
         if (seqStart == null) return false;
-        LocalDateTime seqEnd = sequence.getLastDetection() == null ? LocalDateTime.now(ZoneOffset.UTC) : sequence.getLastDetection();
+        LocalDateTime seqEnd = sequence.isClosed()
+            ? (sequence.getClosedAtUtc() == null ? sequence.getLastDetection() : sequence.getClosedAtUtc())
+            : LocalDateTime.now(ZoneOffset.UTC);
+        if (seqEnd == null) {
+            seqEnd = LocalDateTime.now(ZoneOffset.UTC);
+        }
         return !seqStart.isAfter(end) && !seqEnd.isBefore(start);
+    }
+
+    private void writeHeader(Sheet sheet, int rowNumber) {
+        Row header = sheet.createRow(rowNumber);
+        header.createCell(0).setCellValue("Stage");
+        header.createCell(1).setCellValue("In Time (UTC)");
+        header.createCell(2).setCellValue("Out Time (UTC)");
+        header.createCell(3).setCellValue("Duration");
+        header.createCell(4).setCellValue("Alerts");
+    }
+
+    private void saveReport(byte[] content, LocalDate filterDayUtc) throws IOException {
+        Path dir = Path.of(appConfig.getReportsDir());
+        Files.createDirectories(dir);
+        String suffix = filterDayUtc == null ? "all" : filterDayUtc.format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+        Path file = dir.resolve("sequences_" + suffix + ".xlsx");
+        Files.write(file, content);
     }
 }
