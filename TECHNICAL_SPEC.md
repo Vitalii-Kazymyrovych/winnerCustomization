@@ -22,7 +22,9 @@
     - circular direction matching;
     - in/out and partial/full stage policies;
     - single-camera dedup + out overwrite;
-    - transitional `allowedAfter` candidate creation/countdown;
+    - transitional `allowedAfter` candidate creation/countdown + historical transitional backfill;
+    - candidate invalidation on any new detection for the same plate;
+    - per-plate multi-sequence history (closed sequences retained, new detections create fresh open sequence);
     - sequence close timeout and transitional override timeout;
     - alert creation/cancel/suppression and elapsed-time firing.
   - `EngineOrchestratorService`: startup full rebuild + scheduled incremental polling with `lastProcessedTimestamp` and poll timestamps.
@@ -36,7 +38,7 @@
   - `SequenceController`: `GET /api/sequences`.
   - `ReportController`: XLSX download endpoints.
 - `bootstrap`
-  - `TargetDatabaseBootstrapService`: PostgreSQL bootstrap (role/database/schema/table ensure + grants, best-effort with warning on unavailable DB).
+  - `TargetDatabaseBootstrapService`: PostgreSQL bootstrap (role/database/schema/table ensure + grants), with JDBC existence checks and quoted identifiers for safe DB/schema/user creation.
 - `dto`, `mapper`, `util`
   - DTO + mapping layer and duration formatting helper.
 
@@ -64,4 +66,7 @@
   - single-camera close using last detection;
   - alert firing by elapsed time in incremental mode;
   - transitional candidate auto-creation;
+  - pending candidate invalidation by next detection;
+  - closed-sequence immutability with new sequence creation for same plate;
+  - historical transitional backfill insertion between stages;
   - SQL source parsing + rebuild sanity.

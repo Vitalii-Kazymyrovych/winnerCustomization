@@ -84,6 +84,59 @@ class SequenceEngineServiceImplTest {
     }
 
     @Test
+    void invalidatesPendingTransitionalCandidateOnAnyNewDetection() {
+        SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(configWithTransitionalAndSingle(), text -> {});
+        List<Detection> detections = List.of(
+            new Detection(1, "AA6", 1, 180, LocalDateTime.of(2026, 3, 1, 12, 0)),
+            new Detection(2, "AA6", 5, null, LocalDateTime.of(2026, 3, 1, 12, 0, 30))
+        );
+
+        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 12, 0, 45));
+        Sequence sequence = snapshot.sequences().getFirst();
+        assertTrue(sequence.getStages().stream().noneMatch(s -> s.getType() == StageType.TRANSITIONAL && s.getTimeoutSeconds() > 0));
+    }
+
+    @Test
+    void createsNewSequenceForPlateAfterPreviousOneClosed() {
+        SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(configWithShortSequenceTimeout(), text -> {});
+        var first = service.rebuild(
+            List.of(new Detection(1, "AA7", 1, 0, LocalDateTime.of(2026, 3, 1, 10, 0))),
+            LocalDateTime.of(2026, 3, 1, 10, 3)
+        );
+        var after = service.applyIncremental(
+            first.sequences(),
+            first.alerts(),
+            List.of(new Detection(2, "AA7", 1, 0, LocalDateTime.of(2026, 3, 1, 10, 5))),
+            LocalDateTime.of(2026, 3, 1, 10, 3),
+            LocalDateTime.of(2026, 3, 1, 10, 6)
+        );
+
+        assertEquals(2, after.sequences().size());
+        assertTrue(after.sequences().stream().anyMatch(Sequence::isClosed));
+        assertTrue(after.sequences().stream().anyMatch(s -> !s.isClosed()));
+    }
+
+    @Test
+    void backfillsHistoricalTransitionalWhenGapExceedsCandidateTimeout() {
+        SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(configWithTransitional(), text -> {});
+        List<Detection> detections = List.of(
+            new Detection(1, "AA8", 1, 180, LocalDateTime.of(2026, 3, 1, 10, 0)),
+            new Detection(2, "AA8", 2, 0, LocalDateTime.of(2026, 3, 1, 10, 5))
+        );
+
+        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 10, 6));
+        Sequence sequence = snapshot.sequences().getFirst();
+        Stage transitional = sequence.getStages().stream()
+            .filter(s -> s.getType() == StageType.TRANSITIONAL && s.getTimeoutSeconds() == 0 && s.getOutTime() != null)
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(LocalDateTime.of(2026, 3, 1, 10, 0, 1), transitional.getInTime());
+        assertEquals(LocalDateTime.of(2026, 3, 1, 10, 4, 59), transitional.getOutTime());
+        assertTrue(transitional.isFull());
+    }
+
+    @Test
     void loadsRealSqlDataWithoutErrors() {
         SqlFileSourceDetectionRepository repo = new SqlFileSourceDetectionRepository();
         List<Detection> detections = repo.findAll();
@@ -148,12 +201,34 @@ class SequenceEngineServiceImplTest {
 
     private AppConfig configWithTransitional() {
         AppConfig c = config();
+        StageRuleConfig driveOut = c.getWorkflow().getReal().getFirst();
+
+        StageRuleConfig next = new StageRuleConfig();
+        next.setName("service");
+        next.setLabel("Service");
+        TriggerConfig serviceIn = new TriggerConfig();
+        serviceIn.setType("in");
+        serviceIn.setAnalyticsId(2);
+        serviceIn.setDirection(0);
+        next.setTriggers(List.of(serviceIn));
+        c.getWorkflow().setReal(List.of(driveOut, next));
+
         StageRuleConfig transitional = new StageRuleConfig();
         transitional.setName("between");
         transitional.setLabel("Between");
         transitional.setAllowedAfter(List.of("drive_in"));
         transitional.setCandidateTimeoutMinutes(2);
         c.getWorkflow().setTransitional(List.of(transitional));
+        return c;
+    }
+
+    private AppConfig configWithTransitionalAndSingle() {
+        return configWithTransitional();
+    }
+
+    private AppConfig configWithShortSequenceTimeout() {
+        AppConfig c = config();
+        c.getWorkflow().setSequenceCloseTimeoutMinutes(2);
         return c;
     }
 }

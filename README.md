@@ -8,13 +8,16 @@ Spring Boot application that reads ALPR detections, builds per-plate sequences, 
 - Performs startup rebuild, then **incremental polling** using `lastProcessedTimestamp` and `findNewerThan(...)`.
 - Processes stage types:
   - real (`in`/`out` triggers with circular direction tolerance)
-  - transitional (camera trigger + `allowedAfter` candidate auto-start)
+  - transitional (camera trigger + `allowedAfter` candidate auto-start + historical backfill between stages)
   - single-camera (camera-only stage)
 - Maintains stage duration and sequence lifecycle in UTC.
+- Keeps closed sequences immutable and starts a **new sequence instance** for the same plate on later detections.
+- Invalidates pending transitional candidates immediately on any new detection for that plate.
 - Closes sequences using default timeout or transitional override timeout (`sequenceCloseTimeoutOverrideMinutes`).
 - Creates/cancels/suppresses alerts and fires them by real elapsed UTC time.
 - Sends alerts to Telegram (or logs when messaging is disabled).
 - Builds XLSX reports and saves them to `reportsDir`.
+- Bootstraps target PostgreSQL using JDBC existence checks with quoted identifiers for DB/schema/user names.
 
 ## Endpoints
 

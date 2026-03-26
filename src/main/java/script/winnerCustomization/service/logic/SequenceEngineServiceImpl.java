@@ -37,24 +37,26 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             .sorted(Comparator.comparing(Detection::createdAtUtc).thenComparing(Detection::id))
             .toList();
 
-        Map<String, Sequence> byPlate = new HashMap<>();
+        Map<String, List<Sequence>> byPlate = new HashMap<>();
         List<Alert> alerts = new ArrayList<>();
         LocalDateTime lastProcessed = null;
 
         for (Detection detection : ordered) {
             lastProcessed = detection.createdAtUtc();
-            Sequence sequence = byPlate.computeIfAbsent(detection.plate(), plate -> newSequence(plate, detection.createdAtUtc()));
+            Sequence sequence = getOrCreateOpenSequence(byPlate, detection.plate(), detection.createdAtUtc());
             sequence.setLastDetection(detection.createdAtUtc());
             applyDetection(sequence, detection);
             processAlerts(sequence, detection, alerts);
         }
 
-        closeExpiredSequences(byPlate.values(), nowUtc);
-        recalculateDurations(byPlate.values(), nowUtc);
-        tickTransitionalCandidates(byPlate.values(), secondsBetween(lastProcessed, nowUtc));
+        List<Sequence> allSequences = flatten(byPlate);
+        backfillHistoricalTransitionals(allSequences);
+        closeExpiredSequences(allSequences, nowUtc);
+        recalculateDurations(allSequences, nowUtc);
+        tickTransitionalCandidates(allSequences, secondsBetween(lastProcessed, nowUtc));
         tickAlerts(alerts, nowUtc);
 
-        return new EngineSnapshot(new ArrayList<>(byPlate.values()), alerts, lastProcessed);
+        return new EngineSnapshot(allSequences, alerts, lastProcessed);
     }
 
     @Override
@@ -63,9 +65,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                                            List<Detection> newDetections,
                                            LocalDateTime previousTickUtc,
                                            LocalDateTime nowUtc) {
-        Map<String, Sequence> byPlate = new HashMap<>();
+        Map<String, List<Sequence>> byPlate = new HashMap<>();
         for (Sequence sequence : currentSequences) {
-            byPlate.put(sequence.getPlate(), sequence);
+            byPlate.computeIfAbsent(sequence.getPlate(), plate -> new ArrayList<>()).add(sequence);
         }
 
         List<Alert> alerts = new ArrayList<>(currentAlerts);
@@ -78,19 +80,21 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             .sorted(Comparator.comparing(Detection::createdAtUtc).thenComparing(Detection::id))
             .toList();
         for (Detection detection : ordered) {
-            Sequence sequence = byPlate.computeIfAbsent(detection.plate(), plate -> newSequence(plate, detection.createdAtUtc()));
+            Sequence sequence = getOrCreateOpenSequence(byPlate, detection.plate(), detection.createdAtUtc());
             sequence.setLastDetection(detection.createdAtUtc());
             applyDetection(sequence, detection);
             processAlerts(sequence, detection, alerts);
         }
 
+        List<Sequence> allSequences = flatten(byPlate);
+        backfillHistoricalTransitionals(allSequences);
         int elapsedSeconds = secondsBetween(previousTickUtc, nowUtc);
-        tickTransitionalCandidates(byPlate.values(), elapsedSeconds);
-        closeExpiredSequences(byPlate.values(), nowUtc);
-        recalculateDurations(byPlate.values(), nowUtc);
+        tickTransitionalCandidates(allSequences, elapsedSeconds);
+        closeExpiredSequences(allSequences, nowUtc);
+        recalculateDurations(allSequences, nowUtc);
         tickAlerts(alerts, nowUtc);
 
-        return new EngineSnapshot(new ArrayList<>(byPlate.values()), alerts, lastProcessed);
+        return new EngineSnapshot(allSequences, alerts, lastProcessed);
     }
 
     private Sequence newSequence(String plate, LocalDateTime timestamp) {
@@ -101,10 +105,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
     }
 
     private void applyDetection(Sequence sequence, Detection detection) {
-        if (sequence.isClosed()) {
-            sequence.setClosed(false);
-            sequence.setClosedAtUtc(null);
-        }
+        removePendingCandidates(sequence);
 
         Stage active = findActiveStage(sequence);
         StageMatch match = findMatch(detection);
@@ -171,6 +172,11 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         sequence.getStages().add(partial);
     }
 
+    private void removePendingCandidates(Sequence sequence) {
+        sequence.getStages().removeIf(stage ->
+            stage.isActive() && stage.getType() == StageType.TRANSITIONAL && stage.getTimeoutSeconds() > 0);
+    }
+
     private void closeCurrentStageForNewIn(Stage active) {
         if (active.getType() == StageType.TRANSITIONAL && active.getInTime() != null && active.getOutTime() == null) {
             active.setOutTime(active.getLastDetectionTime());
@@ -201,9 +207,58 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             Stage candidate = newStage(transitional, StageType.TRANSITIONAL, sequence.getPlate());
             candidate.setActive(true);
             candidate.setFull(false);
-            candidate.setInTime(detectionTime);
+            candidate.setInTime(detectionTime.plusSeconds(1));
             candidate.setLastDetectionTime(detectionTime);
             sequence.getStages().add(candidate);
+        }
+    }
+
+    private void backfillHistoricalTransitionals(List<Sequence> sequences) {
+        for (Sequence sequence : sequences) {
+            List<Stage> stages = sequence.getStages();
+            for (int i = 0; i < stages.size() - 1; i++) {
+                Stage stageA = stages.get(i);
+                if (stageA.getOutTime() == null) continue;
+
+                Stage nextWithIn = null;
+                for (int j = i + 1; j < stages.size(); j++) {
+                    Stage candidate = stages.get(j);
+                    if (candidate.getInTime() != null) {
+                        nextWithIn = candidate;
+                        break;
+                    }
+                }
+                if (nextWithIn == null) continue;
+
+                for (StageRuleConfig transitional : appConfig.getWorkflow().getTransitional()) {
+                    if (!transitional.getAllowedAfter().contains(stageA.getName())) continue;
+                    long gapSeconds = Duration.between(stageA.getOutTime(), nextWithIn.getInTime()).getSeconds();
+                    if (gapSeconds <= transitional.getCandidateTimeoutMinutes() * 60L) continue;
+
+                    LocalDateTime inTime = stageA.getOutTime().plusSeconds(1);
+                    LocalDateTime outTime = nextWithIn.getInTime().minusSeconds(1);
+                    if (outTime.isBefore(inTime)) continue;
+                    boolean exists = stages.stream().anyMatch(s ->
+                        s.getType() == StageType.TRANSITIONAL
+                            && s.getName().equals(transitional.getName())
+                            && s.getInTime() != null
+                            && s.getOutTime() != null
+                            && !s.getInTime().isBefore(inTime)
+                            && !s.getOutTime().isAfter(outTime));
+                    if (exists) continue;
+
+                    Stage historical = newStage(transitional, StageType.TRANSITIONAL, sequence.getPlate());
+                    historical.setInTime(inTime);
+                    historical.setOutTime(outTime);
+                    historical.setLastDetectionTime(outTime);
+                    historical.setFull(true);
+                    historical.setTimeoutSeconds(0);
+                    historical.setActive(false);
+                    stages.add(i + 1, historical);
+                    i++;
+                    break;
+                }
+            }
         }
     }
 
@@ -347,6 +402,27 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 }
             }
         }
+    }
+
+    private List<Sequence> flatten(Map<String, List<Sequence>> byPlate) {
+        List<Sequence> result = new ArrayList<>();
+        for (List<Sequence> sequences : byPlate.values()) {
+            result.addAll(sequences);
+        }
+        return result;
+    }
+
+    private Sequence getOrCreateOpenSequence(Map<String, List<Sequence>> byPlate, String plate, LocalDateTime timestamp) {
+        List<Sequence> sequences = byPlate.computeIfAbsent(plate, key -> new ArrayList<>());
+        for (int i = sequences.size() - 1; i >= 0; i--) {
+            Sequence existing = sequences.get(i);
+            if (!existing.isClosed()) {
+                return existing;
+            }
+        }
+        Sequence sequence = newSequence(plate, timestamp);
+        sequences.add(sequence);
+        return sequence;
     }
 
     private int secondsBetween(LocalDateTime fromUtc, LocalDateTime toUtc) {

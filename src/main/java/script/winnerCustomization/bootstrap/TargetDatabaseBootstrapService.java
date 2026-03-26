@@ -10,6 +10,7 @@ import script.winnerCustomization.config.DbConnectionConfig;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -41,8 +42,12 @@ public class TargetDatabaseBootstrapService {
         String maintenanceUrl = jdbcUrl(db, db.getMaintenanceDb());
         try (Connection c = DriverManager.getConnection(maintenanceUrl, db.getRootUser(), db.getRootPassword());
              Statement st = c.createStatement()) {
-            st.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '" + target.getUser() + "') THEN CREATE ROLE " + target.getUser() + " LOGIN PASSWORD '" + target.getPassword() + "'; END IF; END $$;");
-            st.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '" + target.getDb() + "') THEN CREATE DATABASE " + target.getDb() + " OWNER " + target.getUser() + "; END IF; END $$;");
+            if (!exists(st, "SELECT 1 FROM pg_roles WHERE rolname = " + quoteLiteral(target.getUser()))) {
+                st.execute("CREATE ROLE " + quoteIdent(target.getUser()) + " LOGIN PASSWORD " + quoteLiteral(target.getPassword()));
+            }
+            if (!exists(st, "SELECT 1 FROM pg_database WHERE datname = " + quoteLiteral(target.getDb()))) {
+                st.execute("CREATE DATABASE " + quoteIdent(target.getDb()) + " OWNER " + quoteIdent(target.getUser()));
+            }
         }
     }
 
@@ -50,13 +55,28 @@ public class TargetDatabaseBootstrapService {
         String targetUrl = jdbcUrl(db, target.getDb());
         try (Connection c = DriverManager.getConnection(targetUrl, db.getRootUser(), db.getRootPassword());
              Statement st = c.createStatement()) {
-            st.execute("CREATE SCHEMA IF NOT EXISTS " + target.getSchema());
-            st.execute("CREATE TABLE IF NOT EXISTS " + target.getSchema() + ".sequences (plate TEXT PRIMARY KEY, closed BOOLEAN NOT NULL, last_detection TIMESTAMP NULL, closed_at_utc TIMESTAMP NULL)");
-            st.execute("CREATE TABLE IF NOT EXISTS " + target.getSchema() + ".stages (id BIGSERIAL PRIMARY KEY, plate TEXT NOT NULL, name TEXT NOT NULL, label TEXT NOT NULL, type TEXT NOT NULL, active BOOLEAN NOT NULL, full BOOLEAN NOT NULL, timeout_seconds INTEGER NOT NULL, in_time TIMESTAMP NULL, out_time TIMESTAMP NULL, last_detection_time TIMESTAMP NULL, duration_seconds BIGINT NULL, alerts TEXT NULL)");
-            st.execute("CREATE TABLE IF NOT EXISTS " + target.getSchema() + ".alerts (id BIGSERIAL PRIMARY KEY, plate TEXT NOT NULL, trigger_analytics_id INTEGER NOT NULL, timeout_seconds INTEGER NOT NULL, message TEXT NOT NULL, active BOOLEAN NOT NULL, created_at_utc TIMESTAMP NULL)");
-            st.execute("GRANT USAGE ON SCHEMA " + target.getSchema() + " TO " + target.getUser());
-            st.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA " + target.getSchema() + " TO " + target.getUser());
+            String schema = quoteIdent(target.getSchema());
+            st.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
+            st.execute("CREATE TABLE IF NOT EXISTS " + schema + ".sequences (plate TEXT PRIMARY KEY, closed BOOLEAN NOT NULL, last_detection TIMESTAMP NULL, closed_at_utc TIMESTAMP NULL)");
+            st.execute("CREATE TABLE IF NOT EXISTS " + schema + ".stages (id BIGSERIAL PRIMARY KEY, plate TEXT NOT NULL, name TEXT NOT NULL, label TEXT NOT NULL, type TEXT NOT NULL, active BOOLEAN NOT NULL, full BOOLEAN NOT NULL, timeout_seconds INTEGER NOT NULL, in_time TIMESTAMP NULL, out_time TIMESTAMP NULL, last_detection_time TIMESTAMP NULL, duration_seconds BIGINT NULL, alerts TEXT NULL)");
+            st.execute("CREATE TABLE IF NOT EXISTS " + schema + ".alerts (id BIGSERIAL PRIMARY KEY, plate TEXT NOT NULL, trigger_analytics_id INTEGER NOT NULL, timeout_seconds INTEGER NOT NULL, message TEXT NOT NULL, active BOOLEAN NOT NULL, created_at_utc TIMESTAMP NULL)");
+            st.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + quoteIdent(target.getUser()));
+            st.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA " + schema + " TO " + quoteIdent(target.getUser()));
         }
+    }
+
+    private boolean exists(Statement statement, String sql) throws SQLException {
+        try (ResultSet rs = statement.executeQuery(sql)) {
+            return rs.next();
+        }
+    }
+
+    private String quoteIdent(String value) {
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
+    private String quoteLiteral(String value) {
+        return "'" + value.replace("'", "''") + "'";
     }
 
     private String jdbcUrl(DatabaseConfig db, String databaseName) {

@@ -13,3 +13,10 @@
 - Enhanced report service with UTC-safe date filtering, closed-at day coverage, sheet headers, and auto-save to `reportsDir`.
 - Expanded unit tests to cover partial promotion, dedup, single-camera close behavior, transitional candidate creation, and incremental alert timing.
 - Updated README and TECHNICAL_SPEC for the new behavior.
+- Fixed critical sequence logic issues from review:
+  - pending transitional candidates are invalidated on any new detection for the plate;
+  - closed sequences are no longer re-opened; new detections create a new sequence instance while closed history is retained.
+- Added historical transitional backfill between stages when the gap exceeds `candidateTimeoutMinutes`.
+- Hardened target DB bootstrap SQL with JDBC existence checks and quoted identifiers; removed invalid `CREATE DATABASE` inside `DO $$`.
+- Expanded tests for candidate invalidation, post-close new sequence creation, and historical transitional backfill.
+- Updated README and TECHNICAL_SPEC to document the above behavior.
