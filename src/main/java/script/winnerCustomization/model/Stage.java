@@ -15,7 +15,9 @@ public class Stage {
     private String plate;
     private LocalDateTime inTime;
     private LocalDateTime outTime;
+    private LocalDateTime lastDetectionTime;
     private Duration duration;
+    private int sequenceCloseTimeoutOverrideMinutes;
     private final List<String> alerts = new ArrayList<>();
 
     public String getName() { return name; }
@@ -36,7 +38,11 @@ public class Stage {
     public void setInTime(LocalDateTime inTime) { this.inTime = inTime; }
     public LocalDateTime getOutTime() { return outTime; }
     public void setOutTime(LocalDateTime outTime) { this.outTime = outTime; }
+    public LocalDateTime getLastDetectionTime() { return lastDetectionTime; }
+    public void setLastDetectionTime(LocalDateTime lastDetectionTime) { this.lastDetectionTime = lastDetectionTime; }
     public Duration getDuration() { return duration; }
     public void setDuration(Duration duration) { this.duration = duration; }
+    public int getSequenceCloseTimeoutOverrideMinutes() { return sequenceCloseTimeoutOverrideMinutes; }
+    public void setSequenceCloseTimeoutOverrideMinutes(int sequenceCloseTimeoutOverrideMinutes) { this.sequenceCloseTimeoutOverrideMinutes = sequenceCloseTimeoutOverrideMinutes; }
     public List<String> getAlerts() { return alerts; }
 }

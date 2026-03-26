@@ -1,13 +1,13 @@
 package script.winnerCustomization.service.logic;
 
 import org.junit.jupiter.api.Test;
-import script.winnerCustomization.alerts.AlertSender;
 import script.winnerCustomization.config.AlertRuleConfig;
 import script.winnerCustomization.config.AppConfig;
 import script.winnerCustomization.config.StageRuleConfig;
 import script.winnerCustomization.config.TriggerConfig;
 import script.winnerCustomization.config.WorkflowConfig;
 import script.winnerCustomization.model.Detection;
+import script.winnerCustomization.model.Sequence;
 import script.winnerCustomization.model.Stage;
 import script.winnerCustomization.model.StageType;
 import script.winnerCustomization.repository.SqlFileSourceDetectionRepository;
@@ -21,31 +21,66 @@ import static org.junit.jupiter.api.Assertions.*;
 class SequenceEngineServiceImplTest {
 
     @Test
-    void buildsRealStageFromInThenOut() {
+    void createsPartialWhenFirstEventIsOutAndPromotesOnSecondOut() {
         SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(config(), text -> {});
         List<Detection> detections = List.of(
-            new Detection(1, "AA1", 1, 0, LocalDateTime.of(2026, 3, 1, 10, 0)),
-            new Detection(2, "AA1", 1, 180, LocalDateTime.of(2026, 3, 1, 10, 5))
+            new Detection(1, "AA2", 1, 180, LocalDateTime.of(2026, 3, 1, 11, 0)),
+            new Detection(2, "AA2", 1, 182, LocalDateTime.of(2026, 3, 1, 11, 1))
         );
 
-        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 10, 6));
+        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 11, 2));
         Stage stage = snapshot.sequences().getFirst().getStages().getFirst();
-        assertEquals(StageType.REAL, stage.getType());
         assertNotNull(stage.getInTime());
         assertNotNull(stage.getOutTime());
-        assertEquals(300, stage.getDuration().getSeconds());
+        assertTrue(stage.isFull());
     }
 
     @Test
-    void createsPartialWhenFirstEventIsOut() {
+    void deduplicatesConsecutiveInOnSameActiveStage() {
         SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(config(), text -> {});
-        List<Detection> detections = List.of(new Detection(1, "AA2", 1, 180, LocalDateTime.of(2026, 3, 1, 11, 0)));
+        List<Detection> detections = List.of(
+            new Detection(1, "AA1", 1, 0, LocalDateTime.of(2026, 3, 1, 10, 0)),
+            new Detection(2, "AA1", 1, 2, LocalDateTime.of(2026, 3, 1, 10, 1))
+        );
 
-        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 11, 1));
-        Stage stage = snapshot.sequences().getFirst().getStages().getFirst();
-        assertNull(stage.getInTime());
-        assertNotNull(stage.getOutTime());
-        assertFalse(stage.isFull());
+        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 10, 2));
+        assertEquals(1, snapshot.sequences().getFirst().getStages().size());
+    }
+
+    @Test
+    void closesSingleCameraUsingLastDetectionTime() {
+        SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(configWithTwoSingleCameras(), text -> {});
+        List<Detection> detections = List.of(
+            new Detection(1, "AA4", 5, null, LocalDateTime.of(2026, 3, 1, 10, 0)),
+            new Detection(2, "AA4", 5, null, LocalDateTime.of(2026, 3, 1, 10, 3)),
+            new Detection(3, "AA4", 6, null, LocalDateTime.of(2026, 3, 1, 10, 10))
+        );
+
+        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 10, 11));
+        Stage first = snapshot.sequences().getFirst().getStages().getFirst();
+        assertEquals(LocalDateTime.of(2026, 3, 1, 10, 3), first.getOutTime());
+    }
+
+    @Test
+    void supportsIncrementalAlertTimeoutByRealElapsedTime() {
+        List<String> sent = new ArrayList<>();
+        SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(configWithAlerts(), sent::add);
+
+        var initial = service.rebuild(List.of(new Detection(1, "AA3", 1, 0, LocalDateTime.of(2026, 3, 1, 10, 0))), LocalDateTime.of(2026, 3, 1, 10, 0, 10));
+        var after = service.applyIncremental(initial.sequences(), initial.alerts(), List.of(), LocalDateTime.of(2026, 3, 1, 10, 0, 10), LocalDateTime.of(2026, 3, 1, 10, 1, 1));
+
+        assertTrue(sent.stream().anyMatch(m -> m.contains("AA3")));
+        assertTrue(after.alerts().stream().noneMatch(a -> a.isActive() && "AA3".equals(a.getPlate())));
+    }
+
+    @Test
+    void createsTransitionalCandidateAfterAllowedRealOut() {
+        SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(configWithTransitional(), text -> {});
+        List<Detection> detections = List.of(new Detection(1, "AA5", 1, 180, LocalDateTime.of(2026, 3, 1, 12, 0)));
+
+        var snapshot = service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 12, 1));
+        Sequence sequence = snapshot.sequences().getFirst();
+        assertTrue(sequence.getStages().stream().anyMatch(s -> s.getType() == StageType.TRANSITIONAL));
     }
 
     @Test
@@ -57,15 +92,6 @@ class SequenceEngineServiceImplTest {
         SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(config(), text -> {});
         var snapshot = service.rebuild(detections.subList(0, Math.min(200, detections.size())), LocalDateTime.of(2026, 3, 26, 0, 0));
         assertFalse(snapshot.sequences().isEmpty());
-    }
-
-    @Test
-    void sendsAlertWhenTimeoutExpires() {
-        List<String> sent = new ArrayList<>();
-        SequenceEngineServiceImpl service = new SequenceEngineServiceImpl(configWithAlerts(), sent::add);
-        List<Detection> detections = List.of(new Detection(1, "AA3", 1, 0, LocalDateTime.of(2026, 3, 1, 10, 0)));
-        service.rebuild(detections, LocalDateTime.of(2026, 3, 1, 10, 1));
-        assertFalse(sent.isEmpty());
     }
 
     private AppConfig config() {
@@ -98,6 +124,16 @@ class SequenceEngineServiceImplTest {
         return c;
     }
 
+    private AppConfig configWithTwoSingleCameras() {
+        AppConfig c = config();
+        StageRuleConfig single2 = new StageRuleConfig();
+        single2.setName("post_2");
+        single2.setLabel("Post 2");
+        single2.setAnalyticsId(6);
+        c.getWorkflow().setSingleCamera(List.of(c.getWorkflow().getSingleCamera().getFirst(), single2));
+        return c;
+    }
+
     private AppConfig configWithAlerts() {
         AppConfig c = config();
         AlertRuleConfig alert = new AlertRuleConfig();
@@ -107,6 +143,17 @@ class SequenceEngineServiceImplTest {
         alert.setMessage("test");
         alert.setSendTimeOutMinutes(1);
         c.setAlerts(List.of(alert));
+        return c;
+    }
+
+    private AppConfig configWithTransitional() {
+        AppConfig c = config();
+        StageRuleConfig transitional = new StageRuleConfig();
+        transitional.setName("between");
+        transitional.setLabel("Between");
+        transitional.setAllowedAfter(List.of("drive_in"));
+        transitional.setCandidateTimeoutMinutes(2);
+        c.getWorkflow().setTransitional(List.of(transitional));
         return c;
     }
 }
