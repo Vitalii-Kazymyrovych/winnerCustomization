@@ -516,7 +516,8 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         for (PlateSequence seq : activeSequences.values()) {
             List<Stage> toMaterialize = new ArrayList<>();
             for (Stage s : seq.getStages()) {
-                if (s.isCandidate() && s.isActive() && s.getTimeout() <= 0) {
+                if (s.isCandidate() && s.isActive() && s.getTimeout() <= 0
+                        && hasCandidateReachedMinimumDuration(s, now)) {
                     toMaterialize.add(s);
                 }
             }
@@ -545,6 +546,22 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         }
     }
  
+
+    private boolean hasCandidateReachedMinimumDuration(Stage candidate, LocalDateTime now) {
+        if (candidate.getInTime() == null) {
+            return false;
+        }
+
+        int requiredSeconds = configLoader.getConfig().getWorkflow().getTransitional().stream()
+                .filter(tc -> tc.getName().equals(candidate.getName()))
+                .findFirst()
+                .map(tc -> tc.getCandidateTimeoutMinutes() * 60)
+                .orElse(0);
+
+        long elapsedSeconds = Duration.between(candidate.getInTime(), now).getSeconds();
+        return elapsedSeconds >= requiredSeconds;
+    }
+
     private void decrementAlertTimeouts(int elapsedSeconds) {
         for (AlertRecord alert : allAlerts) {
             if (alert.isActive()) {
@@ -584,16 +601,16 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                     && activeStage.getSequenceCloseTimeoutOverrideMinutes() > 0) {
                 timeoutMinutes = activeStage.getSequenceCloseTimeoutOverrideMinutes();
                 // For transitional override, measure from transitional stage start
-                long minutesSinceStart = Duration.between(activeStage.getInTime(), now).toMinutes();
-                if (minutesSinceStart >= timeoutMinutes) {
+                long secondsSinceStart = Duration.between(activeStage.getInTime(), now).getSeconds();
+                if (secondsSinceStart >= timeoutMinutes * 60L) {
                     platesToClose.add(entry.getKey());
                     continue;
                 }
             }
  
             // Global timeout: measure from last detection
-            long minutesSinceLastDetection = Duration.between(seq.getLastDetectionTime(), now).toMinutes();
-            if (minutesSinceLastDetection >= globalTimeoutMinutes) {
+            long secondsSinceLastDetection = Duration.between(seq.getLastDetectionTime(), now).getSeconds();
+            if (secondsSinceLastDetection >= globalTimeoutMinutes * 60L) {
                 platesToClose.add(entry.getKey());
             }
         }
@@ -667,8 +684,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 for (TransitionalStageConfig tc : wf.getTransitional()) {
                     if (!tc.getAllowedAfter().contains(stageA.getName())) continue;
  
-                    long gapMinutes = Duration.between(stageA.getOutTime(), stageB.getInTime()).toMinutes();
-                    if (gapMinutes > tc.getCandidateTimeoutMinutes()) {
+                    long gapSeconds = Duration.between(stageA.getOutTime(), stageB.getInTime()).getSeconds();
+                    long minGapSeconds = tc.getCandidateTimeoutMinutes() * 60L + 2;
+                    if (gapSeconds >= minGapSeconds) {
                         Stage transitional = new Stage();
                         transitional.setName(tc.getName());
                         transitional.setLabel(tc.getLabel());
