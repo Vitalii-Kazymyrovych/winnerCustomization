@@ -1,0 +1,15 @@
+Stage,In Time,Out Time,Duration,Alerts
+,,AA0029TT,,
+Drive In,,2026-03-15 12:30:31,,Vehicle stayed too long on Drive In
+Service,,2026-03-15 12:32:50,,Vehicle stayed too long on Service
+Backyard,2026-03-15 12:32:56,2026-03-15 12:33:05,,
+Post 2,2026-03-15 12:33:06,2026-03-15 12:33:06,,
+Backyard,2026-03-15 12:33:56,2026-03-15 12:36:43,,
+Drive In,,2026-03-15 12:36:44,,
+Service,,2026-03-16 12:31:51,,Vehicle stayed too long on Service
+Backyard,2026-03-16 12:36:38,2026-03-16 13:21:18,,
+Post 2,2026-03-16 13:21:19,2026-03-16 13:21:19,0s,
+,,KA0021CH,,
+Post 1,2026-03-15 12:32:54,2026-03-15 12:36:34,3m 40s,
+,,AA0029II,,
+Post 2,2026-03-15 12:33:15,2026-03-15 12:33:15,0s,

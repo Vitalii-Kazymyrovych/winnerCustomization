@@ -74,8 +74,11 @@ public class DatabaseBootstrapServiceImpl implements DatabaseBootstrapService {
         }
         targetRootJdbc.execute("GRANT ALL PRIVILEGES ON SCHEMA \"" + schema + "\" TO \"" + user + "\"");
         targetRootJdbc.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA \"" + schema + "\" TO \"" + user + "\"");
+        targetRootJdbc.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA \"" + schema + "\" TO \"" + user + "\"");
         targetRootJdbc.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA \"" + schema +
                 "\" GRANT ALL PRIVILEGES ON TABLES TO \"" + user + "\"");
+        targetRootJdbc.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA \"" + schema +
+                "\" GRANT ALL PRIVILEGES ON SEQUENCES TO \"" + user + "\"");
  
         // Step 6: Create tables
         log.info("Creating tables in schema '{}'", schema);
@@ -101,7 +104,7 @@ public class DatabaseBootstrapServiceImpl implements DatabaseBootstrapService {
                 "label VARCHAR(100) NOT NULL, " +
                 "type VARCHAR(20) NOT NULL, " +
                 "active BOOLEAN NOT NULL DEFAULT TRUE, " +
-                "full BOOLEAN NOT NULL DEFAULT FALSE, " +
+                "\"full\" BOOLEAN NOT NULL DEFAULT FALSE, " +
                 "candidate BOOLEAN NOT NULL DEFAULT FALSE, " +
                 "timeout INTEGER NOT NULL DEFAULT 0, " +
                 "in_time TIMESTAMP(3), " +
