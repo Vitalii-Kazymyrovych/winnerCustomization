@@ -206,7 +206,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
  
         // Create partial stage for the new out trigger
         Stage partial = createPartialStage(match, plate, detection.getCreatedAt());
-        seq.getStages().add(partial);
+        if (partial != null) {
+            seq.getStages().add(partial);
+        }
         log.debug("Partial stage '{}' for plate={}", match.stageName, plate);
     }
  
@@ -334,9 +336,8 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         if (closeTime != null) {
             stage.setOutTime(closeTime);
         }
-        // If it's a partial stage that got a second out, handle the promotion
-        if (!stage.isFull() && stage.getOutTime() != null && stage.getInTime() == null) {
-            // Stays partial
+        if (stage.getInTime() != null && stage.getOutTime() != null) {
+            stage.setDurationSeconds(Duration.between(stage.getInTime(), stage.getOutTime()).getSeconds());
         }
         log.debug("Closed stage '{}' plate={} outTime={}", stage.getName(),
                 stage.getPlateNumber(), stage.getOutTime());
@@ -351,6 +352,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             if (stage.getOutTime() == null) {
                 stage.setOutTime(newStageTime.minusSeconds(1));
             }
+        }
+        if (stage.getInTime() != null && stage.getOutTime() != null) {
+            stage.setDurationSeconds(Duration.between(stage.getInTime(), stage.getOutTime()).getSeconds());
         }
     }
  

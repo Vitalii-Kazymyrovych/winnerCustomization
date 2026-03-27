@@ -7,6 +7,7 @@ import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.PlateSequence;
 import script.winnerCustomization.model.Stage;
  
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -480,6 +481,74 @@ class SequenceEngineTest {
         assertEquals(0, engine.getAllSequences().size());
     }
  
+    // ========== DURATION CALCULATION TESTS ==========
+
+    @Test
+    void closedStage_hasDurationSet_whenClosedByNextStage() {
+        // drive_in IN at T0, drive_in OUT at T0+10, service IN at T0+20
+        // drive_in stage is closed by service IN — duration must be set immediately
+        LocalDateTime t1 = T0.plusMinutes(10);
+        LocalDateTime t2 = T0.plusMinutes(20);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 0, T0),        // drive_in IN
+                makeDetection("ABC123", 1, 180, t1),      // drive_in OUT
+                makeDetection("ABC123", 2, 0, t2)         // service IN — closes drive_in
+        );
+        engine.processDetections(detections);
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        Stage driveIn = seq.getStages().stream()
+                .filter(s -> s.getName().equals("drive_in")).findFirst().orElseThrow();
+
+        assertFalse(driveIn.isActive());
+        assertNotNull(driveIn.getDurationSeconds(),
+                "Duration must be set when stage is closed by the next stage");
+        assertEquals(Duration.between(T0, t1).getSeconds(), (long) driveIn.getDurationSeconds());
+    }
+
+    @Test
+    void singleCameraStage_hasDurationSet_whenClosedByNextStage() {
+        // post_1 at T0, then drive_in IN at T0+5 closes the single camera stage
+        LocalDateTime t1 = T0.plusMinutes(2);
+        LocalDateTime t2 = T0.plusMinutes(5);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 6, null, T0),     // post_1 first detection
+                makeDetection("ABC123", 6, null, t1),     // post_1 second detection (updates outTime)
+                makeDetection("ABC123", 1, 0, t2)         // drive_in IN — closes post_1
+        );
+        engine.processDetections(detections);
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        Stage post1 = seq.getStages().stream()
+                .filter(s -> s.getName().equals("post_1")).findFirst().orElseThrow();
+
+        assertFalse(post1.isActive());
+        assertNotNull(post1.getDurationSeconds(),
+                "Duration must be set for single camera stage when closed by next stage");
+        assertEquals(Duration.between(T0, t1).getSeconds(), (long) post1.getDurationSeconds());
+    }
+
+    @Test
+    void partialStagePropmotion_doesNotAddNullToStagesList() {
+        // Second OUT for same partial stage promotes it to full — must not add null entry
+        LocalDateTime t1 = T0.plusMinutes(5);
+        LocalDateTime t2 = T0.plusMinutes(10);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 180, T0),      // drive_in OUT (cold-start partial)
+                makeDetection("ABC123", 1, 180, t1)       // second drive_in OUT — promotes to full
+        );
+        engine.processDetections(detections);
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        boolean hasNull = seq.getStages().stream().anyMatch(s -> s == null);
+        assertFalse(hasNull, "Stages list must not contain null entries after partial promotion");
+        assertEquals(1, seq.getStages().size(),
+                "Exactly one stage after two consecutive OUTs on same stage");
+    }
+
     // ========== HISTORICAL TRANSITIONAL INSERT ==========
  
     @Test
