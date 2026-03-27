@@ -1,0 +1,170 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "rootUser": "postgres",
+    "rootPassword": "postgres",
+    "maintenanceDb": "postgres",
+    "source": {
+      "db": "videoanalytics",
+      "schema": "videoanalytics",
+      "user": "postgres",
+      "password": "postgres"
+    },
+    "sequence": {
+      "db": "customization",
+      "schema": "customization",
+      "user": "postgres",
+      "password": "postgres"
+    }
+  },
+
+  "sourceRefreshSeconds": 10,
+
+  "reportsDir": "C:/Users/vkazymyrovych/Desktop/reports",
+
+  "messaging": {
+    "enabled": false,
+    "telegramBotToken": "BOT_TOKEN_IF_ENABLED",
+    "telegramChatId": "CHAT_ID_IF_ENABLED"
+  },
+
+  "workflow": {
+    "sequenceCloseTimeoutMinutes": 2880,
+
+    "real": [
+      {
+        "name": "drive_in",
+        "label": "Drive In",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 14
+          },
+          {
+            "type": "in",
+            "analyticsId": 25
+          },
+          {
+            "type": "out",
+            "analyticsId": 16
+          }
+        ]
+      },
+      {
+        "name": "service",
+        "label": "Service",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 19
+          },
+          {
+            "type": "in",
+            "analyticsId": 22,
+            "direction": 260
+          },
+          {
+            "type": "out",
+            "analyticsId": 22,
+            "direction": 40
+          }
+        ]
+      },
+      {
+        "name": "parking",
+        "label": "Parking",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 20,
+            "direction": 360
+          },
+          {
+            "type": "out",
+            "analyticsId": 20,
+            "direction": 180
+          }
+        ]
+      }
+    ],
+
+    "transitional": [
+      {
+        "name": "backyard",
+        "label": "Backyard",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 17
+          }
+        ],
+        "allowedAfter": ["service", "parking"],
+        "candidateTimeoutMinutes": 5,
+        "sequenceCloseTimeoutOverrideMinutes": 2880
+      },
+      {
+        "name": "test_drive",
+        "label": "Test-Drive",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 16
+          },
+          {
+            "type": "in",
+            "analyticsId": 13
+          }
+        ],
+        "allowedAfter": ["drive_in"],
+        "candidateTimeoutMinutes": 5,
+        "sequenceCloseTimeoutOverrideMinutes": 60
+      }
+    ],
+
+    "singleCamera": [
+      {
+        "name": "post_1",
+        "label": "Post 1",
+        "analyticsId": 23
+      },
+      {
+        "name": "post_2",
+        "label": "Post 2",
+        "analyticsId": 24
+      }
+    ]
+  },
+
+  "alerts": [
+    {
+      "trigger": {
+        "analyticsId": 14
+      },
+      "message": "No Drive in (out) within 15 minutes",
+      "sendTimeOutMinutes": 15
+    },
+    {
+      "trigger": {
+        "analyticsId": 25
+      },
+      "message": "No Drive in (out) within 15 minutes",
+      "sendTimeOutMinutes": 15
+    },
+    {
+      "trigger": {
+        "analyticsId": 19
+      },
+      "message": "No Post in within 15 minutes",
+      "sendTimeOutMinutes": 15
+    },
+    {
+      "trigger": {
+        "analyticsId": 22,
+        "direction": 260
+      },
+      "message": "No Post in within 15 minutes",
+      "sendTimeOutMinutes": 15
+    }
+  ]
+}
