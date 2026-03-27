@@ -1,5 +1,13 @@
 # AGENT LOG
 
+## 2026-03-27 (session 2)
+- Refactored runtime DB update (polling step 7) to use a new `TargetRepository.updateActive()` method instead of `rewriteAll()`.
+- `updateActive()` deletes only rows where `active = true` in the DB, then reinserts the current active state — closed sequences, inactive stages, and inactive alerts are never touched during polling.
+- Added `nextSeqId / nextStageId / nextAlertId` tracking fields to `TargetRepository`; `rewriteAll` sets them so `updateActive` can assign new IDs without colliding with existing closed-sequence rows.
+- Added `SequenceEngineServiceImpl.getActiveSequences()` to expose only the active sequence map for the polling write path.
+- `SchedulerServiceImpl.performInitialLoad()` still calls `rewriteAll(getAllSequences())` for the full startup rewrite.
+- All 44 tests pass.
+
 ## 2026-03-27
 - Installed PostgreSQL 16 in the execution environment and initialized a local cluster.
 - Created source database objects and loaded `alpr_detections.sql` data (`1439` rows) into `source_db.videoanalytics.alpr_detections`.

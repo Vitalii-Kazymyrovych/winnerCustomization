@@ -710,6 +710,13 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         all.addAll(activeSequences.values());
         return all;
     }
+
+    /**
+     * Returns only the currently active sequences (used for incremental polling writes).
+     */
+    public List<PlateSequence> getActiveSequences() {
+        return new ArrayList<>(activeSequences.values());
+    }
  
     /**
      * Get alerts that are ready to be sent (timeout expired during last maintenance).

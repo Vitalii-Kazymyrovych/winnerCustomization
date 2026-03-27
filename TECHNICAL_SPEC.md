@@ -9,7 +9,7 @@ Application type: Spring Boot monolith with programmatic JDBC data sources (no S
 3. `DatabaseBootstrapServiceImpl` ensures target DB/schema/user/tables/privileges.
 4. `SourceRepository` and `TargetRepository` initialize JDBC connections.
 5. `SchedulerServiceImpl.performInitialLoad()` processes full source history.
-6. `SchedulerServiceImpl.startPolling()` periodically fetches new detections and rewrites target state.
+6. `SchedulerServiceImpl.startPolling()` periodically fetches new detections and updates only active state in target DB.
 7. `ReportController` serves XLSX reports from `ReportServiceImpl`.
 
 ## Packages and Components
@@ -38,8 +38,9 @@ Application type: Spring Boot monolith with programmatic JDBC data sources (no S
   - `fetchDetectionsAfter(LocalDateTime)`
 - `TargetRepository`
   - `initialize()`
-  - `rewriteAll(List<PlateSequence>)`
-  - Persists into target schema (`sequences`, `stages`, `alerts`).
+  - `rewriteAll(List<PlateSequence>)` — startup full rewrite; clears and rebuilds all three tables.
+  - `updateActive(List<PlateSequence>)` — polling incremental write; deletes only rows where `active=true` and reinserts the current active state. Closed sequences, inactive stages, and inactive alerts are not touched.
+  - Tracks `nextSeqId/nextStageId/nextAlertId` to assign new IDs without colliding with existing closed-sequence rows.
 
 ### `service.logic`
 - Interfaces:
@@ -57,7 +58,8 @@ Application type: Spring Boot monolith with programmatic JDBC data sources (no S
     - periodic `pollAndProcess()`
   - `SequenceEngineServiceImpl`
     - detection processing, stage transitions, timeout maintenance, alert activation/deactivation, sequence close logic
-    - exposes computed state for persistence/reporting
+    - `getActiveSequences()`: returns currently active sequences (used by polling write)
+    - `getAllSequences()`: returns all sequences including closed (used by startup write and reports)
   - `TriggerMatcher`: resolves incoming detections to configured trigger candidates.
   - `DirectionMatcher`: direction matching helper.
 
