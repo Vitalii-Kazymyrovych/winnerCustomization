@@ -75,7 +75,7 @@ public class TargetRepository {
  
                 jdbcTemplate.update(
                         "INSERT INTO \"" + schema + "\".stages " +
-                                "(id, sequence_id, name, label, type, active, full, candidate, timeout, " +
+                                "(id, sequence_id, name, label, type, active, \"full\", candidate, timeout, " +
                                 "in_time, out_time, duration_seconds, plate_number) " +
                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         stageId, seqId, stage.getName(), stage.getLabel(), stage.getType(),
