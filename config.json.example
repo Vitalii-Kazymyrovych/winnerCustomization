@@ -1,0 +1,144 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "rootUser": "postgres",
+    "rootPassword": "your_root_password",
+    "maintenanceDb": "postgres",
+    "source": {
+      "db": "source_db_name",
+      "schema": "videoanalytics",
+      "user": "source_db_user",
+      "password": "source_db_password"
+    },
+    "sequence": {
+      "db": "sequence_db_name",
+      "schema": "alpr_sequences",
+      "user": "sequence_db_user",
+      "password": "sequence_db_password"
+    }
+  },
+
+  "sourceRefreshSeconds": 10,
+
+  "reportsDir": "./reports",
+
+  "messaging": {
+    "enabled": false,
+    "telegramBotToken": "BOT_TOKEN_IF_ENABLED",
+    "telegramChatId": "CHAT_ID_IF_ENABLED"
+  },
+
+  "workflow": {
+    "sequenceCloseTimeoutMinutes": 2880,
+
+    "real": [
+      {
+        "name": "drive_in",
+        "label": "Drive In",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 1
+          },
+          {
+            "type": "out",
+            "analyticsId": 1
+          }
+        ]
+      },
+      {
+        "name": "service",
+        "label": "Service",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 2
+          },
+          {
+            "type": "out",
+            "analyticsId": 2,
+            "direction": 180
+          }
+        ]
+      },
+      {
+        "name": "parking",
+        "label": "Parking",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 3,
+            "direction": 0
+          },
+          {
+            "type": "out",
+            "analyticsId": 3,
+            "direction": 180
+          }
+        ]
+      }
+    ],
+
+    "transitional": [
+      {
+        "name": "backyard",
+        "label": "Backyard",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 4
+          }
+        ],
+        "allowedAfter": ["service", "parking"],
+        "candidateTimeoutMinutes": 5,
+        "sequenceCloseTimeoutOverrideMinutes": 0
+      },
+      {
+        "name": "test_drive",
+        "label": "Test Drive",
+        "triggers": [
+          {
+            "type": "in",
+            "analyticsId": 5,
+            "direction": 0
+          }
+        ],
+        "allowedAfter": ["drive_in"],
+        "candidateTimeoutMinutes": 5,
+        "sequenceCloseTimeoutOverrideMinutes": 60
+      }
+    ],
+
+    "singleCamera": [
+      {
+        "name": "post_1",
+        "label": "Post 1",
+        "analyticsId": 6
+      },
+      {
+        "name": "post_2",
+        "label": "Post 2",
+        "analyticsId": 7
+      }
+    ]
+  },
+
+  "alerts": [
+    {
+      "trigger": {
+        "analyticsId": 1,
+        "direction": 200
+      },
+      "message": "Vehicle stayed too long on Drive In",
+      "sendTimeOutMinutes": 15
+    },
+    {
+      "trigger": {
+        "analyticsId": 2
+      },
+      "message": "Vehicle stayed too long on Service",
+      "sendTimeOutMinutes": 15
+    }
+  ]
+}
