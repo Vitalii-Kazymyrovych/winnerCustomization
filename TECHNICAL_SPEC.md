@@ -58,6 +58,8 @@ Application type: Spring Boot monolith with programmatic JDBC data sources (no S
     - periodic `pollAndProcess()`
   - `SequenceEngineServiceImpl`
     - detection processing, stage transitions, timeout maintenance, alert activation/deactivation, sequence close logic
+    - sequence close checks use second-level precision (`timeoutMinutes * 60`) for both startup rebuild maintenance and runtime polling maintenance
+    - transitional candidates materialize only when both countdown timeout is exhausted and real elapsed time since candidate `inTime` reaches configured `candidateTimeoutMinutes`
     - `getActiveSequences()`: returns currently active sequences (used by polling write)
     - `getAllSequences()`: returns all sequences including closed (used by startup write and reports)
   - `TriggerMatcher`: resolves incoming detections to configured trigger candidates.

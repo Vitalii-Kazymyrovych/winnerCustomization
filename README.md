@@ -5,6 +5,7 @@ Spring Boot application that reads ALPR detections from a source PostgreSQL data
 ## Main Features
 - Poll detections from `videoanalytics.alpr_detections`.
 - Build stage-based plate sequences (real, transitional, and single-camera stages).
+- Enforce timeout-safe lifecycle behavior: sequences auto-close after configured inactivity timeout and transitional candidates never materialize before the full configured candidate timeout window.
 - Track and persist alerts with timeout logic.
 - Rewrite full computed state into target DB tables:
   - `alpr_sequences.sequences`

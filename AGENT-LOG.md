@@ -1,5 +1,17 @@
 # AGENT LOG
 
+## 2026-03-27 (session 3)
+- Fixed sequence timeout closure precision in `SequenceEngineServiceImpl.closeTimedOutSequences()` by comparing elapsed **seconds** against `sequenceCloseTimeoutMinutes * 60` (for both global timeout and transitional override timeout), avoiding minute-truncation edge cases on startup rebuild and runtime polling.
+- Fixed transitional candidate materialization race in polling maintenance:
+  - removed accidental duplicate queueing during materialization
+  - materialization now additionally requires real elapsed wall-clock time since candidate `inTime` to reach configured `candidateTimeoutMinutes`.
+- Hardened historical transitional insertion to require a minimum gap that guarantees inserted transitional duration is not shorter than `candidateTimeoutMinutes`.
+- Added regression tests for:
+  - sequence close after global timeout in maintenance
+  - preventing transitional materialization before full configured candidate timeout elapses
+  - preventing historical transitional insertion when resulting duration would be below candidate timeout.
+- All tests pass (47/47).
+
 ## 2026-03-27 (session 2)
 - Refactored runtime DB update (polling step 7) to use a new `TargetRepository.updateActive()` method instead of `rewriteAll()`.
 - `updateActive()` deletes only rows where `active = true` in the DB, then reinserts the current active state — closed sequences, inactive stages, and inactive alerts are never touched during polling.

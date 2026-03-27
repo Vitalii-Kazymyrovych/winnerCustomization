@@ -574,4 +574,67 @@ class SequenceEngineTest {
                 .anyMatch(s -> s.getName().equals("backyard") && "transitional".equals(s.getType()));
         assertTrue(hasBackyard, "Historical transitional 'backyard' should be inserted");
     }
+
+    @Test
+    void sequenceClosesAfterGlobalTimeout_onMaintenance() {
+        configLoader.getConfig().getWorkflow().setSequenceCloseTimeoutMinutes(1);
+
+        LocalDateTime now = LocalDateTime.now();
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 0, now.minusMinutes(2))
+        );
+        engine.processDetections(detections);
+
+        engine.performMaintenance(0);
+
+        List<PlateSequence> all = engine.getAllSequences();
+        assertEquals(1, all.size());
+        assertFalse(all.get(0).isActive(), "Sequence must close once sequenceCloseTimeoutMinutes is exceeded");
+        assertNotNull(all.get(0).getCloseTime(), "Closed sequence must have closeTime set");
+    }
+
+    @Test
+    void transitionalCandidate_doesNotMaterializeBeforeConfiguredDuration() {
+        LocalDateTime now = LocalDateTime.now();
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 2, 0, now.minusSeconds(2)),
+                makeDetection("ABC123", 2, 180, now.minusSeconds(1))
+        );
+        engine.processDetections(detections);
+
+        // Immediately subtract full candidate timeout; timeout reaches <= 0,
+        // but elapsed wall-clock time since candidate inTime is still far below 5 minutes.
+        engine.performMaintenance(5 * 60);
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        long candidateCount = seq.getStages().stream().filter(Stage::isCandidate).count();
+        assertEquals(1, candidateCount,
+                "Candidate must not materialize before candidateTimeoutMinutes of real elapsed time");
+    }
+
+    @Test
+    void insertHistoricalTransitionals_requiresEnoughGapForMinimumDuration() {
+        // gap = 5m1s. With in=A.out+1s and out=B.in-1s this would produce 4m59s,
+        // so transitional must NOT be inserted.
+        LocalDateTime t1 = T0.plusMinutes(5);
+        LocalDateTime t2 = t1.plusMinutes(5).plusSeconds(1);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 2, 0, T0),
+                makeDetection("ABC123", 2, 180, t1),
+                makeDetection("ABC123", 1, 0, t2)
+        );
+        engine.processDetections(detections);
+        engine.insertHistoricalTransitionals();
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        boolean hasBackyard = seq.getStages().stream()
+                .filter(s -> !s.isCandidate())
+                .anyMatch(s -> s.getName().equals("backyard") && "transitional".equals(s.getType()));
+
+        assertFalse(hasBackyard,
+                "Historical transitional must not be inserted when resulting duration would be < candidateTimeoutMinutes");
+    }
+
 }
