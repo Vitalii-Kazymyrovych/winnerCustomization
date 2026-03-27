@@ -1,5 +1,12 @@
 # Claude Code Instructions
 
+## Logic
+- Required logic is described in logic.md
+- Read logic.md before any changes to make sure that you understand the general application architecture.
+- In my tasks I can sometimes relate to certain parts of logic.md
+- Read logic.md after any changes to make sure that new workflow doesn't conflict with desired logic. 
+- Don't make any changes to logic.md
+
 ## Repository
 - GitHub: https://github.com/Vitalii-Kazymyrovych/winnerCustomization
 - Main branch: `main`

@@ -599,9 +599,10 @@ A sequence closes when:
 
 1. Bootstrap target DB (create database, schema, user, tables if needed).
 2. Read **all** detections from source, sorted by `created_at` ascending.
-3. Build all sequences, stages, and alerts from scratch.
-4. Save everything to target DB.
-5. Save `lastProcessedTimestamp` in memory.
+3. Erase **all** data from target db tables.
+4. Build all sequences, stages, and alerts from scratch.
+5. Save everything to target DB. 
+6. Save `lastProcessedTimestamp` in memory.
 
 ### Runtime (Polling)
 
