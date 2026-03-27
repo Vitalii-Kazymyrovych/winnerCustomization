@@ -11,7 +11,6 @@ import script.winnerCustomization.model.Stage;
  
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -483,7 +482,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
  
     @Override
     public void performMaintenance(int elapsedSeconds) {
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now();
         pendingAlertSends.clear();
  
         // 1. Decrement timeouts for transitional candidates
@@ -700,7 +699,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                         transitional.setTimeout(0);
                         transitional.setSequenceCloseTimeoutOverrideMinutes(
                                 tc.getSequenceCloseTimeoutOverrideMinutes());
-                        transitional.recalculateDuration(LocalDateTime.now(ZoneOffset.UTC));
+                        transitional.recalculateDuration(LocalDateTime.now());
  
                         toInsert.add(transitional);
                         // Mark insert position
