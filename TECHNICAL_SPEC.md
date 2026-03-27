@@ -39,7 +39,7 @@ Application type: Spring Boot monolith with programmatic JDBC data sources (no S
 - `TargetRepository`
   - `initialize()`
   - `rewriteAll(List<PlateSequence>)` — startup full rewrite; clears and rebuilds all three tables.
-  - `updateActive(List<PlateSequence>)` — polling incremental write; deletes only rows where `active=true` and reinserts the current active state. Closed sequences, inactive stages, and inactive alerts are not touched.
+  - `updateActive(List<PlateSequence> activeSequences, List<PlateSequence> newlyClosedSequences)` — polling incremental write; deletes only rows where `active=true`, reinserts active sequences (active stages only), then inserts newly-closed sequences with `active=false` and all their stages/alerts.
   - Tracks `nextSeqId/nextStageId/nextAlertId` to assign new IDs without colliding with existing closed-sequence rows.
 
 ### `service.logic`
@@ -58,8 +58,10 @@ Application type: Spring Boot monolith with programmatic JDBC data sources (no S
     - periodic `pollAndProcess()`
   - `SequenceEngineServiceImpl`
     - detection processing, stage transitions, timeout maintenance, alert activation/deactivation, sequence close logic
+    - `checkAndCloseForDetectionGap(plate, detectionTime)`: called before each detection; closes the active sequence if the gap since the last detection exceeds `sequenceCloseTimeoutMinutes` (or the transitional override).
     - `getActiveSequences()`: returns currently active sequences (used by polling write)
     - `getAllSequences()`: returns all sequences including closed (used by startup write and reports)
+    - `getNewlyClosedSequences()` / `clearNewlyClosedSequences()`: expose sequences closed during `processDetections` or `performMaintenance` for the polling write path.
   - `TriggerMatcher`: resolves incoming detections to configured trigger candidates.
   - `DirectionMatcher`: direction matching helper.
 
@@ -105,6 +107,6 @@ Application type: Spring Boot monolith with programmatic JDBC data sources (no S
 ## Testing
 - Unit tests: `./mvnw -B test`
 - Current tests focus on logic matchers and sequence engine behavior:
-  - `SequenceEngineTest`
+  - `SequenceEngineTest` — 29 tests covering sequences, stages, candidates, alerts, historical transitionals, and sequence close timeout / transitional materialization timing.
   - `TriggerMatcherTest`
   - `DirectionMatcherTest`

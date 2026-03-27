@@ -7,6 +7,7 @@ import script.winnerCustomization.alerts.AlertService;
 import script.winnerCustomization.config.ConfigLoader;
 import script.winnerCustomization.model.AlertRecord;
 import script.winnerCustomization.model.Detection;
+import script.winnerCustomization.model.PlateSequence;
 import script.winnerCustomization.repository.SourceRepository;
 import script.winnerCustomization.repository.TargetRepository;
 
@@ -93,10 +94,12 @@ public class SchedulerServiceImpl implements SchedulerService {
                 alertService.sendAlert(alert);
             }
 
-            // 5. Update target DB — only active sequences, active stages, and active alerts.
-            // Closed sequences and inactive stages/alerts are not touched; they persist from
-            // the startup rewriteAll and do not change during polling.
-            targetRepository.updateActive(sequenceEngine.getActiveSequences());
+            // 5. Collect sequences that closed during this cycle (from gap checks or timeout).
+            List<PlateSequence> newlyClosed = sequenceEngine.getNewlyClosedSequences();
+            sequenceEngine.clearNewlyClosedSequences();
+
+            // 6. Update target DB — rewrite active sequences and persist any newly-closed sequences.
+            targetRepository.updateActive(sequenceEngine.getActiveSequences(), newlyClosed);
 
             log.debug("Poll cycle complete. Active sequences: {}", sequenceEngine.getActiveSequences().size());
 
@@ -131,6 +134,10 @@ public class SchedulerServiceImpl implements SchedulerService {
 
             // Write everything to target DB (full rewrite — startup step 5)
             targetRepository.rewriteAll(sequenceEngine.getAllSequences());
+
+            // Clear tracking so the first poll cycle does not re-insert startup-closed sequences
+            // (rewriteAll already wrote them all; duplicate inserts would cause primary-key errors).
+            sequenceEngine.clearNewlyClosedSequences();
 
             log.info("Initial load complete: {} detections processed, {} sequences built",
                     allDetections.size(), sequenceEngine.getAllSequences().size());

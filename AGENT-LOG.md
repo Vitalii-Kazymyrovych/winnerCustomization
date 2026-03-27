@@ -1,5 +1,16 @@
 # AGENT LOG
 
+## 2026-03-27 (session 3)
+- Fixed **Bug 1 (sequences not closing after sequenceCloseTimeoutMinutes)** for both paths:
+  - **Historical/startup**: added `checkAndCloseForDetectionGap()` called at the top of `processOneDetection()`. When the timestamp gap between consecutive detections for the same plate exceeds `sequenceCloseTimeoutMinutes` (or the active transitional's override), the current sequence is closed before the new detection is processed. This correctly produces multiple sequences for a plate with disjoint visits in historical data.
+  - **Runtime/polling**: `closeSequence()` now appends to a `newlyClosedSequences` list. `pollAndProcess()` passes this list to `updateActive(activeSequences, newlyClosed)` so closed sequences are reinserted in the DB as `active=false` instead of disappearing. `performInitialLoad()` calls `clearNewlyClosedSequences()` after `rewriteAll()` to prevent the first poll from re-inserting startup-closed sequences.
+- Fixed **Bug 2 (transitional materializing in less than candidateTimeoutMinutes)** for both paths:
+  - **Runtime**: initial candidate timeout changed from `candidateTimeoutMinutes * 60` to `candidateTimeoutMinutes * 60 + 1` seconds (in both `createTransitionalCandidate` and `resetCandidateOnStageOut`), so duration at materialization = exactly `candidateTimeoutMinutes * 60` seconds (the `+1s inTime` offset was shaving 1 second off).
+  - **Historical**: `insertHistoricalTransitionals` now compares `gapSeconds > candidateTimeoutMinutes * 60L` (seconds-precise) instead of `gapMinutes > candidateTimeoutMinutes` (which truncated and missed gaps in the range `[candidateTimeoutMinutes, candidateTimeoutMinutes + 1)` minutes).
+- Updated `TargetRepository.updateActive()` signature to accept `newlyClosedSequences`; writes all stages/alerts for closed sequences regardless of their `active` flag.
+- Added `getNewlyClosedSequences()` / `clearNewlyClosedSequences()` to `SequenceEngineService` interface and implementation.
+- Added 7 new regression tests; all 51 tests pass.
+
 ## 2026-03-27 (session 2)
 - Refactored runtime DB update (polling step 7) to use a new `TargetRepository.updateActive()` method instead of `rewriteAll()`.
 - `updateActive()` deletes only rows where `active = true` in the DB, then reinserts the current active state — closed sequences, inactive stages, and inactive alerts are never touched during polling.

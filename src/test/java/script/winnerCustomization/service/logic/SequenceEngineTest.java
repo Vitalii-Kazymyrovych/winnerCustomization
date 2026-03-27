@@ -311,7 +311,7 @@ class SequenceEngineTest {
         assertEquals(1, candidates.size());
         assertEquals("backyard", candidates.get(0).getName());
         assertTrue(candidates.get(0).isCandidate());
-        assertEquals(5 * 60, candidates.get(0).getTimeout()); // 5 minutes in seconds
+        assertEquals(5 * 60 + 1, candidates.get(0).getTimeout()); // 5 min in seconds +1 for inTime offset
     }
  
     @Test
@@ -551,6 +551,174 @@ class SequenceEngineTest {
 
     // ========== HISTORICAL TRANSITIONAL INSERT ==========
  
+    // ========== BUG 1: SEQUENCE CLOSE TIMEOUT ==========
+
+    @Test
+    void sequenceClose_historicalGap_createsTwoSequences() {
+        // Plate seen at T0, then again at T0 + (timeout + 1) minutes — should produce two sequences
+        int timeoutMinutes = 10; // override in config for this test
+        setSequenceCloseTimeout(timeoutMinutes);
+
+        LocalDateTime t1 = T0;
+        LocalDateTime t2 = T0.plusMinutes(timeoutMinutes + 1); // gap > timeout
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 0, t1),   // drive_in IN — first visit
+                makeDetection("ABC123", 1, 0, t2)    // drive_in IN — second visit after timeout
+        );
+        engine.processDetections(detections);
+
+        List<PlateSequence> seqs = engine.getAllSequences();
+        assertEquals(2, seqs.size(), "Gap exceeding sequenceCloseTimeoutMinutes must produce two sequences");
+
+        long closedCount = seqs.stream().filter(s -> !s.isActive()).count();
+        long activeCount = seqs.stream().filter(PlateSequence::isActive).count();
+        assertEquals(1, closedCount, "First sequence must be closed");
+        assertEquals(1, activeCount, "Second sequence must be active");
+    }
+
+    @Test
+    void sequenceClose_historicalGapWithinTimeout_oneSequence() {
+        int timeoutMinutes = 10;
+        setSequenceCloseTimeout(timeoutMinutes);
+
+        LocalDateTime t1 = T0;
+        LocalDateTime t2 = T0.plusMinutes(timeoutMinutes - 1); // gap < timeout
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 0, t1),
+                makeDetection("ABC123", 1, 0, t2)
+        );
+        engine.processDetections(detections);
+
+        assertEquals(1, engine.getAllSequences().size(), "Gap within timeout must stay as one sequence");
+    }
+
+    @Test
+    void sequenceClose_newlyClosedTracked_andClearedAfterClear() {
+        int timeoutMinutes = 10;
+        setSequenceCloseTimeout(timeoutMinutes);
+
+        LocalDateTime t1 = T0;
+        LocalDateTime t2 = T0.plusMinutes(timeoutMinutes + 1);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 0, t1),
+                makeDetection("ABC123", 1, 0, t2)
+        );
+        engine.processDetections(detections);
+
+        List<PlateSequence> newlyClosed = engine.getNewlyClosedSequences();
+        assertEquals(1, newlyClosed.size(), "Closed sequence must appear in getNewlyClosedSequences()");
+        assertFalse(newlyClosed.get(0).isActive());
+
+        engine.clearNewlyClosedSequences();
+        assertEquals(0, engine.getNewlyClosedSequences().size(), "List must be empty after clear");
+    }
+
+    @Test
+    void sequenceClose_maintenanceTimeout_appearsInNewlyClosed() {
+        int timeoutMinutes = 10;
+        setSequenceCloseTimeout(timeoutMinutes);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 0, T0)
+        );
+        engine.processDetections(detections);
+        assertEquals(0, engine.getNewlyClosedSequences().size());
+
+        // Advance time beyond timeout via maintenance
+        engine.performMaintenance(timeoutMinutes * 60 + 60); // elapsedSeconds > timeout
+
+        List<PlateSequence> newlyClosed = engine.getNewlyClosedSequences();
+        assertEquals(1, newlyClosed.size(), "Timed-out sequence must appear in getNewlyClosedSequences()");
+        assertFalse(newlyClosed.get(0).isActive());
+    }
+
+    // ========== BUG 2: TRANSITIONAL MATERIALIZATION TIMING ==========
+
+    @Test
+    void transitionalCandidate_materializes_durationAtLeastCandidateTimeout() {
+        // After exactly candidateTimeoutMinutes * 60 + 1 poll-seconds the candidate materializes.
+        // Duration must be >= candidateTimeoutMinutes * 60 seconds.
+        LocalDateTime t1 = T0.plusMinutes(5);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 2, 0, T0),        // service IN
+                makeDetection("ABC123", 2, 180, t1)       // service OUT -> candidate
+        );
+        engine.processDetections(detections);
+
+        // Materialize by expiring the timeout (candidateTimeoutMinutes=5 => 301 seconds initial)
+        engine.performMaintenance(302);
+
+        Stage backyard = engine.getAllSequences().get(0).getStages().stream()
+                .filter(s -> s.getName().equals("backyard") && !s.isCandidate())
+                .findFirst().orElseThrow(() -> new AssertionError("backyard not materialized"));
+
+        assertNotNull(backyard.getDurationSeconds(), "Materialized transitional must have duration");
+        assertTrue(backyard.getDurationSeconds() >= 5 * 60,
+                "Materialized transitional duration must be >= candidateTimeoutMinutes * 60, was "
+                        + backyard.getDurationSeconds());
+    }
+
+    @Test
+    void insertHistoricalTransitionals_exactSecondBoundary_insertedWhenGapExceeds() {
+        // Gap of candidateTimeoutMinutes * 60 + 30 seconds (5 min 30 s) — must insert transitional.
+        // Previously toMinutes() truncation would give 5 > 5 = false and miss this.
+        LocalDateTime serviceOut = T0.plusMinutes(5);
+        LocalDateTime driveInIn = serviceOut.plusSeconds(5 * 60 + 30); // gap = 330 s > 300 s
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 2, 0, T0),
+                makeDetection("ABC123", 2, 180, serviceOut),
+                makeDetection("ABC123", 1, 0, driveInIn)
+        );
+        engine.processDetections(detections);
+        engine.insertHistoricalTransitionals();
+
+        List<Stage> nonCandidates = engine.getAllSequences().get(0).getStages().stream()
+                .filter(s -> !s.isCandidate()).toList();
+
+        boolean hasBackyard = nonCandidates.stream()
+                .anyMatch(s -> s.getName().equals("backyard") && "transitional".equals(s.getType()));
+        assertTrue(hasBackyard, "Gap of 5 min 30s must produce a historical backyard transitional");
+    }
+
+    @Test
+    void insertHistoricalTransitionals_exactTimeout_notInserted() {
+        // Gap of exactly candidateTimeoutMinutes * 60 seconds — must NOT insert transitional.
+        LocalDateTime serviceOut = T0.plusMinutes(5);
+        LocalDateTime driveInIn = serviceOut.plusSeconds(5 * 60); // gap = exactly 300 s
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 2, 0, T0),
+                makeDetection("ABC123", 2, 180, serviceOut),
+                makeDetection("ABC123", 1, 0, driveInIn)
+        );
+        engine.processDetections(detections);
+        engine.insertHistoricalTransitionals();
+
+        List<Stage> nonCandidates = engine.getAllSequences().get(0).getStages().stream()
+                .filter(s -> !s.isCandidate()).toList();
+
+        boolean hasBackyard = nonCandidates.stream()
+                .anyMatch(s -> s.getName().equals("backyard") && "transitional".equals(s.getType()));
+        assertFalse(hasBackyard, "Gap of exactly 5 min must NOT produce a historical backyard transitional");
+    }
+
+    // Helper to override sequenceCloseTimeoutMinutes in the test config
+    private void setSequenceCloseTimeout(int minutes) {
+        try {
+            var configField = ConfigLoader.class.getDeclaredField("config");
+            configField.setAccessible(true);
+            AppConfig config = (AppConfig) configField.get(configLoader);
+            config.getWorkflow().setSequenceCloseTimeoutMinutes(minutes);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     void insertHistoricalTransitionals_addsTransitionalBetweenStages() {
         // service OUT at T0+5, then drive_in IN at T0+15 (10 min gap > 5 min candidate timeout)

@@ -31,4 +31,16 @@ public interface SequenceEngineService {
      * Reset all state (used on restart).
      */
     void reset();
+
+    /**
+     * Returns sequences that closed during the most recent processDetections or performMaintenance call.
+     * Used by the polling loop to write them to the DB as closed.
+     */
+    List<PlateSequence> getNewlyClosedSequences();
+
+    /**
+     * Clears the newly-closed tracking list.
+     * Must be called after rewriteAll so the first polling cycle does not re-insert startup-closed sequences.
+     */
+    void clearNewlyClosedSequences();
 }

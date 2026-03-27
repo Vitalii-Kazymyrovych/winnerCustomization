@@ -131,8 +131,9 @@ public class TargetRepository {
      * in-memory active state. Rows with active=false (written at startup or in a prior cycle)
      * remain untouched in the DB.
      */
-    public void updateActive(List<PlateSequence> activeSequences) {
-        log.debug("Updating active DB state: {} active sequences", activeSequences.size());
+    public void updateActive(List<PlateSequence> activeSequences, List<PlateSequence> newlyClosedSequences) {
+        log.debug("Updating active DB state: {} active, {} newly closed",
+                activeSequences.size(), newlyClosedSequences.size());
 
         // Remove currently-active rows only; closed sequences (active=false) are untouched
         jdbcTemplate.execute("DELETE FROM \"" + schema + "\".alerts WHERE active = true");
@@ -195,7 +196,58 @@ public class TargetRepository {
             }
         }
 
-        log.debug("Active DB update complete: {} sequences written", activeSequences.size());
+        // Write sequences that closed during this poll cycle (active=false).
+        // These were deleted from the DB by the DELETE above (they had active=true) and must be
+        // reinserted as closed so they are not lost.
+        for (PlateSequence seq : newlyClosedSequences) {
+            if (seq.getId() == 0) {
+                seq.setId(nextSeqId++);
+            }
+
+            jdbcTemplate.update(
+                    "INSERT INTO \"" + schema + "\".sequences (id, plate_number, active, start_time, close_time) " +
+                            "VALUES (?, ?, ?, ?, ?)",
+                    seq.getId(), seq.getPlateNumber(), seq.isActive(),
+                    toTimestamp(seq.getStartTime()), toTimestamp(seq.getCloseTime())
+            );
+
+            // Write ALL stages of the closed sequence regardless of active flag —
+            // runtime-created sequences may have stages that were never written to the DB.
+            for (Stage stage : seq.getStages()) {
+                if (stage.getId() == 0) {
+                    stage.setId(nextStageId++);
+                }
+
+                jdbcTemplate.update(
+                        "INSERT INTO \"" + schema + "\".stages " +
+                                "(id, sequence_id, name, label, type, active, \"full\", candidate, timeout, " +
+                                "in_time, out_time, duration_seconds, plate_number) " +
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        stage.getId(), seq.getId(), stage.getName(), stage.getLabel(), stage.getType(),
+                        stage.isActive(), stage.isFull(), stage.isCandidate(), stage.getTimeout(),
+                        toTimestamp(stage.getInTime()), toTimestamp(stage.getOutTime()),
+                        stage.getDurationSeconds(), stage.getPlateNumber()
+                );
+
+                for (AlertRecord alert : stage.getAlerts()) {
+                    if (alert.getId() == 0) {
+                        alert.setId(nextAlertId++);
+                    }
+
+                    jdbcTemplate.update(
+                            "INSERT INTO \"" + schema + "\".alerts " +
+                                    "(id, plate_number, message, timeout_seconds, active, analytics_id, stage_id) " +
+                                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            alert.getId(), alert.getPlateNumber(), alert.getMessage(),
+                            alert.getTimeoutSeconds(), alert.isActive(),
+                            alert.getTriggerAnalyticsId(), stage.getId()
+                    );
+                }
+            }
+        }
+
+        log.debug("Active DB update complete: {} active, {} newly closed written",
+                activeSequences.size(), newlyClosedSequences.size());
     }
 
     private Timestamp toTimestamp(java.time.LocalDateTime dt) {

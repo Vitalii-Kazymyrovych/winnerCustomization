@@ -33,6 +33,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
  
     // Alerts to send (populated during maintenance)
     private final List<AlertRecord> pendingAlertSends = new ArrayList<>();
+
+    // Sequences that closed since the last clearNewlyClosedSequences() call
+    private final List<PlateSequence> newlyClosedSequences = new ArrayList<>();
  
     public SequenceEngineServiceImpl(ConfigLoader configLoader) {
         this.configLoader = configLoader;
@@ -51,6 +54,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         closedSequences.clear();
         allAlerts.clear();
         pendingAlertSends.clear();
+        newlyClosedSequences.clear();
         triggerMatcher = null;
         log.info("Sequence engine state reset");
     }
@@ -67,7 +71,11 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
     private void processOneDetection(Detection detection, TriggerMatcher matcher) {
         String plate = detection.getPlateNumber();
         if (plate == null || plate.isBlank()) return;
- 
+
+        // Bug 1 fix (historical + runtime): close the active sequence if the gap since the
+        // last detection exceeds the configured timeout before processing the new detection.
+        checkAndCloseForDetectionGap(plate, detection.getCreatedAt());
+
         // Find primary (real/transitional) match
         TriggerMatcher.MatchResult primaryMatch = matcher.findPrimaryMatch(detection);
  
@@ -291,7 +299,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         candidate.setCandidate(true);
         candidate.setFull(false);
         candidate.setInTime(afterOutTime.plusSeconds(1));
-        candidate.setTimeout(tc.getCandidateTimeoutMinutes() * 60); // store as seconds
+        // +1 so that duration at materialization = candidateTimeoutMinutes * 60 seconds exactly
+        // (inTime = outTime+1s, so without the +1 the stage would be 1 second too short)
+        candidate.setTimeout(tc.getCandidateTimeoutMinutes() * 60 + 1); // store as seconds
         candidate.setPlateNumber(seq.getPlateNumber());
         candidate.setSequenceCloseTimeoutOverrideMinutes(tc.getSequenceCloseTimeoutOverrideMinutes());
         seq.getStages().add(candidate);
@@ -308,7 +318,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 // Find existing candidate and reset its timeout
                 for (Stage s : seq.getStages()) {
                     if (s.isCandidate() && s.isActive() && s.getName().equals(tc.getName())) {
-                        s.setTimeout(tc.getCandidateTimeoutMinutes() * 60);
+                        s.setTimeout(tc.getCandidateTimeoutMinutes() * 60 + 1);
                         s.setInTime(outTime.plusSeconds(1));
                         log.debug("Reset candidate '{}' timeout for plate={}", tc.getName(),
                                 seq.getPlateNumber());
@@ -641,9 +651,42 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         }
  
         closedSequences.add(seq);
+        newlyClosedSequences.add(seq);
         log.info("Closed sequence for plate={}, stages={}", plate, seq.getStages().size());
     }
- 
+
+    // ========== GAP-BASED CLOSE CHECK ==========
+
+    /**
+     * Called at the top of processOneDetection.
+     * If the gap between the plate's last detection and the new detection exceeds the configured
+     * close timeout, the current active sequence is closed before the new detection is processed.
+     * This handles both historical sequences (multiple disjoint visits) and runtime gap detection.
+     */
+    private void checkAndCloseForDetectionGap(String plate, LocalDateTime detectionTime) {
+        PlateSequence seq = activeSequences.get(plate);
+        if (seq == null || seq.getLastDetectionTime() == null) return;
+
+        WorkflowConfig wf = configLoader.getConfig().getWorkflow();
+        int globalTimeoutMinutes = wf.getSequenceCloseTimeoutMinutes();
+
+        // Check transitional override first (mirrors closeTimedOutSequences logic)
+        Stage activeStage = seq.getActiveStage();
+        if (activeStage != null && "transitional".equals(activeStage.getType())
+                && activeStage.getSequenceCloseTimeoutOverrideMinutes() > 0) {
+            long minutesSinceStart = Duration.between(activeStage.getInTime(), detectionTime).toMinutes();
+            if (minutesSinceStart >= activeStage.getSequenceCloseTimeoutOverrideMinutes()) {
+                closeSequence(plate, detectionTime);
+                return;
+            }
+        }
+
+        long minutesSinceLastDetection = Duration.between(seq.getLastDetectionTime(), detectionTime).toMinutes();
+        if (minutesSinceLastDetection >= globalTimeoutMinutes) {
+            closeSequence(plate, detectionTime);
+        }
+    }
+
     // ========== HISTORICAL TRANSITIONAL CHECK ==========
  
     /**
@@ -667,8 +710,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 for (TransitionalStageConfig tc : wf.getTransitional()) {
                     if (!tc.getAllowedAfter().contains(stageA.getName())) continue;
  
-                    long gapMinutes = Duration.between(stageA.getOutTime(), stageB.getInTime()).toMinutes();
-                    if (gapMinutes > tc.getCandidateTimeoutMinutes()) {
+                    // Use seconds to avoid toMinutes() truncation swallowing valid sub-minute gaps
+                    long gapSeconds = Duration.between(stageA.getOutTime(), stageB.getInTime()).toSeconds();
+                    if (gapSeconds > (long) tc.getCandidateTimeoutMinutes() * 60) {
                         Stage transitional = new Stage();
                         transitional.setName(tc.getName());
                         transitional.setLabel(tc.getLabel());
@@ -723,5 +767,15 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
      */
     public List<AlertRecord> getPendingAlertSends() {
         return new ArrayList<>(pendingAlertSends);
+    }
+
+    @Override
+    public List<PlateSequence> getNewlyClosedSequences() {
+        return new ArrayList<>(newlyClosedSequences);
+    }
+
+    @Override
+    public void clearNewlyClosedSequences() {
+        newlyClosedSequences.clear();
     }
 }
