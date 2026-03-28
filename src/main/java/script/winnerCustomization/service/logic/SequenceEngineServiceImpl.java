@@ -92,10 +92,12 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         // Process alert triggers
         processAlertTriggers(detection, matcher);
  
-        // Update last detection time for active sequence
-        PlateSequence seq = activeSequences.get(plate);
-        if (seq != null) {
-            seq.setLastDetectionTime(detection.getCreatedAt());
+        // Update last detection time only when the detection matched a known trigger
+        if (primaryMatch != null || !singleCameraMatches.isEmpty()) {
+            PlateSequence seq = activeSequences.get(plate);
+            if (seq != null) {
+                seq.setLastDetectionTime(detection.getCreatedAt());
+            }
         }
     }
  

@@ -571,6 +571,36 @@ class SequenceEngineTest {
                 "Exactly one stage after two consecutive OUTs on same stage");
     }
 
+    // ========== LAST DETECTION TIME TESTS ==========
+
+    @Test
+    void lastDetectionTime_notUpdated_forUnknownTrigger() {
+        // Seed a known detection so a sequence exists with a known lastDetectionTime
+        engine.processDetections(List.of(makeDetection("ABC123", 1, 0, T0)));
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        LocalDateTime before = seq.getLastDetectionTime();
+
+        // analyticsId=99 matches nothing — must not update lastDetectionTime
+        LocalDateTime t1 = T0.plusMinutes(5);
+        engine.processDetections(List.of(makeDetection("ABC123", 99, null, t1)));
+
+        assertEquals(before, seq.getLastDetectionTime(),
+                "lastDetectionTime must not change for a detection that matches no trigger");
+    }
+
+    @Test
+    void lastDetectionTime_updated_forKnownTrigger() {
+        engine.processDetections(List.of(makeDetection("ABC123", 1, 0, T0)));
+
+        LocalDateTime t1 = T0.plusMinutes(5);
+        engine.processDetections(List.of(makeDetection("ABC123", 1, 180, t1)));
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        assertEquals(t1, seq.getLastDetectionTime(),
+                "lastDetectionTime must be updated for a detection that matches a known trigger");
+    }
+
     // ========== HISTORICAL TRANSITIONAL INSERT ==========
  
     // ========== BUG 1: SEQUENCE CLOSE TIMEOUT ==========
