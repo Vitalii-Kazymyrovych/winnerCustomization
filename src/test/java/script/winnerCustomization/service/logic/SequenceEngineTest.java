@@ -571,6 +571,44 @@ class SequenceEngineTest {
                 "Exactly one stage after two consecutive OUTs on same stage");
     }
 
+    // ========== CANDIDATE INVALIDATION TESTS ==========
+
+    @Test
+    void candidate_invalidatedByAnyDetection_exceptRepeatOutSameStage() {
+        // Create candidate: service OUT creates backyard candidate
+        LocalDateTime t1 = T0.plusMinutes(5);
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0),
+                makeDetection("ABC123", 2, 180, t1)
+        ));
+        assertEquals(1, engine.getAllSequences().get(0).getCandidates().size(),
+                "Candidate must exist before test");
+
+        // An unrelated detection (drive_in IN) must invalidate the candidate
+        engine.processDetections(List.of(makeDetection("ABC123", 1, 0, t1.plusMinutes(1))));
+
+        assertEquals(0, engine.getAllSequences().get(0).getCandidates().size(),
+                "Candidate must be invalidated by an unrelated detection");
+    }
+
+    @Test
+    void candidate_notInvalidated_byRepeatOutSameStage() {
+        // Create candidate: service OUT creates backyard candidate
+        LocalDateTime t1 = T0.plusMinutes(5);
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0),
+                makeDetection("ABC123", 2, 180, t1)
+        ));
+        assertEquals(1, engine.getAllSequences().get(0).getCandidates().size(),
+                "Candidate must exist before test");
+
+        // A second OUT for the same active stage must NOT invalidate the candidate
+        engine.processDetections(List.of(makeDetection("ABC123", 2, 180, t1.plusMinutes(1))));
+
+        assertEquals(1, engine.getAllSequences().get(0).getCandidates().size(),
+                "Candidate must survive a repeated out for the same active stage");
+    }
+
     // ========== LAST DETECTION TIME TESTS ==========
 
     @Test

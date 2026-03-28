@@ -78,7 +78,20 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
 
         // Find primary (real/transitional) match
         TriggerMatcher.MatchResult primaryMatch = matcher.findPrimaryMatch(detection);
- 
+
+        // Invalidate pending candidates for any detection, except a repeated out for the same active stage
+        PlateSequence seqBeforeProcess = activeSequences.get(plate);
+        if (seqBeforeProcess != null) {
+            Stage activeStageNow = seqBeforeProcess.getActiveStage();
+            boolean isRepeatOutSameStage = primaryMatch != null
+                    && "out".equals(primaryMatch.triggerType)
+                    && activeStageNow != null
+                    && activeStageNow.getName().equals(primaryMatch.stageName);
+            if (!isRepeatOutSameStage) {
+                invalidateCandidates(seqBeforeProcess, detection.getCreatedAt());
+            }
+        }
+
         if (primaryMatch != null && !"singleCamera".equals(primaryMatch.stageType)) {
             processStageMatch(detection, primaryMatch);
         }
