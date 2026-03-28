@@ -699,17 +699,28 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         WorkflowConfig wf = configLoader.getConfig().getWorkflow();
         int globalTimeoutMinutes = wf.getSequenceCloseTimeoutMinutes();
 
-        // Check transitional override first (mirrors closeTimedOutSequences logic)
+        // Mirrors closeTimedOutSequences logic for transitional stages
         Stage activeStage = seq.getActiveStage();
-        if (activeStage != null && "transitional".equals(activeStage.getType())
-                && activeStage.getSequenceCloseTimeoutOverrideMinutes() > 0) {
-            long minutesSinceStart = Duration.between(activeStage.getInTime(), detectionTime).toMinutes();
-            if (minutesSinceStart >= activeStage.getSequenceCloseTimeoutOverrideMinutes()) {
-                closeSequence(plate, detectionTime);
-                return;
+        if (activeStage != null && "transitional".equals(activeStage.getType())) {
+            if (activeStage.getSequenceCloseTimeoutOverrideMinutes() > 0) {
+                // override > 0: measure from stage inTime with override timeout
+                long minutesSinceStart = Duration.between(activeStage.getInTime(), detectionTime).toMinutes();
+                if (minutesSinceStart >= activeStage.getSequenceCloseTimeoutOverrideMinutes()) {
+                    closeSequence(plate, detectionTime);
+                }
+            } else {
+                // override == 0: measure from stage inTime with global timeout
+                if (activeStage.getInTime() != null) {
+                    long minutesSinceStart = Duration.between(activeStage.getInTime(), detectionTime).toMinutes();
+                    if (minutesSinceStart >= globalTimeoutMinutes) {
+                        closeSequence(plate, detectionTime);
+                    }
+                }
             }
+            return;
         }
 
+        // Non-transitional: measure from last detection
         long minutesSinceLastDetection = Duration.between(seq.getLastDetectionTime(), detectionTime).toMinutes();
         if (minutesSinceLastDetection >= globalTimeoutMinutes) {
             closeSequence(plate, detectionTime);
