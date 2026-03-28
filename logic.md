@@ -389,7 +389,7 @@ When the very first detection is an **in** trigger, open a normal stage as descr
 | `label` | Same as real stage |
 | `triggers` | Same as real stage |
 | `allowedAfter` | Array of stage names after which this transitional may auto-start |
-| `candidateTimeoutMinutes` | Minutes after previous stage `out` before the transitional materializes |
+| `candidateTimeoutMinutes` | Minutes before a transitional candidate materializes (applies to both auto-start and camera trigger candidates) |
 | `sequenceCloseTimeoutOverrideMinutes` | If > 0, overrides global `sequenceCloseTimeoutMinutes` for this stage; if 0, use global value |
 
 ### Database Fields
@@ -402,7 +402,11 @@ Same as real stage, except:
 
 ### In Policy — Camera Trigger
 
-- Same deduplication rules as real stage `in` policy.
+When a detection matches an `in` trigger for a transitional stage:
+1. If a candidate with the same name already exists (pending), ignore the detection.
+2. Otherwise, create a **candidate** transitional stage with `inTime = detectionTimestamp`, `timeout = candidateTimeoutMinutes`, `candidate = true`, `full = false`.
+3. The previous active stage is **not** closed — candidates are not active stages.
+4. Materialization, invalidation, and timeout rules are identical to auto-start candidates (see below).
 
 ### In Policy — AllowedAfter Auto-Start (Candidate)
 
@@ -417,6 +421,7 @@ When an `out` event occurs for a stage listed in `allowedAfter`:
 - If the stage A `out` trigger fires again before the candidate materializes, apply the real stage out policy (overwrite `outTime`) and **reset the candidate timeout** to `candidateTimeoutMinutes`.
 - If **any other detection** for the plate arrives before timeout ends (on any camera, any stage), the candidate is **deleted** without materializing.
 - If a partial stage is created while a candidate is pending, the candidate is also deleted.
+- These invalidation rules apply equally to candidates created by camera triggers and by auto-start.
 
 **Historical sequences:** After calculating stage A's `inTime`, `outTime`, and `duration`, if stage A is in `allowedAfter` for a transitional C, and the next detection for this plate (stage B `in`) arrives more than `candidateTimeoutMinutes` after stage A's `outTime`, create transitional stage C between A and B: `inTime = stageA.outTime + 1 second`, `outTime = stageB.inTime - 1 second`.
 

@@ -135,6 +135,34 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             seq = createNewSequence(plate, detection.getCreatedAt());
         }
 
+        // Transitional in-trigger: create a candidate, do NOT close the previous active stage
+        if ("transitional".equals(match.stageType) && match.transitionalConfig != null) {
+            // Dedup: skip if a pending candidate with the same name already exists
+            boolean alreadyExists = seq.getStages().stream()
+                    .anyMatch(s -> s.isCandidate() && s.isActive() && s.getName().equals(match.stageName));
+            if (alreadyExists) {
+                log.debug("Dedup: transitional candidate '{}' already exists for plate={}",
+                        match.stageName, plate);
+                return;
+            }
+            TransitionalStageConfig tc = match.transitionalConfig;
+            Stage candidate = new Stage();
+            candidate.setName(match.stageName);
+            candidate.setLabel(match.stageLabel);
+            candidate.setType("transitional");
+            candidate.setActive(true);
+            candidate.setCandidate(true);
+            candidate.setFull(false);
+            candidate.setInTime(detection.getCreatedAt());
+            candidate.setTimeout(tc.getCandidateTimeoutMinutes() * 60 + 1);
+            candidate.setPlateNumber(plate);
+            candidate.setSequenceCloseTimeoutOverrideMinutes(tc.getSequenceCloseTimeoutOverrideMinutes());
+            seq.getStages().add(candidate);
+            log.debug("Created transitional candidate '{}' for plate={} via in-trigger at {}",
+                    match.stageName, plate, detection.getCreatedAt());
+            return;
+        }
+
         Stage activeStage = seq.getActiveStage();
 
         // Deduplication: if same stage is already active with an in event, ignore
@@ -169,17 +197,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         newStage.setPlateNumber(plate);
         newStage.setTimeout(0);
 
-        if ("transitional".equals(match.stageType) && match.transitionalConfig != null) {
-            newStage.setSequenceCloseTimeoutOverrideMinutes(
-                    match.transitionalConfig.getSequenceCloseTimeoutOverrideMinutes());
-        }
-
         seq.getStages().add(newStage);
         log.debug("Opened {} stage '{}' for plate={} at {}", match.stageType, match.stageName,
                 plate, detection.getCreatedAt());
-
-        // Check for transitional auto-start candidates based on this new stage's future out events
-        // (candidates are created on out events, not in events)
     }
 
     // ========== OUT TRIGGER ==========

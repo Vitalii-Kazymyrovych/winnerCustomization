@@ -571,6 +571,56 @@ class SequenceEngineTest {
                 "Exactly one stage after two consecutive OUTs on same stage");
     }
 
+    // ========== TRANSITIONAL IN-TRIGGER TESTS ==========
+
+    @Test
+    void transitionalInTrigger_createsCandidateNotLiveStage() {
+        // service IN then backyard in-trigger (analyticsId=4).
+        // Must create a candidate (candidate=true, full=false), NOT a live stage.
+        // Previous service stage must remain active.
+        LocalDateTime t1 = T0.plusMinutes(5);
+
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0),        // service IN
+                makeDetection("ABC123", 4, null, t1)      // backyard in-trigger
+        ));
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+
+        // Service stage must still be active
+        Stage service = seq.getStages().stream()
+                .filter(s -> s.getName().equals("service"))
+                .findFirst().orElseThrow(() -> new AssertionError("service stage missing"));
+        assertTrue(service.isActive(), "Previous real stage must remain active after transitional in-trigger");
+
+        // Backyard must exist as a candidate
+        List<Stage> candidates = seq.getCandidates();
+        assertEquals(1, candidates.size(), "Exactly one candidate must be created");
+        Stage backyard = candidates.get(0);
+        assertEquals("backyard", backyard.getName());
+        assertTrue(backyard.isCandidate());
+        assertFalse(backyard.isFull());
+        assertEquals(t1, backyard.getInTime());
+        assertEquals(5 * 60 + 1, backyard.getTimeout());
+    }
+
+    @Test
+    void transitionalInTrigger_dedup_noDuplicateCandidate() {
+        // Two consecutive backyard in-triggers: only one candidate must exist.
+        LocalDateTime t1 = T0.plusMinutes(5);
+        LocalDateTime t2 = T0.plusMinutes(6);
+
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0),
+                makeDetection("ABC123", 4, null, t1),   // first backyard in-trigger
+                makeDetection("ABC123", 4, null, t2)    // duplicate — must be ignored
+        ));
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        assertEquals(1, seq.getCandidates().size(),
+                "Duplicate transitional in-trigger must not create a second candidate");
+    }
+
     // ========== TRANSITIONAL OVERRIDE=0 TIMEOUT TESTS ==========
 
     @Test
