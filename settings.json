@@ -3,6 +3,11 @@
     "allow": [
       "Bash(./mvnw:*)"
     ],
-    "deny": []
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(powershell:*)",
+      "Bash(pwsh:*)"
+    ]
   }
 }

@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(./mvnw -B test)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)"
-    ]
-  }
-}
