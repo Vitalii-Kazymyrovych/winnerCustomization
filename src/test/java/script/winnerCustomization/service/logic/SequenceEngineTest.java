@@ -531,6 +531,28 @@ class SequenceEngineTest {
     }
 
     @Test
+    void partialStagePromotion_secondOutPromotesToFull() {
+        // Cold-start OUT creates partial (inTime=null, outTime=T0, full=false).
+        // Second OUT on the same stage must promote it: inTime=T0, outTime=t1, full=true.
+        LocalDateTime t1 = T0.plusMinutes(5);
+
+        List<Detection> detections = List.of(
+                makeDetection("ABC123", 1, 180, T0),   // drive_in OUT — cold-start partial
+                makeDetection("ABC123", 1, 180, t1)    // drive_in OUT — promotes to full
+        );
+        engine.processDetections(detections);
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        assertEquals(1, seq.getStages().size());
+
+        Stage stage = seq.getStages().get(0);
+        assertEquals("drive_in", stage.getName());
+        assertTrue(stage.isFull(), "Stage must be promoted to full");
+        assertEquals(T0, stage.getInTime(), "inTime must be the first OUT timestamp");
+        assertEquals(t1, stage.getOutTime(), "outTime must be the second OUT timestamp");
+    }
+
+    @Test
     void partialStagePropmotion_doesNotAddNullToStagesList() {
         // Second OUT for same partial stage promotes it to full — must not add null entry
         LocalDateTime t1 = T0.plusMinutes(5);

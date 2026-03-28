@@ -185,10 +185,19 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
  
         // Check if this out is for the same stage that is active
         if (activeStage != null && activeStage.getName().equals(match.stageName)) {
-            // Same stage out: overwrite outTime
-            activeStage.setOutTime(detection.getCreatedAt());
-            log.debug("Updated outTime for active stage '{}' plate={} to {}",
-                    match.stageName, plate, detection.getCreatedAt());
+            if (!activeStage.isFull() && activeStage.getInTime() == null) {
+                // Partial stage (cold-start): promote to full by shifting times
+                activeStage.setInTime(activeStage.getOutTime());
+                activeStage.setOutTime(detection.getCreatedAt());
+                activeStage.setFull(true);
+                log.debug("Promoted partial stage '{}' plate={} to full: inTime={} outTime={}",
+                        match.stageName, plate, activeStage.getInTime(), activeStage.getOutTime());
+            } else {
+                // Normal: overwrite outTime
+                activeStage.setOutTime(detection.getCreatedAt());
+                log.debug("Updated outTime for active stage '{}' plate={} to {}",
+                        match.stageName, plate, detection.getCreatedAt());
+            }
  
             // Check for transitional auto-start candidate creation
             checkTransitionalAutoStart(seq, activeStage, detection.getCreatedAt());
