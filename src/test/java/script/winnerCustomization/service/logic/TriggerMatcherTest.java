@@ -202,6 +202,85 @@ class TriggerMatcherTest {
     }
  
     @Test
+    void globalConflictResolution_crossStage_expandsOutTolerance() {
+        // Stage A: analyticsId=5, in dir=90 (different stage from Stage B)
+        // Stage B: analyticsId=5, out dir=0
+        // rangesOverlap(90, 90, 0, 90) -> dist=90 < 180 -> conflict detected globally.
+        // out gets tolerance=91, in gets tolerance=89.
+        // Detection at dir=91: dist(91, 0)=91 <= 91 -> out matches (expanded).
+        // Without global resolution out tol=90: 91 > 90 -> no match, only in would match.
+        RealStageConfig stageA = new RealStageConfig();
+        stageA.setName("gate_in");
+        stageA.setLabel("Gate In");
+        TriggerConfig tA = new TriggerConfig();
+        tA.setType("in");
+        tA.setAnalyticsId(5);
+        tA.setDirection(90);
+        stageA.setTriggers(List.of(tA));
+
+        RealStageConfig stageB = new RealStageConfig();
+        stageB.setName("gate_out");
+        stageB.setLabel("Gate Out");
+        TriggerConfig tB = new TriggerConfig();
+        tB.setType("out");
+        tB.setAnalyticsId(5);
+        tB.setDirection(0);
+        stageB.setTriggers(List.of(tB));
+
+        WorkflowConfig wf = new WorkflowConfig();
+        wf.setSequenceCloseTimeoutMinutes(999);
+        wf.setReal(List.of(stageA, stageB));
+        wf.setTransitional(List.of());
+        wf.setSingleCamera(List.of());
+
+        TriggerMatcher matcher = new TriggerMatcher(wf);
+
+        // direction=91: only out (expanded to 91) matches; in (shrunk to 89) still matches (dist=1).
+        // Both have direction -> out wins.
+        Detection d = makeDetection(5, 91);
+        TriggerMatcher.MatchResult result = matcher.findPrimaryMatch(d);
+
+        assertNotNull(result);
+        assertEquals("gate_out", result.stageName,
+                "Global conflict must expand out tolerance so it matches at the boundary");
+        assertEquals("out", result.triggerType);
+    }
+
+    @Test
+    void findPrimaryMatch_inWins_whenInHasDirectionAndOutDoesNot() {
+        // analyticsId=7: in has direction=0, out has no direction.
+        // Detection at direction=0: both match, but in is more specific -> in wins.
+        RealStageConfig stage = new RealStageConfig();
+        stage.setName("gate");
+        stage.setLabel("Gate");
+        TriggerConfig inT = new TriggerConfig();
+        inT.setType("in");
+        inT.setAnalyticsId(7);
+        inT.setDirection(0);
+        TriggerConfig outT = new TriggerConfig();
+        outT.setType("out");
+        outT.setAnalyticsId(7);
+        // outT direction intentionally null
+        stage.setTriggers(List.of(inT, outT));
+
+        WorkflowConfig wf = new WorkflowConfig();
+        wf.setSequenceCloseTimeoutMinutes(999);
+        wf.setReal(List.of(stage));
+        wf.setTransitional(List.of());
+        wf.setSingleCamera(List.of());
+
+        TriggerMatcher matcher = new TriggerMatcher(wf);
+
+        Detection d = makeDetection(7, 0);
+        TriggerMatcher.MatchResult result = matcher.findPrimaryMatch(d);
+
+        assertNotNull(result);
+        assertEquals("in", result.triggerType,
+                "in must win when in has direction and out does not");
+        assertTrue(result.triggerHasDirection);
+    }
+
+    @Test
     void matchesAlertTrigger_noDirection() {
         TriggerMatcher matcher = new TriggerMatcher(workflow);
  
