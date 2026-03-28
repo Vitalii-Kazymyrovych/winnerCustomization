@@ -1,5 +1,5 @@
 package script.winnerCustomization.service.logic;
- 
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -8,46 +8,46 @@ import script.winnerCustomization.model.AlertRecord;
 import script.winnerCustomization.model.Detection;
 import script.winnerCustomization.model.PlateSequence;
 import script.winnerCustomization.model.Stage;
- 
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
- 
+
 @Service
 public class SequenceEngineServiceImpl implements SequenceEngineService {
- 
+
     private static final Logger log = LoggerFactory.getLogger(SequenceEngineServiceImpl.class);
- 
+
     private final ConfigLoader configLoader;
     private TriggerMatcher triggerMatcher;
- 
+
     // State: plate -> active sequence
     private final Map<String, PlateSequence> activeSequences = new LinkedHashMap<>();
     // State: all closed sequences
     private final List<PlateSequence> closedSequences = new ArrayList<>();
     // All alerts (across all sequences)
     private final List<AlertRecord> allAlerts = new ArrayList<>();
- 
+
     // Alerts to send (populated during maintenance)
     private final List<AlertRecord> pendingAlertSends = new ArrayList<>();
 
     // Sequences that closed since the last clearNewlyClosedSequences() call
     private final List<PlateSequence> newlyClosedSequences = new ArrayList<>();
- 
+
     public SequenceEngineServiceImpl(ConfigLoader configLoader) {
         this.configLoader = configLoader;
     }
- 
+
     private TriggerMatcher getTriggerMatcher() {
         if (triggerMatcher == null) {
             triggerMatcher = new TriggerMatcher(configLoader.getConfig().getWorkflow());
         }
         return triggerMatcher;
     }
- 
+
     @Override
     public void reset() {
         activeSequences.clear();
@@ -58,16 +58,16 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         triggerMatcher = null;
         log.info("Sequence engine state reset");
     }
- 
+
     @Override
     public void processDetections(List<Detection> detections) {
         TriggerMatcher matcher = getTriggerMatcher();
- 
+
         for (Detection detection : detections) {
             processOneDetection(detection, matcher);
         }
     }
- 
+
     private void processOneDetection(Detection detection, TriggerMatcher matcher) {
         String plate = detection.getPlateNumber();
         if (plate == null || plate.isBlank()) return;
@@ -95,16 +95,16 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         if (primaryMatch != null && !"singleCamera".equals(primaryMatch.stageType)) {
             processStageMatch(detection, primaryMatch);
         }
- 
+
         // Process single camera matches separately
         List<TriggerMatcher.MatchResult> singleCameraMatches = matcher.findSingleCameraMatches(detection);
         for (TriggerMatcher.MatchResult scMatch : singleCameraMatches) {
             processSingleCameraMatch(detection, scMatch);
         }
- 
+
         // Process alert triggers
         processAlertTriggers(detection, matcher);
- 
+
         // Update last detection time only when the detection matched a known trigger
         if (primaryMatch != null || !singleCameraMatches.isEmpty()) {
             PlateSequence seq = activeSequences.get(plate);
@@ -113,40 +113,40 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     private void processStageMatch(Detection detection, TriggerMatcher.MatchResult match) {
         String plate = detection.getPlateNumber();
         PlateSequence seq = activeSequences.get(plate);
- 
+
         if ("in".equals(match.triggerType)) {
             handleInTrigger(detection, match, seq);
         } else if ("out".equals(match.triggerType)) {
             handleOutTrigger(detection, match, seq);
         }
     }
- 
+
     // ========== IN TRIGGER ==========
- 
+
     private void handleInTrigger(Detection detection, TriggerMatcher.MatchResult match, PlateSequence seq) {
         String plate = detection.getPlateNumber();
- 
+
         if (seq == null) {
             // Start a new sequence
             seq = createNewSequence(plate, detection.getCreatedAt());
         }
- 
+
         Stage activeStage = seq.getActiveStage();
- 
+
         // Deduplication: if same stage is already active with an in event, ignore
         if (activeStage != null && activeStage.getName().equals(match.stageName)
                 && activeStage.getInTime() != null) {
             log.debug("Dedup: in trigger for already-active stage '{}' plate={}", match.stageName, plate);
             return;
         }
- 
+
         // Invalidate any pending transitional candidates
         invalidateCandidates(seq, detection.getCreatedAt());
- 
+
         // Close previous active stage
         if (activeStage != null) {
             if (activeStage.getOutTime() != null) {
@@ -157,7 +157,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 closeActiveStage(activeStage, detection.getCreatedAt().minusSeconds(1));
             }
         }
- 
+
         // Open new stage
         Stage newStage = new Stage();
         newStage.setName(match.stageName);
@@ -168,25 +168,25 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         newStage.setInTime(detection.getCreatedAt());
         newStage.setPlateNumber(plate);
         newStage.setTimeout(0);
- 
+
         if ("transitional".equals(match.stageType) && match.transitionalConfig != null) {
             newStage.setSequenceCloseTimeoutOverrideMinutes(
                     match.transitionalConfig.getSequenceCloseTimeoutOverrideMinutes());
         }
- 
+
         seq.getStages().add(newStage);
         log.debug("Opened {} stage '{}' for plate={} at {}", match.stageType, match.stageName,
                 plate, detection.getCreatedAt());
- 
+
         // Check for transitional auto-start candidates based on this new stage's future out events
         // (candidates are created on out events, not in events)
     }
- 
+
     // ========== OUT TRIGGER ==========
- 
+
     private void handleOutTrigger(Detection detection, TriggerMatcher.MatchResult match, PlateSequence seq) {
         String plate = detection.getPlateNumber();
- 
+
         if (seq == null) {
             // Cold-start rule: first detection is an out trigger
             seq = createNewSequence(plate, detection.getCreatedAt());
@@ -195,9 +195,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             log.debug("Cold-start partial stage '{}' for plate={}", match.stageName, plate);
             return;
         }
- 
+
         Stage activeStage = seq.getActiveStage();
- 
+
         // Check if this out is for the same stage that is active
         if (activeStage != null && activeStage.getName().equals(match.stageName)) {
             if (!activeStage.isFull() && activeStage.getInTime() == null) {
@@ -213,20 +213,20 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 log.debug("Updated outTime for active stage '{}' plate={} to {}",
                         match.stageName, plate, detection.getCreatedAt());
             }
- 
+
             // Check for transitional auto-start candidate creation
             checkTransitionalAutoStart(seq, activeStage, detection.getCreatedAt());
- 
+
             // Reset any existing candidates for this stage's allowedAfter triggers
             resetCandidateOnStageOut(seq, activeStage, detection.getCreatedAt());
             return;
         }
- 
+
         // Out trigger for a different stage than the active one
         if (activeStage != null) {
             // Invalidate candidates
             invalidateCandidates(seq, detection.getCreatedAt());
- 
+
             if (activeStage.getOutTime() != null) {
                 // Active stage has outTime -> close it using its current outTime
                 closeActiveStage(activeStage, null);
@@ -235,7 +235,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 closeActiveStage(activeStage, detection.getCreatedAt().minusSeconds(1));
             }
         }
- 
+
         // Create partial stage for the new out trigger
         Stage partial = createPartialStage(match, plate, detection.getCreatedAt());
         if (partial != null) {
@@ -243,19 +243,19 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         }
         log.debug("Partial stage '{}' for plate={}", match.stageName, plate);
     }
- 
+
     // ========== SINGLE CAMERA ==========
- 
+
     private void processSingleCameraMatch(Detection detection, TriggerMatcher.MatchResult match) {
         String plate = detection.getPlateNumber();
         PlateSequence seq = activeSequences.get(plate);
- 
+
         if (seq == null) {
             seq = createNewSequence(plate, detection.getCreatedAt());
         }
- 
+
         Stage activeStage = seq.getActiveStage();
- 
+
         // Check if same single camera stage is already active
         if (activeStage != null && activeStage.getName().equals(match.stageName)
                 && "singleCamera".equals(activeStage.getType())) {
@@ -263,7 +263,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             activeStage.setOutTime(detection.getCreatedAt());
             return;
         }
- 
+
         // If there's no active real/transitional match for this detection,
         // and we have a single camera match, open the single camera stage
         TriggerMatcher.MatchResult primary = getTriggerMatcher().findPrimaryMatch(detection);
@@ -271,15 +271,15 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             // A real/transitional match takes precedence; single camera only updates if already active
             return;
         }
- 
+
         // Invalidate candidates
         invalidateCandidates(seq, detection.getCreatedAt());
- 
+
         // Close previous active stage
         if (activeStage != null) {
             closeActiveStageForSingleCamera(activeStage, detection.getCreatedAt());
         }
- 
+
         // Open new single camera stage
         Stage scStage = new Stage();
         scStage.setName(match.stageName);
@@ -292,12 +292,12 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         scStage.setPlateNumber(plate);
         scStage.setTimeout(0);
         seq.getStages().add(scStage);
- 
+
         log.debug("Opened singleCamera stage '{}' for plate={}", match.stageName, plate);
     }
- 
+
     // ========== TRANSITIONAL AUTO-START ==========
- 
+
     private void checkTransitionalAutoStart(PlateSequence seq, Stage closingStage,
                                             LocalDateTime outTime) {
         WorkflowConfig wf = configLoader.getConfig().getWorkflow();
@@ -312,7 +312,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     private void createTransitionalCandidate(PlateSequence seq, TransitionalStageConfig tc,
                                              LocalDateTime afterOutTime) {
         Stage candidate = new Stage();
@@ -329,11 +329,11 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         candidate.setPlateNumber(seq.getPlateNumber());
         candidate.setSequenceCloseTimeoutOverrideMinutes(tc.getSequenceCloseTimeoutOverrideMinutes());
         seq.getStages().add(candidate);
- 
+
         log.debug("Created transitional candidate '{}' for plate={}, timeout={}min",
                 tc.getName(), seq.getPlateNumber(), tc.getCandidateTimeoutMinutes());
     }
- 
+
     private void resetCandidateOnStageOut(PlateSequence seq, Stage activeStage,
                                           LocalDateTime outTime) {
         WorkflowConfig wf = configLoader.getConfig().getWorkflow();
@@ -351,7 +351,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     private void invalidateCandidates(PlateSequence seq, LocalDateTime detectionTime) {
         Iterator<Stage> it = seq.getStages().iterator();
         while (it.hasNext()) {
@@ -362,9 +362,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     // ========== STAGE CLOSING ==========
- 
+
     private void closeActiveStage(Stage stage, LocalDateTime closeTime) {
         stage.setActive(false);
         if (closeTime != null) {
@@ -376,7 +376,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         log.debug("Closed stage '{}' plate={} outTime={}", stage.getName(),
                 stage.getPlateNumber(), stage.getOutTime());
     }
- 
+
     private void closeActiveStageForSingleCamera(Stage stage, LocalDateTime newStageTime) {
         stage.setActive(false);
         if ("singleCamera".equals(stage.getType())) {
@@ -391,9 +391,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             stage.setDurationSeconds(Duration.between(stage.getInTime(), stage.getOutTime()).getSeconds());
         }
     }
- 
+
     // ========== PARTIAL STAGE HELPERS ==========
- 
+
     private Stage createPartialStage(TriggerMatcher.MatchResult match, String plate,
                                      LocalDateTime outTime) {
         // Check if the last stage for this plate (in the same sequence) is a partial for the same stage name
@@ -410,7 +410,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 return null; // signal that we modified existing, don't add new
             }
         }
- 
+
         Stage partial = new Stage();
         partial.setName(match.stageName);
         partial.setLabel(match.stageLabel);
@@ -421,15 +421,15 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         partial.setOutTime(outTime);
         partial.setPlateNumber(plate);
         partial.setTimeout(0);
- 
+
         if ("transitional".equals(match.stageType) && match.transitionalConfig != null) {
             partial.setSequenceCloseTimeoutOverrideMinutes(
                     match.transitionalConfig.getSequenceCloseTimeoutOverrideMinutes());
         }
- 
+
         return partial;
     }
- 
+
     private Stage findLastPartialForStage(PlateSequence seq, String stageName) {
         for (int i = seq.getStages().size() - 1; i >= 0; i--) {
             Stage s = seq.getStages().get(i);
@@ -439,9 +439,9 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         }
         return null;
     }
- 
+
     // ========== SEQUENCE MANAGEMENT ==========
- 
+
     private PlateSequence createNewSequence(String plate, LocalDateTime startTime) {
         PlateSequence seq = new PlateSequence();
         seq.setPlateNumber(plate);
@@ -452,17 +452,17 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         log.debug("Created new sequence for plate={} at {}", plate, startTime);
         return seq;
     }
- 
+
     // ========== ALERT PROCESSING ==========
- 
+
     private void processAlertTriggers(Detection detection, TriggerMatcher matcher) {
         String plate = detection.getPlateNumber();
         PlateSequence seq = activeSequences.get(plate);
         if (seq == null) return;
- 
+
         Stage activeStage = seq.getActiveStage();
         if (activeStage == null) return;
- 
+
         List<AlertConfig> alertConfigs = configLoader.getConfig().getAlerts();
         for (AlertConfig ac : alertConfigs) {
             if (matcher.matchesAlertTrigger(detection, ac.getTrigger())) {
@@ -470,17 +470,17 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 handleAlertMatch(seq, activeStage, detection, ac);
             }
         }
- 
+
         // Check if this detection is on a DIFFERENT analyticsId than any active alert
         // If so, deactivate those alerts
         deactivateAlertsOnDifferentCamera(plate, detection.getAnalyticsId());
     }
- 
+
     private void handleAlertMatch(PlateSequence seq, Stage activeStage,
                                   Detection detection, AlertConfig ac) {
         String plate = detection.getPlateNumber();
         int triggerAnalyticsId = ac.getTrigger().getAnalyticsId();
- 
+
         // Check if an active alert already exists for this plate + analyticsId
         for (AlertRecord existing : activeStage.getAlerts()) {
             if (existing.isActive() && existing.getTriggerAnalyticsId() == triggerAnalyticsId) {
@@ -489,7 +489,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 return; // Don't create duplicate
             }
         }
- 
+
         AlertRecord alert = new AlertRecord();
         alert.setPlateNumber(plate);
         alert.setMessage(ac.getMessage());
@@ -498,11 +498,11 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         alert.setTriggerAnalyticsId(triggerAnalyticsId);
         activeStage.getAlerts().add(alert);
         allAlerts.add(alert);
- 
+
         log.debug("Created alert for plate={}: '{}', timeout={}min",
                 plate, ac.getMessage(), ac.getSendTimeOutMinutes());
     }
- 
+
     private void deactivateAlertsOnDifferentCamera(String plate, int currentAnalyticsId) {
         for (AlertRecord alert : allAlerts) {
             if (alert.isActive() && alert.getPlateNumber().equals(plate)
@@ -512,30 +512,30 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     // ========== MAINTENANCE ==========
- 
+
     @Override
     public void performMaintenance(int elapsedSeconds) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         pendingAlertSends.clear();
- 
+
         // 1. Decrement timeouts for transitional candidates
         decrementCandidateTimeouts(elapsedSeconds);
- 
+
         // 2. Materialize candidates whose timeout <= 0
         materializeCandidates(now);
- 
+
         // 3. Decrement alert timeouts
         decrementAlertTimeouts(elapsedSeconds);
- 
+
         // 4. Recalculate durations for all active stages
         recalculateDurations(now);
- 
+
         // 5. Close timed-out sequences
         closeTimedOutSequences(now);
     }
- 
+
     private void decrementCandidateTimeouts(int elapsedSeconds) {
         for (PlateSequence seq : activeSequences.values()) {
             for (Stage s : seq.getStages()) {
@@ -545,7 +545,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     private void materializeCandidates(LocalDateTime now) {
         for (PlateSequence seq : activeSequences.values()) {
             List<Stage> toMaterialize = new ArrayList<>();
@@ -558,7 +558,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 candidate.setCandidate(false);
                 candidate.setFull(true);
                 candidate.setDurationSeconds(Duration.between(candidate.getInTime(), now).getSeconds());
- 
+
                 // Close previous active real stage
                 Stage activeStage = null;
                 for (Stage s : seq.getStages()) {
@@ -572,13 +572,13 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                         activeStage.setOutTime(candidate.getInTime().minusSeconds(1));
                     }
                 }
- 
+
                 log.info("Materialized transitional '{}' for plate={}", candidate.getName(),
                         seq.getPlateNumber());
             }
         }
     }
- 
+
     private void decrementAlertTimeouts(int elapsedSeconds) {
         for (AlertRecord alert : allAlerts) {
             if (alert.isActive()) {
@@ -590,7 +590,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     private void recalculateDurations(LocalDateTime now) {
         for (PlateSequence seq : activeSequences.values()) {
             for (Stage s : seq.getStages()) {
@@ -601,49 +601,54 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         }
         // Also recalculate for closed sequences (their stages are already inactive but may need duration)
     }
- 
+
     private void closeTimedOutSequences(LocalDateTime now) {
         int globalTimeoutMinutes = configLoader.getConfig().getWorkflow().getSequenceCloseTimeoutMinutes();
         List<String> platesToClose = new ArrayList<>();
- 
+
         for (Map.Entry<String, PlateSequence> entry : activeSequences.entrySet()) {
             PlateSequence seq = entry.getValue();
             if (seq.getLastDetectionTime() == null) continue;
- 
-            int timeoutMinutes = globalTimeoutMinutes;
- 
-            // Check if active stage is a transitional with override
+
             Stage activeStage = seq.getActiveStage();
-            if (activeStage != null && "transitional".equals(activeStage.getType())
-                    && activeStage.getSequenceCloseTimeoutOverrideMinutes() > 0) {
-                timeoutMinutes = activeStage.getSequenceCloseTimeoutOverrideMinutes();
-                // For transitional override, measure from transitional stage start
-                long minutesSinceStart = Duration.between(activeStage.getInTime(), now).toMinutes();
-                if (minutesSinceStart >= timeoutMinutes) {
-                    platesToClose.add(entry.getKey());
-                    continue;
+            if (activeStage != null && "transitional".equals(activeStage.getType())) {
+                if (activeStage.getSequenceCloseTimeoutOverrideMinutes() > 0) {
+                    // override > 0: measure from stage inTime with override timeout
+                    long minutesSinceStart = Duration.between(activeStage.getInTime(), now).toMinutes();
+                    if (minutesSinceStart >= activeStage.getSequenceCloseTimeoutOverrideMinutes()) {
+                        platesToClose.add(entry.getKey());
+                    }
+                } else {
+                    // override == 0: measure from stage inTime with global timeout
+                    if (activeStage.getInTime() != null) {
+                        long minutesSinceStart = Duration.between(activeStage.getInTime(), now).toMinutes();
+                        if (minutesSinceStart >= globalTimeoutMinutes) {
+                            platesToClose.add(entry.getKey());
+                        }
+                    }
                 }
+                continue;
             }
- 
-            // Global timeout: measure from last detection
+
+            // Non-transitional: global timeout measured from last detection
             long minutesSinceLastDetection = Duration.between(seq.getLastDetectionTime(), now).toMinutes();
             if (minutesSinceLastDetection >= globalTimeoutMinutes) {
                 platesToClose.add(entry.getKey());
             }
         }
- 
+
         for (String plate : platesToClose) {
             closeSequence(plate, now);
         }
     }
- 
+
     private void closeSequence(String plate, LocalDateTime now) {
         PlateSequence seq = activeSequences.remove(plate);
         if (seq == null) return;
- 
+
         seq.setActive(false);
         seq.setCloseTime(now);
- 
+
         Stage activeStage = seq.getActiveStage();
         if (activeStage != null) {
             if ("singleCamera".equals(activeStage.getType())) {
@@ -663,17 +668,17 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 activeStage.setActive(false);
             }
         }
- 
+
         // Delete any pending candidates
         seq.getStages().removeIf(s -> s.isCandidate() && s.isActive());
- 
+
         // Deactivate all active alerts for this plate
         for (AlertRecord alert : allAlerts) {
             if (alert.isActive() && alert.getPlateNumber().equals(plate)) {
                 alert.setActive(false);
             }
         }
- 
+
         closedSequences.add(seq);
         newlyClosedSequences.add(seq);
         log.info("Closed sequence for plate={}, stages={}", plate, seq.getStages().size());
@@ -712,28 +717,28 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
     }
 
     // ========== HISTORICAL TRANSITIONAL CHECK ==========
- 
+
     /**
      * After all historical detections are processed, check for transitional stages
      * that should have been inserted between stages based on timing gaps.
      */
     public void insertHistoricalTransitionals() {
         WorkflowConfig wf = configLoader.getConfig().getWorkflow();
- 
+
         for (PlateSequence seq : getAllSequences()) {
             List<Stage> stages = seq.getStages();
             List<Stage> toInsert = new ArrayList<>();
- 
+
             for (int i = 0; i < stages.size() - 1; i++) {
                 Stage stageA = stages.get(i);
                 Stage stageB = stages.get(i + 1);
- 
+
                 if (stageA.isCandidate() || stageB.isCandidate()) continue;
                 if (stageA.getOutTime() == null || stageB.getInTime() == null) continue;
- 
+
                 for (TransitionalStageConfig tc : wf.getTransitional()) {
                     if (!tc.getAllowedAfter().contains(stageA.getName())) continue;
- 
+
                     // Use seconds to avoid toMinutes() truncation swallowing valid sub-minute gaps
                     long gapSeconds = Duration.between(stageA.getOutTime(), stageB.getInTime()).toSeconds();
                     if (gapSeconds > (long) tc.getCandidateTimeoutMinutes() * 60) {
@@ -751,7 +756,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                         transitional.setSequenceCloseTimeoutOverrideMinutes(
                                 tc.getSequenceCloseTimeoutOverrideMinutes());
                         transitional.recalculateDuration(LocalDateTime.now(ZoneOffset.UTC));
- 
+
                         toInsert.add(transitional);
                         // Mark insert position
                         transitional.setId(i + 1); // temporary marker for insertion index
@@ -760,7 +765,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                     }
                 }
             }
- 
+
             // Insert in reverse order to maintain correct indices
             toInsert.sort((a, b) -> Long.compare(b.getId(), a.getId()));
             for (Stage s : toInsert) {
@@ -770,7 +775,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             }
         }
     }
- 
+
     @Override
     public List<PlateSequence> getAllSequences() {
         List<PlateSequence> all = new ArrayList<>();
@@ -785,7 +790,7 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
     public List<PlateSequence> getActiveSequences() {
         return new ArrayList<>(activeSequences.values());
     }
- 
+
     /**
      * Get alerts that are ready to be sent (timeout expired during last maintenance).
      */

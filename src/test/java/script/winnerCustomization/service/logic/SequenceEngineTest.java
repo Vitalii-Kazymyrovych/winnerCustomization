@@ -571,6 +571,39 @@ class SequenceEngineTest {
                 "Exactly one stage after two consecutive OUTs on same stage");
     }
 
+    // ========== TRANSITIONAL OVERRIDE=0 TIMEOUT TESTS ==========
+
+    @Test
+    void transitionalOverride0_closedByMaintenance_viaInTimePath() {
+        // backyard has sequenceCloseTimeoutOverrideMinutes=0.
+        // Use default (999999 min) so materialization does NOT immediately trigger close.
+        // Then switch to a small timeout: sequence must close because inTime (T0+5m) is
+        // far enough in the past — i.e. the override==0 code path measured from inTime fires.
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0),
+                makeDetection("ABC123", 2, 180, T0.plusMinutes(5))
+        ));
+
+        // Materialize backyard candidate (no close yet — global timeout still 999999 min)
+        engine.performMaintenance(302);
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        assertTrue(seq.isActive(), "Sequence must still be active after materialization");
+        Stage backyard = seq.getStages().stream()
+                .filter(s -> s.getName().equals("backyard") && !s.isCandidate())
+                .findFirst().orElseThrow(() -> new AssertionError("backyard not materialized"));
+        assertEquals(0, backyard.getSequenceCloseTimeoutOverrideMinutes(),
+                "backyard must have override=0");
+
+        // Lower global timeout to 10 min — inTime is far in the past, so must close now
+        setSequenceCloseTimeout(10);
+        engine.performMaintenance(1);
+
+        long activeCount = engine.getAllSequences().stream().filter(PlateSequence::isActive).count();
+        assertEquals(0, activeCount,
+                "Sequence with transitional override=0 must close when global timeout is exceeded from inTime");
+    }
+
     // ========== CANDIDATE INVALIDATION TESTS ==========
 
     @Test

@@ -20,6 +20,8 @@ If tests fail: review exception → fix code → run tests → repeat
 - If an edit fails on first attempt: rewrite the whole file, don't debug whitespace
 - Maximum 2 attempts for any single file edit. If both fail — rewrite the file from scratch.
 - NEVER write PowerShell scripts. Use only: Read/Write tool, or bash -c with simple commands.
+### Strict rule
+- NEVER use bash/python/powershell to read or edit Java files. Use ONLY built-in Read/Write/Update tools.
 
 ## Anti-loop rule
 - If the same operation (edit, search, build) fails twice with similar errors: STOP and explain the problem to me. Do NOT retry more than twice.
