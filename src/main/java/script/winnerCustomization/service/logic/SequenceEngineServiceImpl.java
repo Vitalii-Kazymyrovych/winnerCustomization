@@ -247,13 +247,15 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         if (activeStage != null) {
             // Invalidate candidates
             invalidateCandidates(seq, detection.getCreatedAt());
-
             if (activeStage.getOutTime() != null) {
                 // Active stage has outTime -> close it using its current outTime
                 closeActiveStage(activeStage, null);
             } else {
                 // Active stage has no outTime -> close with detection - 1 second
                 closeActiveStage(activeStage, detection.getCreatedAt().minusSeconds(1));
+            }
+            if (activeStage.getOutTime() != null) {
+                checkTransitionalAutoStart(seq, activeStage, activeStage.getOutTime());
             }
         }
 
