@@ -167,7 +167,8 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
 
         // Deduplication: if same stage is already active with an in event, ignore
         if (activeStage != null && activeStage.getName().equals(match.stageName)
-                && activeStage.getInTime() != null) {
+                && activeStage.getInTime() != null
+                && activeStage.getOutTime() == null) {
             log.debug("Dedup: in trigger for already-active stage '{}' plate={}", match.stageName, plate);
             return;
         }
