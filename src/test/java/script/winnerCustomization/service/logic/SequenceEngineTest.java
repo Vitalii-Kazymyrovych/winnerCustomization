@@ -880,6 +880,136 @@ class SequenceEngineTest {
         assertFalse(hasBackyard, "Gap of exactly 5 min must NOT produce a historical backyard transitional");
     }
 
+    // ========== BUGFIX-31-03-2026 TEST CASES ==========
+
+    @Test
+    void testParkingMultipleOutInCycles() {
+        // Task 1: OUT→IN cycles must produce separate stages, not be deduped
+        // drive_in IN → OUT → IN → OUT: 2 separate drive_in stages expected
+        LocalDateTime t1 = T0.plusMinutes(10);
+        LocalDateTime t2 = T0.plusMinutes(20);
+        LocalDateTime t3 = T0.plusMinutes(30);
+
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 1, 0, T0),      // drive_in IN  — stage 1 open
+                makeDetection("ABC123", 1, 180, t1),    // drive_in OUT — stage 1 outTime
+                makeDetection("ABC123", 1, 0, t2),      // drive_in IN  — must open stage 2 (not deduped)
+                makeDetection("ABC123", 1, 180, t3)     // drive_in OUT — stage 2 outTime
+        ));
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        List<Stage> driveIns = seq.getStages().stream()
+                .filter(s -> s.getName().equals("drive_in") && !s.isCandidate()).toList();
+
+        assertEquals(2, driveIns.size(), "Two OUT→IN cycles must produce 2 separate drive_in stages");
+        assertEquals(T0, driveIns.get(0).getInTime());
+        assertEquals(t1, driveIns.get(0).getOutTime());
+        assertEquals(t2, driveIns.get(1).getInTime());
+        assertEquals(t3, driveIns.get(1).getOutTime());
+    }
+
+    @Test
+    void testAutoStartAfterDifferentStageOut() {
+        // Task 2: checkTransitionalAutoStart must be called in the «different stage» OUT branch
+        // service IN → drive_in OUT (closes service via different-stage path) → backyard candidate created
+        LocalDateTime t1 = T0.plusMinutes(10);
+
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0),      // service IN
+                makeDetection("ABC123", 1, 180, t1)     // drive_in OUT — different stage, closes service
+        ));
+
+        // Candidate must exist before materialization
+        PlateSequence seq = engine.getAllSequences().get(0);
+        assertEquals(1, seq.getCandidates().size(),
+                "Backyard candidate must be created when service is closed by a different-stage OUT");
+
+        // Materialize by advancing past candidateTimeoutMinutes (5 min = 300s)
+        engine.performMaintenance(302);
+
+        Stage backyard = engine.getAllSequences().get(0).getStages().stream()
+                .filter(s -> s.getName().equals("backyard") && !s.isCandidate())
+                .findFirst().orElse(null);
+        assertNotNull(backyard, "Backyard must be materialized after candidate timeout");
+        assertTrue(backyard.isFull());
+    }
+
+    @Test
+    void testSequenceClosesOnGap() {
+        // Task 3b: gap > sequenceCloseTimeoutMinutes must close the sequence and open a new one
+        int timeoutMinutes = 2880;
+        setSequenceCloseTimeout(timeoutMinutes);
+
+        LocalDateTime t1 = T0.plusMinutes(timeoutMinutes + 1);
+
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0),           // service IN — first sequence
+                makeDetection("ABC123", 2, 0, t1)            // service IN — 2881 min later
+        ));
+
+        List<PlateSequence> seqs = engine.getAllSequences();
+        assertEquals(2, seqs.size(), "Gap of 2881 min > 2880 min timeout must produce two sequences");
+        assertEquals(1, seqs.stream().filter(s -> !s.isActive()).count(), "First sequence must be closed");
+        assertEquals(1, seqs.stream().filter(PlateSequence::isActive).count(), "Second sequence must be active");
+    }
+
+    @Test
+    void testBackyardOverrideTimeoutCloses() {
+        // Task 3a: pending candidate with override timeout must close the sequence on next detection
+        // backyard.sequenceCloseTimeoutOverrideMinutes = 2880
+        int overrideMinutes = 2880;
+        setBackyardOverrideTimeout(overrideMinutes);
+
+        LocalDateTime serviceOut = T0;
+        // candidate inTime = serviceOut + 1s; detection at +2881min → 2880min59s >= 2880min → closes
+        LocalDateTime newDetection = T0.plusMinutes(overrideMinutes + 1);
+
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, T0.minusMinutes(5)), // service IN
+                makeDetection("ABC123", 2, 180, serviceOut)         // service OUT → backyard candidate
+        ));
+
+        // Candidate must exist (not yet materialized — no performMaintenance)
+        assertEquals(1, engine.getAllSequences().get(0).getCandidates().size(),
+                "Backyard candidate must exist after service OUT");
+
+        // New detection after override timeout — must close old sequence and start new
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 2, 0, newDetection)
+        ));
+
+        List<PlateSequence> seqs = engine.getAllSequences();
+        assertEquals(2, seqs.size(), "Sequence must close when candidate override timeout is exceeded");
+
+        // Closed sequence must not contain a materialized backyard
+        PlateSequence closed = seqs.stream().filter(s -> !s.isActive()).findFirst().orElseThrow();
+        boolean hasBackyard = closed.getStages().stream()
+                .anyMatch(s -> s.getName().equals("backyard") && !s.isCandidate());
+        assertFalse(hasBackyard, "Backyard must not be inserted into a sequence closed by override timeout");
+    }
+
+    @Test
+    void testPartialStageAlwaysFullFalse() {
+        // Task 4: a partial stage (created by an OUT with no prior IN for that stage) must have full=false
+        // drive_in IN → service OUT (no service IN) → service partial stage created
+        LocalDateTime t1 = T0.plusMinutes(10);
+
+        engine.processDetections(List.of(
+                makeDetection("ABC123", 1, 0, T0),      // drive_in IN
+                makeDetection("ABC123", 2, 180, t1)     // service OUT — creates partial (no IN for service)
+        ));
+
+        PlateSequence seq = engine.getAllSequences().get(0);
+        Stage partial = seq.getStages().stream()
+                .filter(s -> s.getName().equals("service") && !s.isCandidate())
+                .findFirst().orElseThrow(() -> new AssertionError("service partial stage not found"));
+
+        assertFalse(partial.isFull(), "Partial stage must have full=false");
+        assertNull(partial.getInTime(), "Partial stage must have inTime=null");
+        assertNotNull(partial.getOutTime(), "Partial stage must have outTime set");
+        assertEquals(t1, partial.getOutTime());
+    }
+
     // Helper to override sequenceCloseTimeoutMinutes in the test config
     private void setSequenceCloseTimeout(int minutes) {
         try {
@@ -887,6 +1017,20 @@ class SequenceEngineTest {
             configField.setAccessible(true);
             AppConfig config = (AppConfig) configField.get(configLoader);
             config.getWorkflow().setSequenceCloseTimeoutMinutes(minutes);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void setBackyardOverrideTimeout(int minutes) {
+        try {
+            var configField = ConfigLoader.class.getDeclaredField("config");
+            configField.setAccessible(true);
+            AppConfig config = (AppConfig) configField.get(configLoader);
+            config.getWorkflow().getTransitional().stream()
+                    .filter(tc -> tc.getName().equals("backyard"))
+                    .findFirst().orElseThrow()
+                    .setSequenceCloseTimeoutOverrideMinutes(minutes);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
