@@ -193,8 +193,8 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         newStage.setLabel(match.stageLabel);
         newStage.setType(match.stageType);
         newStage.setActive(true);
-        newStage.setFull(true);
         newStage.setInTime(detection.getCreatedAt());
+        newStage.setFull(true);
         newStage.setPlateNumber(plate);
         newStage.setTimeout(0);
 
@@ -225,7 +225,12 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 // Partial stage (cold-start): promote to full by shifting times
                 activeStage.setInTime(activeStage.getOutTime());
                 activeStage.setOutTime(detection.getCreatedAt());
-                activeStage.setFull(true);
+                if (activeStage.getInTime() != null) {
+                    activeStage.setFull(true);
+                } else {
+                    log.warn("Attempted to set full=true on partial stage '{}' plate={} — skipping",
+                            activeStage.getName(), activeStage.getPlateNumber());
+                }
                 log.debug("Promoted partial stage '{}' plate={} to full: inTime={} outTime={}",
                         match.stageName, plate, activeStage.getInTime(), activeStage.getOutTime());
             } else {
@@ -309,8 +314,8 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         scStage.setLabel(match.stageLabel);
         scStage.setType("singleCamera");
         scStage.setActive(true);
-        scStage.setFull(true);
         scStage.setInTime(detection.getCreatedAt());
+        scStage.setFull(true);
         scStage.setOutTime(detection.getCreatedAt()); // first = last initially
         scStage.setPlateNumber(plate);
         scStage.setTimeout(0);
@@ -428,7 +433,12 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                 // Second out for same partial: promote to full
                 lastPartial.setInTime(lastPartial.getOutTime());
                 lastPartial.setOutTime(outTime);
-                lastPartial.setFull(true);
+                if (lastPartial.getInTime() != null) {
+                    lastPartial.setFull(true);
+                } else {
+                    log.warn("Attempted to set full=true on partial stage '{}' plate={} — skipping",
+                            lastPartial.getName(), lastPartial.getPlateNumber());
+                }
                 log.debug("Promoted partial stage '{}' to full for plate={}", match.stageName, plate);
                 return null; // signal that we modified existing, don't add new
             }
@@ -439,8 +449,8 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
         partial.setLabel(match.stageLabel);
         partial.setType(match.stageType);
         partial.setActive(true);
-        partial.setFull(false);
-        partial.setInTime(null);
+        partial.setFull(false);  // partial stage: no inTime yet, cannot be full
+        partial.setInTime(null); // always null for partial
         partial.setOutTime(outTime);
         partial.setPlateNumber(plate);
         partial.setTimeout(0);
@@ -809,10 +819,10 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                         transitional.setLabel(tc.getLabel());
                         transitional.setType("transitional");
                         transitional.setActive(false);
-                        transitional.setFull(true);
                         transitional.setCandidate(false);
                         transitional.setInTime(stageA.getOutTime().plusSeconds(1));
                         transitional.setOutTime(stageB.getInTime().minusSeconds(1));
+                        transitional.setFull(true);
                         transitional.setPlateNumber(seq.getPlateNumber());
                         transitional.setTimeout(0);
                         transitional.setSequenceCloseTimeoutOverrideMinutes(
