@@ -743,6 +743,22 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
             return;
         }
 
+        // Check pending transitional candidates with override timeout
+        for (Stage candidate : seq.getCandidates()) {
+            if (candidate.getSequenceCloseTimeoutOverrideMinutes() > 0
+                    && candidate.getInTime() != null) {
+                long minutesSinceCandidate =
+                    Duration.between(candidate.getInTime(), detectionTime).toMinutes();
+                if (minutesSinceCandidate >= candidate.getSequenceCloseTimeoutOverrideMinutes()) {
+                    log.debug("Closing sequence for plate={}: candidate '{}' override timeout {}min exceeded",
+                            plate, candidate.getName(),
+                            candidate.getSequenceCloseTimeoutOverrideMinutes());
+                    closeSequence(plate, detectionTime);
+                    return;
+                }
+            }
+        }
+
         // Non-transitional: measure from last detection
         long minutesSinceLastDetection = Duration.between(seq.getLastDetectionTime(), detectionTime).toMinutes();
         if (minutesSinceLastDetection >= globalTimeoutMinutes) {
@@ -776,6 +792,18 @@ public class SequenceEngineServiceImpl implements SequenceEngineService {
                     // Use seconds to avoid toMinutes() truncation swallowing valid sub-minute gaps
                     long gapSeconds = Duration.between(stageA.getOutTime(), stageB.getInTime()).toSeconds();
                     if (gapSeconds > (long) tc.getCandidateTimeoutMinutes() * 60) {
+
+                        // Skip if gap exceeds the effective sequence close timeout
+                        long overrideMinutes = tc.getSequenceCloseTimeoutOverrideMinutes();
+                        long effectiveCloseTimeoutSeconds = (overrideMinutes > 0
+                                ? overrideMinutes
+                                : wf.getSequenceCloseTimeoutMinutes()) * 60L;
+                        if (gapSeconds >= effectiveCloseTimeoutSeconds) {
+                            log.debug("Gap {}s >= close timeout {}s for '{}' plate={}: skipping historical transitional",
+                                    gapSeconds, effectiveCloseTimeoutSeconds, tc.getName(), seq.getPlateNumber());
+                            continue;
+                        }
+
                         Stage transitional = new Stage();
                         transitional.setName(tc.getName());
                         transitional.setLabel(tc.getLabel());
